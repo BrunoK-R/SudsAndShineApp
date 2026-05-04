@@ -18,25 +18,34 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AirportShuttle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 private data class BookingService(
@@ -86,6 +96,7 @@ private enum class BookingStep {
     Service,
     Vehicle,
     DateTime,
+    Contact,
 }
 
 private val bookingServices = listOf(
@@ -177,7 +188,16 @@ fun ProductsScreen(contentPadding: PaddingValues) {
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDateId by rememberSaveable { mutableStateOf(bookingDateOptions.first().id) }
     var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
+    var contactName by rememberSaveable { mutableStateOf("") }
+    var contactPhone by rememberSaveable { mutableStateOf("") }
+    var contactEmail by rememberSaveable { mutableStateOf("") }
+    var contactNotes by rememberSaveable { mutableStateOf("") }
+    var acceptsPrivacy by rememberSaveable { mutableStateOf(false) }
     val currentStep = BookingStep.valueOf(currentStepName)
+    val contactFormValid = contactName.isNotBlank() &&
+        contactPhone.isNotBlank() &&
+        contactEmail.isNotBlank() &&
+        acceptsPrivacy
 
     Box(
         modifier = Modifier
@@ -256,6 +276,25 @@ fun ProductsScreen(contentPadding: PaddingValues) {
                         onTimeSelected = { selectedTime = it },
                     )
                 }
+
+                BookingStep.Contact -> {
+                    BookingContactHeader(
+                        onBack = { currentStepName = BookingStep.DateTime.name },
+                    )
+
+                    BookingContactContent(
+                        name = contactName,
+                        phone = contactPhone,
+                        email = contactEmail,
+                        notes = contactNotes,
+                        acceptsPrivacy = acceptsPrivacy,
+                        onNameChange = { contactName = it },
+                        onPhoneChange = { contactPhone = it },
+                        onEmailChange = { contactEmail = it },
+                        onNotesChange = { contactNotes = it },
+                        onAcceptsPrivacyChange = { acceptsPrivacy = it },
+                    )
+                }
             }
         }
 
@@ -264,14 +303,17 @@ fun ProductsScreen(contentPadding: PaddingValues) {
                 BookingStep.Service -> selectedServiceId != null
                 BookingStep.Vehicle -> selectedVehicleId != null
                 BookingStep.DateTime -> selectedDateId.isNotBlank() && selectedTime != null
+                BookingStep.Contact -> contactFormValid
             },
             onClick = {
                 when (currentStep) {
                     BookingStep.Service -> currentStepName = BookingStep.Vehicle.name
                     BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
-                    BookingStep.DateTime -> Unit
+                    BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
+                    BookingStep.Contact -> Unit
                 }
             },
+            label = if (currentStep == BookingStep.Contact) "Rever Marcação" else "Continuar",
             contentPadding = contentPadding,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
@@ -435,6 +477,212 @@ private fun BookingDateTimeHeader(onBack: () -> Unit) {
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
     }
+}
+
+@Composable
+private fun BookingContactHeader(onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.inverseSurface,
+                        MaterialTheme.colorScheme.secondary,
+                    ),
+                ),
+            )
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 8.dp, bottom = 28.dp),
+    ) {
+        OutlinedButton(
+            onClick = onBack,
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.size(8.dp))
+            Text("Voltar", style = MaterialTheme.typography.labelLarge)
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = "Dados de Contacto",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Passo 4 de 4",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
+        )
+    }
+}
+
+@Composable
+private fun BookingContactContent(
+    name: String,
+    phone: String,
+    email: String,
+    notes: String,
+    acceptsPrivacy: Boolean,
+    onNameChange: (String) -> Unit,
+    onPhoneChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onNotesChange: (String) -> Unit,
+    onAcceptsPrivacyChange: (Boolean) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(top = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            shape = RoundedCornerShape(18.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                BookingContactField(
+                    label = "Nome Completo *",
+                    value = name,
+                    placeholder = "João Silva",
+                    icon = Icons.Filled.Person,
+                    onValueChange = onNameChange,
+                )
+                BookingContactField(
+                    label = "Telemóvel *",
+                    value = phone,
+                    placeholder = "913 005 855",
+                    icon = Icons.Filled.Phone,
+                    keyboardType = KeyboardType.Phone,
+                    onValueChange = onPhoneChange,
+                )
+                BookingContactField(
+                    label = "Email *",
+                    value = email,
+                    placeholder = "seuemail@exemplo.com",
+                    icon = Icons.Filled.Email,
+                    keyboardType = KeyboardType.Email,
+                    onValueChange = onEmailChange,
+                )
+                BookingContactField(
+                    label = "Observações (Opcional)",
+                    value = notes,
+                    placeholder = "Alguma informação adicional que devamos saber...",
+                    icon = Icons.AutoMirrored.Filled.Notes,
+                    singleLine = false,
+                    minLines = 4,
+                    onValueChange = onNotesChange,
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            shape = RoundedCornerShape(18.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onAcceptsPrivacyChange(!acceptsPrivacy) }
+                    .padding(18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Checkbox(
+                    checked = acceptsPrivacy,
+                    onCheckedChange = onAcceptsPrivacyChange,
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.tertiary,
+                        checkmarkColor = MaterialTheme.colorScheme.onTertiary,
+                        uncheckedColor = MaterialTheme.colorScheme.outline,
+                    ),
+                )
+                Text(
+                    text = "Aceito a Política de Privacidade e autorizo o processamento dos meus dados para efeitos de marcação. *",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingContactField(
+    label: String,
+    value: String,
+    placeholder: String,
+    icon: ImageVector,
+    onValueChange: (String) -> Unit,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        },
+        placeholder = {
+            Text(
+                text = placeholder,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline,
+            )
+        },
+        singleLine = singleLine,
+        minLines = minLines,
+        shape = RoundedCornerShape(14.dp),
+        textStyle = MaterialTheme.typography.bodyMedium,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.tertiary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            focusedLabelColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    )
 }
 
 @Composable
@@ -987,6 +1235,7 @@ private fun VehicleHelpCard() {
 private fun ContinueBar(
     enabled: Boolean,
     onClick: () -> Unit,
+    label: String,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -1015,7 +1264,7 @@ private fun ContinueBar(
                 ),
             ) {
                 Text(
-                    text = "Continuar",
+                    text = label,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
