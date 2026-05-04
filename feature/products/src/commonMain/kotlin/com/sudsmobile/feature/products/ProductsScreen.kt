@@ -22,9 +22,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.AirportShuttle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.Button
@@ -59,6 +61,18 @@ private data class BookingService(
     val icon: ImageVector,
     val popular: Boolean = false,
 )
+
+private data class BookingVehicle(
+    val id: String,
+    val name: String,
+    val description: String,
+    val icon: ImageVector,
+)
+
+private enum class BookingStep {
+    Service,
+    Vehicle,
+}
 
 private val bookingServices = listOf(
     BookingService(
@@ -96,9 +110,27 @@ private val bookingServices = listOf(
     ),
 )
 
+private val bookingVehicles = listOf(
+    BookingVehicle(
+        id = "passenger",
+        name = "Passageiros",
+        description = "Carros normais, sedans, compactos",
+        icon = Icons.Filled.DirectionsCar,
+    ),
+    BookingVehicle(
+        id = "suv",
+        name = "SUV",
+        description = "SUVs, vans, carrinhas",
+        icon = Icons.Filled.AirportShuttle,
+    ),
+)
+
 @Composable
 fun ProductsScreen(contentPadding: PaddingValues) {
+    var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
+    val currentStep = BookingStep.valueOf(currentStepName)
 
     Box(
         modifier = Modifier
@@ -111,27 +143,70 @@ fun ProductsScreen(contentPadding: PaddingValues) {
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = contentPadding.calculateBottomPadding() + 104.dp),
         ) {
-            BookingServiceHeader()
+            when (currentStep) {
+                BookingStep.Service -> {
+                    BookingServiceHeader()
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(top = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                bookingServices.forEach { service ->
-                    BookingServiceCard(
-                        service = service,
-                        selected = selectedServiceId == service.id,
-                        onSelected = { selectedServiceId = service.id },
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        bookingServices.forEach { service ->
+                            BookingServiceCard(
+                                service = service,
+                                selected = selectedServiceId == service.id,
+                                onSelected = { selectedServiceId = service.id },
+                            )
+                        }
+                    }
+                }
+
+                BookingStep.Vehicle -> {
+                    BookingVehicleHeader(
+                        onBack = { currentStepName = BookingStep.Service.name },
                     )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Text(
+                            text = "Selecione o tipo de veículo para calcular o preço correto",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        bookingVehicles.forEach { vehicle ->
+                            BookingVehicleCard(
+                                vehicle = vehicle,
+                                selected = selectedVehicleId == vehicle.id,
+                                onSelected = { selectedVehicleId = vehicle.id },
+                            )
+                        }
+
+                        VehicleHelpCard()
+                    }
                 }
             }
         }
 
         ContinueBar(
-            enabled = selectedServiceId != null,
+            enabled = when (currentStep) {
+                BookingStep.Service -> selectedServiceId != null
+                BookingStep.Vehicle -> selectedVehicleId != null
+            },
+            onClick = {
+                when (currentStep) {
+                    BookingStep.Service -> currentStepName = BookingStep.Vehicle.name
+                    BookingStep.Vehicle -> Unit
+                }
+            },
             contentPadding = contentPadding,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
@@ -185,6 +260,59 @@ private fun BookingServiceHeader() {
         Spacer(Modifier.height(4.dp))
         Text(
             text = "Passo 1 de 4",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
+        )
+    }
+}
+
+@Composable
+private fun BookingVehicleHeader(onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.inverseSurface,
+                        MaterialTheme.colorScheme.secondary,
+                    ),
+                ),
+            )
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 8.dp, bottom = 28.dp),
+    ) {
+        OutlinedButton(
+            onClick = onBack,
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.size(8.dp))
+            Text("Voltar", style = MaterialTheme.typography.labelLarge)
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = "Tipo de Veículo",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Passo 2 de 4",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
@@ -343,8 +471,131 @@ private fun PopularBadge() {
 }
 
 @Composable
+private fun BookingVehicleCard(
+    vehicle: BookingVehicle,
+    selected: Boolean,
+    onSelected: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelected),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.18f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLowest
+            },
+        ),
+        border = BorderStroke(
+            width = 2.dp,
+            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceContainerLowest,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 8.dp else 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier.size(80.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = if (selected) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f)
+                },
+                contentColor = if (selected) {
+                    MaterialTheme.colorScheme.onTertiary
+                } else {
+                    MaterialTheme.colorScheme.tertiary
+                },
+            ) {
+                Icon(
+                    imageVector = vehicle.icon,
+                    contentDescription = null,
+                    modifier = Modifier.padding(20.dp),
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = vehicle.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = vehicle.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (selected) {
+                Surface(
+                    modifier = Modifier.size(32.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        modifier = Modifier.padding(7.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VehicleHelpCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Não tem a certeza?",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Carros SUV incluem veículos maiores como SUVs, vans e carrinhas. O preço é ligeiramente superior devido ao tamanho.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ContinueBar(
     enabled: Boolean,
+    onClick: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -357,7 +608,7 @@ private fun ContinueBar(
         Column {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Button(
-                onClick = {},
+                onClick = onClick,
                 enabled = enabled,
                 modifier = Modifier
                     .fillMaxWidth()
