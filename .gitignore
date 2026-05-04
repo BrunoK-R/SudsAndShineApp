@@ -14,3 +14,20 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Kotlin/Gradle
+.kotlin
+.gradle
+**/build/
+local.properties
+.idea
+*.iml
+
+# Xcode
+xcuserdata
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
