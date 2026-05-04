@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -57,7 +58,15 @@ fun MainNavigation(
                             unselectedIconColor = MaterialTheme.colorScheme.outline,
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
-                        label = { Text(destination.label) },
+                        label = {
+                            Text(
+                                text = destination.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Clip,
+                                softWrap = false,
+                            )
+                        },
                         icon = {
                             Icon(
                                 imageVector = destination.icon,
@@ -101,7 +110,18 @@ fun MainNavigation(
                 )
             }
             composable(Routes.Blog) {
-                BlogScreen(contentPadding = paddingValues)
+                BlogScreen(
+                    contentPadding = paddingValues,
+                    onBookWash = {
+                        navController.navigate(Routes.Products) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable(Routes.Payment) {
                 PaymentScreen(contentPadding = paddingValues)
