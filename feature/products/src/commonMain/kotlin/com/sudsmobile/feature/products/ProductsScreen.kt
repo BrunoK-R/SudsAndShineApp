@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.WaterDrop
@@ -938,20 +940,30 @@ private fun BookingSuccessContent(
             .padding(top = 36.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(20.dp))
 
-        Surface(
-            modifier = Modifier.size(112.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.tertiary,
-            contentColor = MaterialTheme.colorScheme.onTertiary,
-            shadowElevation = 8.dp,
+        Box(
+            modifier = Modifier.size(128.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Filled.CheckCircle,
-                contentDescription = null,
-                modifier = Modifier.padding(24.dp),
-            )
+            Surface(
+                modifier = Modifier.size(128.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.24f),
+            ) {}
+            Surface(
+                modifier = Modifier.size(112.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+                shadowElevation = 8.dp,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.padding(24.dp),
+                )
+            }
         }
 
         Spacer(Modifier.height(28.dp))
@@ -994,25 +1006,18 @@ private fun BookingSuccessContent(
 
         Spacer(Modifier.height(28.dp))
 
-        ConfirmationCard(title = "Resumo da Marcação") {
-            ConfirmationIconRow(
-                icon = Icons.Filled.Event,
-                title = "${date?.dateLabel ?: "Data por confirmar"}, ${time ?: "hora por confirmar"}",
-                body = service?.name ?: "Serviço por confirmar",
-            )
-            ConfirmationIconRow(
-                icon = Icons.Filled.LocationOn,
-                title = "Suds & Shine Solutions",
-                body = "Shopping Norte Sul, Piso -1, Leiria",
-            )
-            ConfirmationIconRow(
-                icon = Icons.Filled.Phone,
-                title = phone.ifBlank { "913 005 855" },
-                body = "Entre em contacto se necessário",
-            )
-        }
+        SuccessSummaryCard(
+            service = service,
+            date = date,
+            time = time,
+            phone = phone,
+        )
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(16.dp))
+
+        ConfirmationSentCard()
+
+        Spacer(Modifier.height(28.dp))
 
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1034,7 +1039,7 @@ private fun BookingSuccessContent(
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                 )
-                Spacer(Modifier.size(8.dp))
+                Spacer(Modifier.width(8.dp))
                 Text("Adicionar ao Google Calendar", style = MaterialTheme.typography.labelLarge)
             }
 
@@ -1068,11 +1073,76 @@ private fun BookingSuccessContent(
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                 )
-                Spacer(Modifier.size(8.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = "Voltar ao Início",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuccessSummaryCard(
+    service: BookingService?,
+    date: BookingDateOption?,
+    time: String?,
+    phone: String,
+) {
+    ConfirmationCard(title = "Resumo da Marcação") {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            ConfirmationIconRow(
+                icon = Icons.Filled.Event,
+                title = "${date?.dateLabel ?: "Data por confirmar"}, ${time ?: "hora por confirmar"}",
+                body = service?.name ?: "Serviço por confirmar",
+            )
+            ConfirmationIconRow(
+                icon = Icons.Filled.LocationOn,
+                title = "Suds & Shine Solutions",
+                body = "Shopping Norte Sul, Piso -1, Leiria",
+            )
+            ConfirmationIconRow(
+                icon = Icons.Filled.Phone,
+                title = phone.ifBlank { "913 005 855" },
+                body = "Entre em contacto se necessário",
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfirmationSentCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MarkEmailRead,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Confirmação enviada",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Enviámos um email de confirmação com todos os detalhes da sua marcação.",
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
