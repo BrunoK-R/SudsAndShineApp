@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,9 +29,15 @@ import androidx.compose.material.icons.filled.AirportShuttle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Euro
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.WaterDrop
@@ -97,6 +104,8 @@ private enum class BookingStep {
     Vehicle,
     DateTime,
     Contact,
+    Confirmation,
+    Success,
 }
 
 private val bookingServices = listOf(
@@ -182,7 +191,10 @@ private val bookingTimeSlots = listOf(
 )
 
 @Composable
-fun ProductsScreen(contentPadding: PaddingValues) {
+fun ProductsScreen(
+    contentPadding: PaddingValues,
+    onHome: () -> Unit = {},
+) {
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -198,6 +210,9 @@ fun ProductsScreen(contentPadding: PaddingValues) {
         contactPhone.isNotBlank() &&
         contactEmail.isNotBlank() &&
         acceptsPrivacy
+    val selectedService = bookingServices.firstOrNull { it.id == selectedServiceId }
+    val selectedVehicle = bookingVehicles.firstOrNull { it.id == selectedVehicleId }
+    val selectedDate = bookingDateOptions.firstOrNull { it.id == selectedDateId }
 
     Box(
         modifier = Modifier
@@ -295,28 +310,74 @@ fun ProductsScreen(contentPadding: PaddingValues) {
                         onAcceptsPrivacyChange = { acceptsPrivacy = it },
                     )
                 }
+
+                BookingStep.Confirmation -> {
+                    BookingConfirmationHeader(
+                        onBack = { currentStepName = BookingStep.Contact.name },
+                    )
+
+                    BookingConfirmationContent(
+                        service = selectedService,
+                        vehicle = selectedVehicle,
+                        date = selectedDate,
+                        time = selectedTime,
+                        name = contactName,
+                        phone = contactPhone,
+                        email = contactEmail,
+                        notes = contactNotes,
+                        onEditService = { currentStepName = BookingStep.Service.name },
+                        onEditDateTime = { currentStepName = BookingStep.DateTime.name },
+                        onEditContact = { currentStepName = BookingStep.Contact.name },
+                    )
+                }
+
+                BookingStep.Success -> {
+                    BookingSuccessContent(
+                        service = selectedService,
+                        date = selectedDate,
+                        time = selectedTime,
+                        phone = contactPhone,
+                        onAddToCalendar = {},
+                        onViewBooking = {},
+                        onHome = onHome,
+                    )
+                }
             }
         }
 
-        ContinueBar(
-            enabled = when (currentStep) {
-                BookingStep.Service -> selectedServiceId != null
-                BookingStep.Vehicle -> selectedVehicleId != null
-                BookingStep.DateTime -> selectedDateId.isNotBlank() && selectedTime != null
-                BookingStep.Contact -> contactFormValid
-            },
-            onClick = {
-                when (currentStep) {
-                    BookingStep.Service -> currentStepName = BookingStep.Vehicle.name
-                    BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
-                    BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
-                    BookingStep.Contact -> Unit
-                }
-            },
-            label = if (currentStep == BookingStep.Contact) "Rever Marcação" else "Continuar",
-            contentPadding = contentPadding,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+        if (currentStep != BookingStep.Success) {
+            ContinueBar(
+                enabled = when (currentStep) {
+                    BookingStep.Service -> selectedServiceId != null
+                    BookingStep.Vehicle -> selectedVehicleId != null
+                    BookingStep.DateTime -> selectedDateId.isNotBlank() && selectedTime != null
+                    BookingStep.Contact -> contactFormValid
+                    BookingStep.Confirmation -> selectedService != null &&
+                        selectedVehicle != null &&
+                        selectedDate != null &&
+                        selectedTime != null &&
+                        contactFormValid
+                    BookingStep.Success -> false
+                },
+                onClick = {
+                    when (currentStep) {
+                        BookingStep.Service -> currentStepName = BookingStep.Vehicle.name
+                        BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
+                        BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
+                        BookingStep.Contact -> currentStepName = BookingStep.Confirmation.name
+                        BookingStep.Confirmation -> currentStepName = BookingStep.Success.name
+                        BookingStep.Success -> Unit
+                    }
+                },
+                label = when (currentStep) {
+                    BookingStep.Contact -> "Rever Marcação"
+                    BookingStep.Confirmation -> "Confirmar Marcação"
+                    else -> "Continuar"
+                },
+                contentPadding = contentPadding,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 }
 
@@ -529,6 +590,492 @@ private fun BookingContactHeader(onBack: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
+    }
+}
+
+@Composable
+private fun BookingConfirmationHeader(onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.inverseSurface,
+                        MaterialTheme.colorScheme.secondary,
+                    ),
+                ),
+            )
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 8.dp, bottom = 28.dp),
+    ) {
+        OutlinedButton(
+            onClick = onBack,
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.size(8.dp))
+            Text("Voltar", style = MaterialTheme.typography.labelLarge)
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = "Confirmar Marcação",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Reveja os detalhes antes de confirmar",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
+        )
+    }
+}
+
+@Composable
+private fun BookingConfirmationContent(
+    service: BookingService?,
+    vehicle: BookingVehicle?,
+    date: BookingDateOption?,
+    time: String?,
+    name: String,
+    phone: String,
+    email: String,
+    notes: String,
+    onEditService: () -> Unit,
+    onEditDateTime: () -> Unit,
+    onEditContact: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(top = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        ConfirmationCard(
+            title = "Detalhes do Serviço",
+            onEdit = onEditService,
+        ) {
+            ConfirmationIconRow(
+                icon = service?.icon ?: Icons.Filled.AutoAwesome,
+                title = service?.name ?: "Serviço por selecionar",
+                body = "Veículo: ${vehicle?.name ?: "Por selecionar"}",
+            )
+        }
+
+        ConfirmationCard(
+            title = "Data e Hora",
+            onEdit = onEditDateTime,
+        ) {
+            ConfirmationLine(
+                icon = Icons.Filled.CalendarMonth,
+                text = "${date?.dateLabel ?: "Data por selecionar"}",
+            )
+            ConfirmationLine(
+                icon = Icons.Filled.AccessTime,
+                text = time ?: "Hora por selecionar",
+            )
+        }
+
+        ConfirmationCard(
+            title = "Seus Dados",
+            onEdit = onEditContact,
+        ) {
+            ConfirmationLine(icon = Icons.Filled.Person, text = name)
+            ConfirmationLine(icon = Icons.Filled.Phone, text = phone)
+            ConfirmationLine(icon = Icons.Filled.Email, text = email)
+            if (notes.isNotBlank()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(
+                    text = notes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+
+        ConfirmationCard(title = "Localização") {
+            ConfirmationIconRow(
+                icon = Icons.Filled.LocationOn,
+                title = "Suds & Shine Solutions",
+                body = "Shopping Norte Sul, Piso -1\nLeiria, Portugal",
+            )
+        }
+
+        PriceSummaryCard(
+            serviceName = service?.name ?: "Serviço",
+            price = service?.passengerPrice ?: "0,00€",
+        )
+    }
+}
+
+@Composable
+private fun ConfirmationCard(
+    title: String,
+    onEdit: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (onEdit != null) {
+                    Surface(
+                        modifier = Modifier.clickable(onClick = onEdit),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.24f),
+                        contentColor = MaterialTheme.colorScheme.tertiary,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = "Editar",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+            }
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ConfirmationIconRow(
+    icon: ImageVector,
+    title: String,
+    body: String,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            modifier = Modifier.size(42.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f),
+            contentColor = MaterialTheme.colorScheme.tertiary,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.padding(10.dp),
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfirmationLine(
+    icon: ImageVector,
+    text: String,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun PriceSummaryCard(
+    serviceName: String,
+    price: String,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Total a Pagar",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Icon(
+                    imageVector = Icons.Filled.Euro,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = serviceName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
+                )
+                Text(
+                    text = price,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.18f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Total",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = price,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingSuccessContent(
+    service: BookingService?,
+    date: BookingDateOption?,
+    time: String?,
+    phone: String,
+    onAddToCalendar: () -> Unit,
+    onViewBooking: () -> Unit,
+    onHome: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 36.dp, bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+
+        Surface(
+            modifier = Modifier.size(112.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            shadowElevation = 8.dp,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.padding(24.dp),
+            )
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        Text(
+            text = "Marcação Confirmada!",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "A sua marcação foi criada com sucesso",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(20.dp))
+
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.24f),
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "Referência",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "SS-4MAI-1430",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        ConfirmationCard(title = "Resumo da Marcação") {
+            ConfirmationIconRow(
+                icon = Icons.Filled.Event,
+                title = "${date?.dateLabel ?: "Data por confirmar"}, ${time ?: "hora por confirmar"}",
+                body = service?.name ?: "Serviço por confirmar",
+            )
+            ConfirmationIconRow(
+                icon = Icons.Filled.LocationOn,
+                title = "Suds & Shine Solutions",
+                body = "Shopping Norte Sul, Piso -1, Leiria",
+            )
+            ConfirmationIconRow(
+                icon = Icons.Filled.Phone,
+                title = phone.ifBlank { "913 005 855" },
+                body = "Entre em contacto se necessário",
+            )
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedButton(
+                onClick = onAddToCalendar,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.inverseSurface),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.inverseSurface,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CalendarMonth,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text("Adicionar ao Google Calendar", style = MaterialTheme.typography.labelLarge)
+            }
+
+            OutlinedButton(
+                onClick = onViewBooking,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.inverseSurface),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.inverseSurface,
+                ),
+            ) {
+                Text("Ver Detalhes da Marcação", style = MaterialTheme.typography.labelLarge)
+            }
+
+            Button(
+                onClick = onHome,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Home,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = "Voltar ao Início",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
     }
 }
 

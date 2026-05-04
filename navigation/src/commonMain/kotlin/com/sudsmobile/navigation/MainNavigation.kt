@@ -78,7 +78,18 @@ fun MainNavigation(
                 HomeScreen(contentPadding = paddingValues)
             }
             composable(Routes.Products) {
-                ProductsScreen(contentPadding = paddingValues)
+                ProductsScreen(
+                    contentPadding = paddingValues,
+                    onHome = {
+                        navController.navigate(Routes.Home) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable(Routes.Cart) {
                 CartScreen(contentPadding = paddingValues)
