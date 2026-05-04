@@ -62,7 +62,13 @@ private data class ProfileStat(
 private data class ProfileMenuItem(
     val icon: ImageVector,
     val label: String,
+    val action: ProfileMenuAction = ProfileMenuAction.None,
 )
+
+private enum class ProfileMenuAction {
+    None,
+    Vehicles,
+}
 
 private val profileStats = listOf(
     ProfileStat(value = "7", label = "Lavagens"),
@@ -72,7 +78,11 @@ private val profileStats = listOf(
 
 private val menuItems = listOf(
     ProfileMenuItem(icon = Icons.Filled.Person, label = "Dados Pessoais"),
-    ProfileMenuItem(icon = Icons.Filled.DirectionsCar, label = "Meus Veículos"),
+    ProfileMenuItem(
+        icon = Icons.Filled.DirectionsCar,
+        label = "Meus Veículos",
+        action = ProfileMenuAction.Vehicles,
+    ),
     ProfileMenuItem(icon = Icons.Filled.CardGiftcard, label = "Programa de Fidelização"),
     ProfileMenuItem(icon = Icons.Filled.CalendarMonth, label = "Histórico de Lavagens"),
     ProfileMenuItem(icon = Icons.Filled.Notifications, label = "Notificações"),
@@ -84,6 +94,7 @@ private val menuItems = listOf(
 fun ProfileScreen(
     contentPadding: PaddingValues,
     onRequestSignIn: () -> Unit,
+    onManageVehicles: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -102,7 +113,7 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             NearestLocationCard()
-            ProfileMenuCard()
+            ProfileMenuCard(onManageVehicles = onManageVehicles)
             PreferencesCard()
             LogoutButton(onClick = onRequestSignIn)
             AppVersionText()
@@ -310,7 +321,7 @@ private fun NearestLocationCard() {
 }
 
 @Composable
-private fun ProfileMenuCard() {
+private fun ProfileMenuCard(onManageVehicles: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -319,7 +330,15 @@ private fun ProfileMenuCard() {
     ) {
         Column {
             menuItems.forEachIndexed { index, item ->
-                ProfileMenuRow(item = item)
+                ProfileMenuRow(
+                    item = item,
+                    onClick = {
+                        when (item.action) {
+                            ProfileMenuAction.None -> Unit
+                            ProfileMenuAction.Vehicles -> onManageVehicles()
+                        }
+                    },
+                )
                 if (index != menuItems.lastIndex) {
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 68.dp),
@@ -332,11 +351,14 @@ private fun ProfileMenuCard() {
 }
 
 @Composable
-private fun ProfileMenuRow(item: ProfileMenuItem) {
+private fun ProfileMenuRow(
+    item: ProfileMenuItem,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {}
+            .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

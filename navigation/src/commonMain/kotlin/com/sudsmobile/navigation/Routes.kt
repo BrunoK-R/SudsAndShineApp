@@ -8,6 +8,7 @@ object Routes {
     const val Products = "products"
     const val Cart = "cart"
     const val Profile = "profile"
+    const val Vehicles = "vehicles"
     const val Blog = "blog"
     const val Payment = "payment"
 }
