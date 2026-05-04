@@ -22,6 +22,7 @@ import com.sudsmobile.feature.blog.BlogScreen
 import com.sudsmobile.feature.cart.CartScreen
 import com.sudsmobile.feature.home.HomeScreen
 import com.sudsmobile.feature.payment.PaymentScreen
+import com.sudsmobile.feature.profile.HistoryScreen
 import com.sudsmobile.feature.products.ProductsScreen
 import com.sudsmobile.feature.profile.ProfileScreen
 import com.sudsmobile.feature.profile.VehiclesScreen
@@ -112,10 +113,17 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onRequestSignIn = onRequestSignIn,
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
+                    onOpenHistory = { navController.navigate(Routes.History) },
                 )
             }
             composable(Routes.Vehicles) {
                 VehiclesScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.History) {
+                HistoryScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                 )

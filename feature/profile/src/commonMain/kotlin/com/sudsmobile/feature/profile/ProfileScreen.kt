@@ -68,6 +68,7 @@ private data class ProfileMenuItem(
 private enum class ProfileMenuAction {
     None,
     Vehicles,
+    History,
 }
 
 private val profileStats = listOf(
@@ -84,7 +85,11 @@ private val menuItems = listOf(
         action = ProfileMenuAction.Vehicles,
     ),
     ProfileMenuItem(icon = Icons.Filled.CardGiftcard, label = "Programa de Fidelização"),
-    ProfileMenuItem(icon = Icons.Filled.CalendarMonth, label = "Histórico de Lavagens"),
+    ProfileMenuItem(
+        icon = Icons.Filled.CalendarMonth,
+        label = "Histórico de Lavagens",
+        action = ProfileMenuAction.History,
+    ),
     ProfileMenuItem(icon = Icons.Filled.Notifications, label = "Notificações"),
     ProfileMenuItem(icon = Icons.AutoMirrored.Filled.Help, label = "Ajuda e Suporte"),
     ProfileMenuItem(icon = Icons.Filled.Security, label = "Privacidade"),
@@ -95,6 +100,7 @@ fun ProfileScreen(
     contentPadding: PaddingValues,
     onRequestSignIn: () -> Unit,
     onManageVehicles: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -113,7 +119,10 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             NearestLocationCard()
-            ProfileMenuCard(onManageVehicles = onManageVehicles)
+            ProfileMenuCard(
+                onManageVehicles = onManageVehicles,
+                onOpenHistory = onOpenHistory,
+            )
             PreferencesCard()
             LogoutButton(onClick = onRequestSignIn)
             AppVersionText()
@@ -321,7 +330,10 @@ private fun NearestLocationCard() {
 }
 
 @Composable
-private fun ProfileMenuCard(onManageVehicles: () -> Unit) {
+private fun ProfileMenuCard(
+    onManageVehicles: () -> Unit,
+    onOpenHistory: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -336,6 +348,7 @@ private fun ProfileMenuCard(onManageVehicles: () -> Unit) {
                         when (item.action) {
                             ProfileMenuAction.None -> Unit
                             ProfileMenuAction.Vehicles -> onManageVehicles()
+                            ProfileMenuAction.History -> onOpenHistory()
                         }
                     },
                 )
