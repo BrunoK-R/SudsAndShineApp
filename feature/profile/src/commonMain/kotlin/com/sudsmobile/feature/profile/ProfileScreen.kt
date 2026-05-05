@@ -69,6 +69,7 @@ private enum class ProfileMenuAction {
     None,
     Vehicles,
     History,
+    Contact,
 }
 
 private val profileStats = listOf(
@@ -91,7 +92,11 @@ private val menuItems = listOf(
         action = ProfileMenuAction.History,
     ),
     ProfileMenuItem(icon = Icons.Filled.Notifications, label = "Notificações"),
-    ProfileMenuItem(icon = Icons.AutoMirrored.Filled.Help, label = "Ajuda e Suporte"),
+    ProfileMenuItem(
+        icon = Icons.AutoMirrored.Filled.Help,
+        label = "Ajuda e Suporte",
+        action = ProfileMenuAction.Contact,
+    ),
     ProfileMenuItem(icon = Icons.Filled.Security, label = "Privacidade"),
 )
 
@@ -101,6 +106,7 @@ fun ProfileScreen(
     onRequestSignIn: () -> Unit,
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
+    onOpenContact: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -122,6 +128,7 @@ fun ProfileScreen(
             ProfileMenuCard(
                 onManageVehicles = onManageVehicles,
                 onOpenHistory = onOpenHistory,
+                onOpenContact = onOpenContact,
             )
             PreferencesCard()
             LogoutButton(onClick = onRequestSignIn)
@@ -333,6 +340,7 @@ private fun NearestLocationCard() {
 private fun ProfileMenuCard(
     onManageVehicles: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenContact: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -349,6 +357,7 @@ private fun ProfileMenuCard(
                             ProfileMenuAction.None -> Unit
                             ProfileMenuAction.Vehicles -> onManageVehicles()
                             ProfileMenuAction.History -> onOpenHistory()
+                            ProfileMenuAction.Contact -> onOpenContact()
                         }
                     },
                 )

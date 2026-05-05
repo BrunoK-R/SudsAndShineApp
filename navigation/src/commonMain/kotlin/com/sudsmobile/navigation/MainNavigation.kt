@@ -22,6 +22,7 @@ import com.sudsmobile.feature.blog.BlogScreen
 import com.sudsmobile.feature.cart.CartScreen
 import com.sudsmobile.feature.home.HomeScreen
 import com.sudsmobile.feature.payment.PaymentScreen
+import com.sudsmobile.feature.profile.ContactScreen
 import com.sudsmobile.feature.profile.HistoryScreen
 import com.sudsmobile.feature.products.ProductsScreen
 import com.sudsmobile.feature.profile.ProfileScreen
@@ -114,6 +115,7 @@ fun MainNavigation(
                     onRequestSignIn = onRequestSignIn,
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
                     onOpenHistory = { navController.navigate(Routes.History) },
+                    onOpenContact = { navController.navigate(Routes.Contact) },
                 )
             }
             composable(Routes.Vehicles) {
@@ -126,6 +128,21 @@ fun MainNavigation(
                 HistoryScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.Contact) {
+                ContactScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onBookWash = {
+                        navController.navigate(Routes.Products) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                 )
             }
             composable(Routes.Blog) {
