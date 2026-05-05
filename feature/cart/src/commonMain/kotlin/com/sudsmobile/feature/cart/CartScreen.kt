@@ -17,22 +17,33 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Recommend
+import androidx.compose.material.icons.filled.SentimentSatisfied
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -70,6 +82,19 @@ private data class BookingSummary(
     val status: BookingStatus,
     val icon: ImageVector,
     val showLocation: Boolean,
+)
+
+private data class RatingTag(
+    val id: String,
+    val label: String,
+    val icon: ImageVector,
+)
+
+private val ratingTags = listOf(
+    RatingTag("fast", "Rápido", Icons.Filled.FlashOn),
+    RatingTag("quality", "Qualidade", Icons.Filled.Shield),
+    RatingTag("friendly", "Simpático", Icons.Filled.SentimentSatisfied),
+    RatingTag("recommend", "Recomendo", Icons.Filled.Recommend),
 )
 
 private val upcomingBookings = listOf(
@@ -123,7 +148,10 @@ private val completedBookings = listOf(
 )
 
 @Composable
-fun CartScreen(contentPadding: PaddingValues) {
+fun CartScreen(
+    contentPadding: PaddingValues,
+    onRateService: () -> Unit = {},
+) {
     var selectedTabName by rememberSaveable { mutableStateOf(BookingsTab.Upcoming.name) }
     val selectedTab = BookingsTab.valueOf(selectedTabName)
     val bookings = when (selectedTab) {
@@ -157,6 +185,7 @@ fun CartScreen(contentPadding: PaddingValues) {
                     BookingSummaryCard(
                         booking = booking,
                         showRatingAction = selectedTab == BookingsTab.Completed,
+                        onRateService = onRateService,
                     )
                 }
             }
@@ -251,6 +280,7 @@ private fun BookingsSegmentedTabs(
 private fun BookingSummaryCard(
     booking: BookingSummary,
     showRatingAction: Boolean,
+    onRateService: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -341,7 +371,7 @@ private fun BookingSummaryCard(
                     text = "Avaliar Serviço",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { }
+                        .clickable(onClick = onRateService)
                         .padding(top = 14.dp),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.tertiary,
@@ -350,6 +380,462 @@ private fun BookingSummaryCard(
             }
         }
     }
+}
+
+@Composable
+fun RatingScreen(
+    contentPadding: PaddingValues,
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+) {
+    var rating by rememberSaveable { mutableStateOf(0) }
+    var selectedTagIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var comment by rememberSaveable { mutableStateOf("") }
+    var submitted by rememberSaveable { mutableStateOf(false) }
+
+    if (submitted) {
+        RatingSubmittedScreen(
+            contentPadding = contentPadding,
+            onHome = onHome,
+        )
+        return
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + if (rating > 0) 112.dp else 24.dp),
+        ) {
+            RatingHeader(onBack = onBack)
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                CompletedServiceCard()
+                RatingStarsCard(
+                    rating = rating,
+                    onRatingSelected = { rating = it },
+                )
+
+                if (rating > 0) {
+                    RatingTagsCard(
+                        selectedTagIds = selectedTagIds,
+                        onTagToggled = { tagId ->
+                            selectedTagIds = if (tagId in selectedTagIds) {
+                                selectedTagIds - tagId
+                            } else {
+                                selectedTagIds + tagId
+                            }
+                        },
+                    )
+                    RatingCommentCard(
+                        comment = comment,
+                        onCommentChange = { comment = it },
+                    )
+                }
+            }
+        }
+
+        if (rating > 0) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                shadowElevation = 6.dp,
+            ) {
+                Column {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Button(
+                        onClick = { submitted = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 16.dp, bottom = contentPadding.calculateBottomPadding() + 16.dp)
+                            .height(56.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary,
+                        ),
+                    ) {
+                        Text(
+                            text = "Enviar Avaliação",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RatingHeader(onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.inverseSurface,
+                        MaterialTheme.colorScheme.secondary,
+                    ),
+                ),
+            )
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 8.dp, bottom = 28.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onBack)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = "Voltar",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = "Avaliar Serviço",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Como foi a sua experiência?",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
+        )
+    }
+}
+
+@Composable
+private fun CompletedServiceCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "Serviço Realizado",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Lavagem Premium",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "15 de Março, 2026",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RatingStarsCard(
+    rating: Int,
+    onRatingSelected: (Int) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "Classifique o Serviço",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(22.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (1..5).forEach { star ->
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = "$star estrelas",
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .clickable { onRatingSelected(star) }
+                            .padding(2.dp),
+                        tint = if (star <= rating) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        },
+                    )
+                }
+            }
+            if (rating > 0) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = ratingLabel(rating),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RatingTagsCard(
+    selectedTagIds: List<String>,
+    onTagToggled: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "O que destacaria?",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ratingTags.chunked(2).forEach { rowTags ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        rowTags.forEach { tag ->
+                            RatingTagButton(
+                                tag = tag,
+                                selected = tag.id in selectedTagIds,
+                                onClick = { onTagToggled(tag.id) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RatingTagButton(
+    tag: RatingTag,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .height(92.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        border = androidx.compose.foundation.BorderStroke(
+            width = 2.dp,
+            color = if (selected) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.tertiary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = tag.icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = tag.label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RatingCommentCard(
+    comment: String,
+    onCommentChange: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "Comentário (Opcional)",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            OutlinedTextField(
+                value = comment,
+                onValueChange = onCommentChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(128.dp),
+                placeholder = {
+                    Text(
+                        text = "Partilhe mais detalhes sobre a sua experiência...",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                minLines = 4,
+                shape = RoundedCornerShape(14.dp),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.tertiary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RatingSubmittedScreen(
+    contentPadding: PaddingValues,
+    onHome: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 48.dp, bottom = contentPadding.calculateBottomPadding() + 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Surface(
+            modifier = Modifier.size(112.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+            shadowElevation = 10.dp,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = null,
+                modifier = Modifier.padding(24.dp),
+            )
+        }
+        Spacer(Modifier.height(32.dp))
+        Text(
+            text = "Obrigado!",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "A sua avaliação ajuda-nos a melhorar o serviço",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(32.dp))
+        Button(
+            onClick = onHome,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+            ),
+        ) {
+            Text(
+                text = "Voltar ao Início",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+private fun ratingLabel(rating: Int): String = when (rating) {
+    5 -> "Excelente!"
+    4 -> "Muito Bom!"
+    3 -> "Bom"
+    2 -> "Pode Melhorar"
+    else -> "Insatisfeito"
 }
 
 @Composable

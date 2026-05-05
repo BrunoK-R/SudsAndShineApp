@@ -20,6 +20,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.sudsmobile.feature.blog.BlogScreen
 import com.sudsmobile.feature.cart.CartScreen
+import com.sudsmobile.feature.cart.RatingScreen
 import com.sudsmobile.feature.home.HomeScreen
 import com.sudsmobile.feature.payment.PaymentScreen
 import com.sudsmobile.feature.profile.ContactScreen
@@ -107,7 +108,25 @@ fun MainNavigation(
                 )
             }
             composable(Routes.Cart) {
-                CartScreen(contentPadding = paddingValues)
+                CartScreen(
+                    contentPadding = paddingValues,
+                    onRateService = { navController.navigate(Routes.Rating) },
+                )
+            }
+            composable(Routes.Rating) {
+                RatingScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onHome = {
+                        navController.navigate(Routes.Home) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable(Routes.Profile) {
                 ProfileScreen(
