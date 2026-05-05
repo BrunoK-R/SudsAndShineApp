@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -68,6 +69,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -259,13 +261,14 @@ fun ProductsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
-                            .padding(top = 24.dp),
+                            .offset(y = (-16).dp)
+                            .padding(top = 0.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Text(
                             text = "Selecione o tipo de veículo para calcular o preço correto",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
                         )
 
                         bookingVehicles.forEach { vehicle ->
@@ -387,218 +390,55 @@ fun ProductsScreen(
 
 @Composable
 private fun BookingServiceHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        OutlinedButton(
-            onClick = onBack,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(8.dp))
-            Text("Voltar", style = MaterialTheme.typography.labelLarge)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = "Escolha o Serviço",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Passo 1 de 4",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    BookingStepHeader(
+        title = "Escolha o Serviço",
+        subtitle = "Passo 1 de 4",
+        onBack = onBack,
+    )
 }
 
 @Composable
 private fun BookingVehicleHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        OutlinedButton(
-            onClick = onBack,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(8.dp))
-            Text("Voltar", style = MaterialTheme.typography.labelLarge)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = "Tipo de Veículo",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Passo 2 de 4",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    BookingStepHeader(
+        title = "Tipo de Veículo",
+        subtitle = "Passo 2 de 4",
+        onBack = onBack,
+    )
 }
 
 @Composable
 private fun BookingDateTimeHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        OutlinedButton(
-            onClick = onBack,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(8.dp))
-            Text("Voltar", style = MaterialTheme.typography.labelLarge)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = "Data e Hora",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Passo 3 de 4",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    BookingStepHeader(
+        title = "Data e Hora",
+        subtitle = "Passo 3 de 4",
+        onBack = onBack,
+    )
 }
 
 @Composable
 private fun BookingContactHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        OutlinedButton(
-            onClick = onBack,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(8.dp))
-            Text("Voltar", style = MaterialTheme.typography.labelLarge)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = "Dados de Contacto",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Passo 4 de 4",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    BookingStepHeader(
+        title = "Dados de Contacto",
+        subtitle = "Passo 4 de 4",
+        onBack = onBack,
+    )
 }
 
 @Composable
 private fun BookingConfirmationHeader(onBack: () -> Unit) {
+    BookingStepHeader(
+        title = "Confirmar Marcação",
+        subtitle = "Reveja os detalhes antes de confirmar",
+        onBack = onBack,
+    )
+}
+
+@Composable
+private fun BookingStepHeader(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -636,14 +476,14 @@ private fun BookingConfirmationHeader(onBack: () -> Unit) {
         Spacer(Modifier.height(24.dp))
 
         Text(
-            text = "Confirmar Marcação",
+            text = title,
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Reveja os detalhes antes de confirmar",
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
@@ -668,7 +508,8 @@ private fun BookingConfirmationContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .padding(top = 24.dp),
+            .offset(y = (-16).dp)
+            .padding(top = 0.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ConfirmationCard(
@@ -709,6 +550,7 @@ private fun BookingConfirmationContent(
                     text = notes,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = FontStyle.Italic,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
@@ -1168,7 +1010,8 @@ private fun BookingContactContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .padding(top = 24.dp),
+            .offset(y = (-16).dp)
+            .padding(top = 0.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Card(
@@ -1315,7 +1158,8 @@ private fun DateTimeStepContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .padding(top = 24.dp),
+            .offset(y = (-16).dp)
+            .padding(top = 0.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         DateSelectionCard(
