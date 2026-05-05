@@ -195,6 +195,8 @@ private val bookingTimeSlots = listOf(
 @Composable
 fun ProductsScreen(
     contentPadding: PaddingValues,
+    onBack: () -> Unit = {},
+    onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
 ) {
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
@@ -229,7 +231,7 @@ fun ProductsScreen(
         ) {
             when (currentStep) {
                 BookingStep.Service -> {
-                    BookingServiceHeader()
+                    BookingServiceHeader(onBack = onBack)
 
                     Column(
                         modifier = Modifier
@@ -340,7 +342,7 @@ fun ProductsScreen(
                         time = selectedTime,
                         phone = contactPhone,
                         onAddToCalendar = {},
-                        onViewBooking = {},
+                        onViewBooking = onViewBooking,
                         onHome = onHome,
                     )
                 }
@@ -384,7 +386,7 @@ fun ProductsScreen(
 }
 
 @Composable
-private fun BookingServiceHeader() {
+private fun BookingServiceHeader(onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -402,7 +404,7 @@ private fun BookingServiceHeader() {
             .padding(top = 8.dp, bottom = 28.dp),
     ) {
         OutlinedButton(
-            onClick = {},
+            onClick = onBack,
             shape = RoundedCornerShape(12.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
             colors = ButtonDefaults.outlinedButtonColors(

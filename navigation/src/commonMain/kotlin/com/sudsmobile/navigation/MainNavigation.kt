@@ -91,6 +91,16 @@ fun MainNavigation(
             composable(Routes.Products) {
                 ProductsScreen(
                     contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onViewBooking = {
+                        navController.navigate(Routes.Cart) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     onHome = {
                         navController.navigate(Routes.Home) {
                             popUpTo(navController.graph.findStartDestination().id) {
