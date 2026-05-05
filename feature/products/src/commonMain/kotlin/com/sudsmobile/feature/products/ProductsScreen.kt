@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 private data class BookingService(
@@ -93,8 +94,9 @@ private data class BookingVehicle(
 
 private data class BookingDateOption(
     val id: String,
-    val dayLabel: String,
+    val dayOfMonth: Int,
     val dateLabel: String,
+    val summaryLabel: String,
     val available: Boolean = true,
 )
 
@@ -164,13 +166,37 @@ private val bookingVehicles = listOf(
 )
 
 private val bookingDateOptions = listOf(
-    BookingDateOption("today", "Hoje", "4 mai"),
-    BookingDateOption("tomorrow", "Amanhã", "5 mai"),
-    BookingDateOption("wed", "Quarta", "6 mai"),
-    BookingDateOption("thu", "Quinta", "7 mai"),
-    BookingDateOption("fri", "Sexta", "8 mai"),
-    BookingDateOption("sat", "Sábado", "9 mai"),
-    BookingDateOption("sun", "Domingo", "10 mai", available = false),
+    BookingDateOption("2026-05-01", 1, "1 mai", "1 de maio, 2026", available = false),
+    BookingDateOption("2026-05-02", 2, "2 mai", "2 de maio, 2026", available = false),
+    BookingDateOption("2026-05-03", 3, "3 mai", "3 de maio, 2026", available = false),
+    BookingDateOption("2026-05-04", 4, "4 mai", "4 de maio, 2026", available = false),
+    BookingDateOption("2026-05-05", 5, "5 mai", "5 de maio, 2026"),
+    BookingDateOption("2026-05-06", 6, "6 mai", "6 de maio, 2026"),
+    BookingDateOption("2026-05-07", 7, "7 mai", "7 de maio, 2026"),
+    BookingDateOption("2026-05-08", 8, "8 mai", "8 de maio, 2026"),
+    BookingDateOption("2026-05-09", 9, "9 mai", "9 de maio, 2026"),
+    BookingDateOption("2026-05-10", 10, "10 mai", "10 de maio, 2026", available = false),
+    BookingDateOption("2026-05-11", 11, "11 mai", "11 de maio, 2026"),
+    BookingDateOption("2026-05-12", 12, "12 mai", "12 de maio, 2026"),
+    BookingDateOption("2026-05-13", 13, "13 mai", "13 de maio, 2026"),
+    BookingDateOption("2026-05-14", 14, "14 mai", "14 de maio, 2026"),
+    BookingDateOption("2026-05-15", 15, "15 mai", "15 de maio, 2026"),
+    BookingDateOption("2026-05-16", 16, "16 mai", "16 de maio, 2026"),
+    BookingDateOption("2026-05-17", 17, "17 mai", "17 de maio, 2026", available = false),
+    BookingDateOption("2026-05-18", 18, "18 mai", "18 de maio, 2026"),
+    BookingDateOption("2026-05-19", 19, "19 mai", "19 de maio, 2026"),
+    BookingDateOption("2026-05-20", 20, "20 mai", "20 de maio, 2026"),
+    BookingDateOption("2026-05-21", 21, "21 mai", "21 de maio, 2026"),
+    BookingDateOption("2026-05-22", 22, "22 mai", "22 de maio, 2026"),
+    BookingDateOption("2026-05-23", 23, "23 mai", "23 de maio, 2026"),
+    BookingDateOption("2026-05-24", 24, "24 mai", "24 de maio, 2026", available = false),
+    BookingDateOption("2026-05-25", 25, "25 mai", "25 de maio, 2026"),
+    BookingDateOption("2026-05-26", 26, "26 mai", "26 de maio, 2026"),
+    BookingDateOption("2026-05-27", 27, "27 mai", "27 de maio, 2026"),
+    BookingDateOption("2026-05-28", 28, "28 mai", "28 de maio, 2026"),
+    BookingDateOption("2026-05-29", 29, "29 mai", "29 de maio, 2026"),
+    BookingDateOption("2026-05-30", 30, "30 mai", "30 de maio, 2026"),
+    BookingDateOption("2026-05-31", 31, "31 mai", "31 de maio, 2026", available = false),
 )
 
 private val bookingTimeSlots = listOf(
@@ -204,7 +230,7 @@ fun ProductsScreen(
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
-    var selectedDateId by rememberSaveable { mutableStateOf(bookingDateOptions.first().id) }
+    var selectedDateId by rememberSaveable { mutableStateOf(bookingDateOptions.first { it.available }.id) }
     var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
     var contactName by rememberSaveable { mutableStateOf("") }
     var contactPhone by rememberSaveable { mutableStateOf("") }
@@ -529,7 +555,7 @@ private fun BookingConfirmationContent(
         ) {
             ConfirmationLine(
                 icon = Icons.Filled.CalendarMonth,
-                text = "${date?.dateLabel ?: "Data por selecionar"}",
+                text = date?.summaryLabel ?: "Data por selecionar",
             )
             ConfirmationLine(
                 icon = Icons.Filled.AccessTime,
@@ -939,7 +965,7 @@ private fun SuccessSummaryCard(
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             ConfirmationIconRow(
                 icon = Icons.Filled.Event,
-                title = "${date?.dateLabel ?: "Data por confirmar"}, ${time ?: "hora por confirmar"}",
+                title = "${date?.summaryLabel ?: "Data por confirmar"}, ${time ?: "hora por confirmar"}",
                 body = service?.name ?: "Serviço por confirmar",
             )
             ConfirmationIconRow(
@@ -1162,7 +1188,7 @@ private fun DateTimeStepContent(
             .padding(top = 0.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        DateSelectionCard(
+        CalendarSelectionCard(
             selectedDateId = selectedDateId,
             onDateSelected = onDateSelected,
         )
@@ -1177,7 +1203,7 @@ private fun DateTimeStepContent(
 }
 
 @Composable
-private fun DateSelectionCard(
+private fun CalendarSelectionCard(
     selectedDateId: String,
     onDateSelected: (String) -> Unit,
 ) {
@@ -1196,12 +1222,77 @@ private fun DateSelectionCard(
                 title = "Selecione a Data",
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                bookingDateOptions.forEach { dateOption ->
-                    DateOptionRow(
-                        dateOption = dateOption,
-                        selected = selectedDateId == dateOption.id,
-                        onSelected = { onDateSelected(dateOption.id) },
+            CalendarMonthPicker(
+                selectedDateId = selectedDateId,
+                onDateSelected = onDateSelected,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalendarMonthPicker(
+    selectedDateId: String,
+    onDateSelected: (String) -> Unit,
+) {
+    val leadingEmptyCells = 4
+    val cells = List<BookingDateOption?>(leadingEmptyCells) { null } + bookingDateOptions
+    val weeks = cells.chunked(7)
+    val weekdayLabels = listOf("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Text(
+                text = "maio 2026",
+                modifier = Modifier.padding(vertical = 12.dp),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            weekdayLabels.forEach { label ->
+                Text(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+
+        weeks.forEach { week ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                week.forEach { dateOption ->
+                    if (dateOption == null) {
+                        Spacer(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp),
+                        )
+                    } else {
+                        CalendarDayCell(
+                            dateOption = dateOption,
+                            selected = selectedDateId == dateOption.id,
+                            onSelected = { onDateSelected(dateOption.id) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                repeat(7 - week.size) {
+                    Spacer(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
                     )
                 }
             }
@@ -1210,63 +1301,38 @@ private fun DateSelectionCard(
 }
 
 @Composable
-private fun DateOptionRow(
+private fun CalendarDayCell(
     dateOption: BookingDateOption,
     selected: Boolean,
     onSelected: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+        modifier = modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = dateOption.available, onClick = onSelected),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = when {
-            selected -> MaterialTheme.colorScheme.tertiaryContainer
+            selected -> MaterialTheme.colorScheme.tertiary
             dateOption.available -> MaterialTheme.colorScheme.surfaceContainerLow
             else -> MaterialTheme.colorScheme.surfaceContainerHigh
         },
         contentColor = when {
-            selected -> MaterialTheme.colorScheme.onTertiaryContainer
+            selected -> MaterialTheme.colorScheme.onTertiary
             dateOption.available -> MaterialTheme.colorScheme.onSurface
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.56f)
+            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f)
         },
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            contentAlignment = Alignment.Center,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = dateOption.dayLabel,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = dateOption.dateLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onTertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-            } else if (!dateOption.available) {
-                Text(
-                    text = "Encerrado",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            Text(
+                text = dateOption.dayOfMonth.toString(),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
