@@ -57,6 +57,9 @@ fun HomeScreen(
     contentPadding: PaddingValues,
     onBookService: () -> Unit = {},
     onViewServices: () -> Unit = {},
+    onViewBookings: () -> Unit = {},
+    onOpenRewards: () -> Unit = {},
+    onOpenProfile: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -65,7 +68,10 @@ fun HomeScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = contentPadding.calculateBottomPadding()),
     ) {
-        HomeHeader(onBookService = onBookService)
+        HomeHeader(
+            onBookService = onBookService,
+            onOpenProfile = onOpenProfile,
+        )
 
         Column(
             modifier = Modifier
@@ -74,8 +80,8 @@ fun HomeScreen(
                 .padding(top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            UpcomingBookingCard()
-            LoyaltyCard()
+            UpcomingBookingCard(onViewBookings = onViewBookings)
+            LoyaltyCard(onOpenRewards = onOpenRewards)
             FeaturedServices(
                 onBookService = onBookService,
                 onViewServices = onViewServices,
@@ -96,7 +102,10 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(onBookService: () -> Unit) {
+private fun HomeHeader(
+    onBookService: () -> Unit,
+    onOpenProfile: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -130,7 +139,9 @@ private fun HomeHeader(onBookService: () -> Unit) {
                 )
             }
             Surface(
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier
+                    .size(48.dp)
+                    .clickable(onClick = onOpenProfile),
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
                 border = CardDefaults.outlinedCardBorder().copy(
@@ -187,7 +198,7 @@ private fun HomeHeader(onBookService: () -> Unit) {
 }
 
 @Composable
-private fun UpcomingBookingCard() {
+private fun UpcomingBookingCard(onViewBookings: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -223,7 +234,7 @@ private fun UpcomingBookingCard() {
             DetailRow(Icons.Filled.AccessTime, "14:30")
             DetailRow(Icons.Filled.Place, "Shopping Norte Sul, Piso -1")
             OutlinedButton(
-                onClick = {},
+                onClick = onViewBookings,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
@@ -254,9 +265,11 @@ private fun DetailRow(icon: ImageVector, text: String, highlighted: Boolean = fa
 }
 
 @Composable
-private fun LoyaltyCard() {
+private fun LoyaltyCard(onOpenRewards: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenRewards),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface),
         shape = RoundedCornerShape(18.dp),
     ) {

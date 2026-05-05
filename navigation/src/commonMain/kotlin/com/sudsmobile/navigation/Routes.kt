@@ -13,6 +13,7 @@ object Routes {
     const val Vehicles = "vehicles"
     const val History = "history"
     const val Contact = "contact"
+    const val Loyalty = "loyalty"
     const val Blog = "blog"
     const val Payment = "payment"
 }

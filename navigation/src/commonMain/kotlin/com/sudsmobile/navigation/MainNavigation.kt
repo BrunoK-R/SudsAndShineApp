@@ -76,6 +76,9 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onBookService = { navController.navigate(Routes.Products) },
                     onViewServices = { navController.navigate(Routes.Services) },
+                    onViewBookings = { navController.navigate(Routes.Cart) },
+                    onOpenRewards = { navController.navigate(Routes.Loyalty) },
+                    onOpenProfile = { navController.navigate(Routes.Profile) },
                 )
             }
             composable(Routes.Services) {
@@ -127,6 +130,7 @@ fun MainNavigation(
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
                     onOpenHistory = { navController.navigate(Routes.History) },
                     onOpenContact = { navController.navigate(Routes.Contact) },
+                    onOpenRewards = { navController.navigate(Routes.Loyalty) },
                 )
             }
             composable(Routes.Vehicles) {
@@ -156,7 +160,7 @@ fun MainNavigation(
                     },
                 )
             }
-            composable(Routes.Blog) {
+            composable(Routes.Loyalty) {
                 BlogScreen(
                     contentPadding = paddingValues,
                     onBookWash = {

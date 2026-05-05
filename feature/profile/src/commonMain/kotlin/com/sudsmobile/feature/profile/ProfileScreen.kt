@@ -68,6 +68,7 @@ private data class ProfileMenuItem(
 private enum class ProfileMenuAction {
     None,
     Vehicles,
+    Loyalty,
     History,
     Contact,
 }
@@ -85,7 +86,11 @@ private val menuItems = listOf(
         label = "Meus Veículos",
         action = ProfileMenuAction.Vehicles,
     ),
-    ProfileMenuItem(icon = Icons.Filled.CardGiftcard, label = "Programa de Fidelização"),
+    ProfileMenuItem(
+        icon = Icons.Filled.CardGiftcard,
+        label = "Programa de Fidelização",
+        action = ProfileMenuAction.Loyalty,
+    ),
     ProfileMenuItem(
         icon = Icons.Filled.CalendarMonth,
         label = "Histórico de Lavagens",
@@ -107,6 +112,7 @@ fun ProfileScreen(
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
+    onOpenRewards: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -129,6 +135,7 @@ fun ProfileScreen(
                 onManageVehicles = onManageVehicles,
                 onOpenHistory = onOpenHistory,
                 onOpenContact = onOpenContact,
+                onOpenRewards = onOpenRewards,
             )
             PreferencesCard()
             LogoutButton(onClick = onRequestSignIn)
@@ -341,6 +348,7 @@ private fun ProfileMenuCard(
     onManageVehicles: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenContact: () -> Unit,
+    onOpenRewards: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -356,6 +364,7 @@ private fun ProfileMenuCard(
                         when (item.action) {
                             ProfileMenuAction.None -> Unit
                             ProfileMenuAction.Vehicles -> onManageVehicles()
+                            ProfileMenuAction.Loyalty -> onOpenRewards()
                             ProfileMenuAction.History -> onOpenHistory()
                             ProfileMenuAction.Contact -> onOpenContact()
                         }

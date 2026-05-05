@@ -11,6 +11,6 @@ val mainDestinations = listOf(
     MainNavDestination(Routes.Home, "Início", Icons.Filled.Home),
     MainNavDestination(Routes.Products, "Marcar", Icons.Filled.CalendarMonth),
     MainNavDestination(Routes.Cart, "Marcações", Icons.Filled.History),
-    MainNavDestination(Routes.Blog, "Recompensas", Icons.Filled.CardGiftcard),
+    MainNavDestination(Routes.Loyalty, "Recompensas", Icons.Filled.CardGiftcard),
     MainNavDestination(Routes.Profile, "Perfil", Icons.Filled.Person),
 )
