@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -52,7 +53,11 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HomeScreen(contentPadding: PaddingValues) {
+fun HomeScreen(
+    contentPadding: PaddingValues,
+    onBookService: () -> Unit = {},
+    onViewServices: () -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -60,7 +65,7 @@ fun HomeScreen(contentPadding: PaddingValues) {
             .verticalScroll(rememberScrollState())
             .padding(bottom = contentPadding.calculateBottomPadding()),
     ) {
-        HomeHeader()
+        HomeHeader(onBookService = onBookService)
 
         Column(
             modifier = Modifier
@@ -71,7 +76,10 @@ fun HomeScreen(contentPadding: PaddingValues) {
         ) {
             UpcomingBookingCard()
             LoyaltyCard()
-            FeaturedServices()
+            FeaturedServices(
+                onBookService = onBookService,
+                onViewServices = onViewServices,
+            )
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -88,7 +96,7 @@ fun HomeScreen(contentPadding: PaddingValues) {
 }
 
 @Composable
-private fun HomeHeader() {
+private fun HomeHeader(onBookService: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,7 +156,7 @@ private fun HomeHeader() {
         Spacer(Modifier.height(24.dp))
 
         Button(
-            onClick = {},
+            onClick = onBookService,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp),
@@ -304,7 +312,10 @@ private fun LoyaltyCard() {
 }
 
 @Composable
-private fun FeaturedServices() {
+private fun FeaturedServices(
+    onBookService: () -> Unit,
+    onViewServices: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -318,14 +329,29 @@ private fun FeaturedServices() {
             )
             Text(
                 "Ver Todos",
+                modifier = Modifier.clickable(onClick = onViewServices),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.tertiary,
                 fontWeight = FontWeight.Bold,
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ServiceCard(Icons.Filled.AutoAwesome, "Lavagem Premium", "32,00€", "45 min", Modifier.weight(1f))
-            ServiceCard(Icons.Filled.DirectionsCar, "Lavagem Standard", "25,00€", "30 min", Modifier.weight(1f))
+            ServiceCard(
+                icon = Icons.Filled.AutoAwesome,
+                title = "Lavagem Premium",
+                price = "32,00€",
+                duration = "45 min",
+                modifier = Modifier.weight(1f),
+                onClick = onBookService,
+            )
+            ServiceCard(
+                icon = Icons.Filled.DirectionsCar,
+                title = "Lavagem Standard",
+                price = "25,00€",
+                duration = "30 min",
+                modifier = Modifier.weight(1f),
+                onClick = onBookService,
+            )
         }
     }
 }
@@ -337,9 +363,12 @@ private fun ServiceCard(
     price: String,
     duration: String,
     modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
 ) {
     Card(
-        modifier = modifier.aspectRatio(1.05f),
+        modifier = modifier
+            .aspectRatio(1.05f)
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         shape = RoundedCornerShape(16.dp),

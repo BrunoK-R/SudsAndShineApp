@@ -26,6 +26,7 @@ import com.sudsmobile.feature.payment.PaymentScreen
 import com.sudsmobile.feature.profile.ContactScreen
 import com.sudsmobile.feature.profile.HistoryScreen
 import com.sudsmobile.feature.products.ProductsScreen
+import com.sudsmobile.feature.products.ServicesScreen
 import com.sudsmobile.feature.profile.ProfileScreen
 import com.sudsmobile.feature.profile.VehiclesScreen
 
@@ -36,7 +37,7 @@ fun MainNavigation(
     val navController = rememberNavController()
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
-    val showBottomBar = mainDestinations.any { it.route == currentRoute }
+    val showBottomBar = currentRoute == Routes.Services || mainDestinations.any { it.route == currentRoute }
 
     Scaffold(
         bottomBar = {
@@ -91,7 +92,18 @@ fun MainNavigation(
             startDestination = Routes.Home,
         ) {
             composable(Routes.Home) {
-                HomeScreen(contentPadding = paddingValues)
+                HomeScreen(
+                    contentPadding = paddingValues,
+                    onBookService = { navController.navigate(Routes.Products) },
+                    onViewServices = { navController.navigate(Routes.Services) },
+                )
+            }
+            composable(Routes.Services) {
+                ServicesScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onBookService = { navController.navigate(Routes.Products) },
+                )
             }
             composable(Routes.Products) {
                 ProductsScreen(

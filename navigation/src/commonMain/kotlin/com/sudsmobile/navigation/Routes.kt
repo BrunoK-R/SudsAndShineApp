@@ -5,6 +5,7 @@ object Routes {
     const val Auth = "auth"
     const val Main = "main"
     const val Home = "home"
+    const val Services = "services"
     const val Products = "products"
     const val Cart = "cart"
     const val Rating = "rating"
