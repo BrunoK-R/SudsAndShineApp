@@ -4,6 +4,7 @@ import com.sudsmobile.di.initializeKoin
 import com.sudsmobile.feature.blog.blogModule
 import com.sudsmobile.feature.cart.cartModule
 import com.sudsmobile.feature.home.homeModule
+import com.sudsmobile.feature.onboarding.onboardingModule
 import com.sudsmobile.feature.payment.di.paymentModule
 import com.sudsmobile.feature.profile.profileModule
 import com.sudsmobile.feature.products.productsModule
@@ -21,6 +22,7 @@ private fun initializeApp(isDebugBuild: Boolean) {
         isDebugBuild = isDebugBuild,
         additionalModules = listOf(
             homeModule,
+            onboardingModule,
             productsModule,
             blogModule,
             cartModule,

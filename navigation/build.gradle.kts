@@ -53,6 +53,7 @@ kotlin {
             implementation(project(path = ":data"))
             implementation(project(path = ":feature:auth"))
             implementation(project(path = ":feature:home"))
+            implementation(project(path = ":feature:onboarding"))
             implementation(project(path = ":feature:products"))
             implementation(project(path = ":feature:cart"))
             implementation(project(path = ":feature:payment"))
