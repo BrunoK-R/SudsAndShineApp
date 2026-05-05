@@ -95,7 +95,7 @@ fun SudsAndShineTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = SudsTypography,
+        typography = sudsTypography(),
         content = content,
     )
 }
