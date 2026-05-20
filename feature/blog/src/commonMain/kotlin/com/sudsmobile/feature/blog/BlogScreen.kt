@@ -25,17 +25,23 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,31 +49,24 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-
-private const val CurrentWashes = 7
-private const val TargetWashes = 10
-
-private data class LoyaltyHistoryItem(
-    val date: String,
-    val service: String,
-    val points: Int,
-)
-
-private val loyaltyHistory = listOf(
-    LoyaltyHistoryItem("15 de Março, 2026", "Lavagem Premium", 1),
-    LoyaltyHistoryItem("10 de Março, 2026", "Lavagem Exterior", 1),
-    LoyaltyHistoryItem("5 de Março, 2026", "Lavagem Standard", 1),
-    LoyaltyHistoryItem("28 de Fevereiro, 2026", "Lavagem Premium", 1),
-    LoyaltyHistoryItem("20 de Fevereiro, 2026", "Limpeza Interior", 1),
-    LoyaltyHistoryItem("15 de Fevereiro, 2026", "Lavagem Standard", 1),
-    LoyaltyHistoryItem("8 de Fevereiro, 2026", "Lavagem Premium", 1),
-)
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun BlogScreen(
     contentPadding: PaddingValues,
     onBookWash: () -> Unit = {},
+    onRequestSignIn: () -> Unit = {},
 ) {
+    val viewModel: LoyaltyViewModel = koinViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
+
+    LaunchedEffect(sessionState, bookingRevision) {
+        viewModel.refreshForSession()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -84,11 +83,12 @@ fun BlogScreen(
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            MainProgressCard()
-            StampGridCard()
-            HowItWorksCard()
-            StampHistoryCard()
-            BookWashButton(onClick = onBookWash)
+            LoyaltyContent(
+                uiState = uiState,
+                onRetry = viewModel::loadRewards,
+                onRequestSignIn = onRequestSignIn,
+                onBookWash = onBookWash,
+            )
         }
     }
 }
@@ -127,7 +127,145 @@ private fun LoyaltyHeader() {
 }
 
 @Composable
-private fun MainProgressCard() {
+private fun LoyaltyContent(
+    uiState: LoyaltyUiState,
+    onRetry: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onBookWash: () -> Unit,
+) {
+    when (uiState) {
+        LoyaltyUiState.Idle,
+        LoyaltyUiState.Loading -> LoyaltyStatusCard(
+            title = "A carregar recompensas",
+            body = "Estamos a consultar o seu histórico em tempo real.",
+            loading = true,
+        )
+
+        LoyaltyUiState.Unauthenticated -> {
+            LoyaltyStatusCard(
+                title = "Sessão necessária",
+                body = "Entre na sua conta para ver selos ganhos e recompensas disponíveis.",
+                icon = Icons.Filled.Lock,
+                actionLabel = "Entrar ou criar conta",
+                onAction = onRequestSignIn,
+            )
+            HowItWorksCard()
+        }
+
+        is LoyaltyUiState.Error -> {
+            LoyaltyStatusCard(
+                title = "Não foi possível carregar",
+                body = uiState.message,
+                icon = Icons.Filled.Refresh,
+                actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+                onAction = if (uiState.retryable) onRetry else null,
+            )
+            HowItWorksCard()
+        }
+
+        is LoyaltyUiState.Empty -> {
+            MainProgressCard(progress = uiState.progress)
+            StampGridCard(progress = uiState.progress)
+            HowItWorksCard()
+            StampHistoryCard(history = emptyList())
+            BookWashButton(onClick = onBookWash)
+        }
+
+        is LoyaltyUiState.Loaded -> {
+            MainProgressCard(progress = uiState.progress)
+            StampGridCard(progress = uiState.progress)
+            HowItWorksCard()
+            StampHistoryCard(history = uiState.history)
+            BookWashButton(onClick = onBookWash)
+        }
+    }
+}
+
+@Composable
+private fun LoyaltyStatusCard(
+    title: String,
+    body: String,
+    loading: Boolean = false,
+    icon: ImageVector = Icons.Filled.CardGiftcard,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f),
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (actionLabel != null && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.tertiary,
+                    ),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MainProgressCard(progress: LoyaltyProgressUi) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary),
@@ -175,16 +313,16 @@ private fun MainProgressCard() {
                     ) {
                         ProgressStat(
                             label = "Progresso Atual",
-                            value = "$CurrentWashes/$TargetWashes",
+                            value = "${progress.currentWashes}/${progress.targetWashes}",
                         )
                         ProgressStat(
                             label = "Faltam",
-                            value = "${TargetWashes - CurrentWashes}",
+                            value = progress.remainingWashes.toString(),
                             alignEnd = true,
                         )
                     }
                     LinearProgressIndicator(
-                        progress = { CurrentWashes.toFloat() / TargetWashes.toFloat() },
+                        progress = { progress.progress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(10.dp)
@@ -195,7 +333,7 @@ private fun MainProgressCard() {
                 }
 
                 Text(
-                    text = "Mais ${TargetWashes - CurrentWashes} lavagens para ganhar 1 lavagem grátis!",
+                    text = progress.progressMessage(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.90f),
                 )
@@ -229,7 +367,7 @@ private fun ProgressStat(
 }
 
 @Composable
-private fun StampGridCard() {
+private fun StampGridCard(progress: LoyaltyProgressUi) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -248,7 +386,7 @@ private fun StampGridCard() {
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                (0 until TargetWashes).chunked(5).forEach { rowItems ->
+                (0 until progress.targetWashes).chunked(5).forEach { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -256,7 +394,7 @@ private fun StampGridCard() {
                         rowItems.forEach { index ->
                             StampCell(
                                 index = index,
-                                earned = index < CurrentWashes,
+                                earned = index < progress.currentWashes,
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -386,7 +524,7 @@ private fun HowItWorksStep(
 }
 
 @Composable
-private fun StampHistoryCard() {
+private fun StampHistoryCard(history: List<LoyaltyHistoryItemUi>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -403,10 +541,18 @@ private fun StampHistoryCard() {
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
             )
-            loyaltyHistory.forEachIndexed { index, item ->
-                LoyaltyHistoryRow(item = item)
-                if (index != loyaltyHistory.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (history.isEmpty()) {
+                Text(
+                    text = "Ainda não tem lavagens concluídas a contar para recompensas.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                history.forEachIndexed { index, item ->
+                    LoyaltyHistoryRow(item = item)
+                    if (index != history.lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
                 }
             }
         }
@@ -414,7 +560,7 @@ private fun StampHistoryCard() {
 }
 
 @Composable
-private fun LoyaltyHistoryRow(item: LoyaltyHistoryItem) {
+private fun LoyaltyHistoryRow(item: LoyaltyHistoryItemUi) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -534,5 +680,13 @@ private fun SectionTitle(
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold,
         )
+    }
+}
+
+private fun LoyaltyProgressUi.progressMessage(): String {
+    return if (remainingWashes == 0) {
+        "Tem uma recompensa pronta para usar na próxima lavagem."
+    } else {
+        "Mais $remainingWashes lavagens para ganhar 1 lavagem grátis."
     }
 }

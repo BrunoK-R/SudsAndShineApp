@@ -193,6 +193,7 @@ fun MainNavigation(
             composable(Routes.Loyalty) {
                 BlogScreen(
                     contentPadding = paddingValues,
+                    onRequestSignIn = onRequestSignIn,
                     onBookWash = {
                         navController.navigate(Routes.Products) {
                             popUpTo(navController.graph.findStartDestination().id) {
