@@ -1,15 +1,23 @@
 package com.sudsmobile.data.booking
 
+import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthResult
+import com.sudsmobile.data.auth.AuthSession
+import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.auth.AuthUser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 class FirebaseBookingRepositoryTest {
     @Test
     fun rejectsInvalidAvailabilityRequestBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
-        val repository = FirebaseBookingRepository(api)
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
 
         val result = repository.getAvailability(
             BookingAvailabilityRequest(
@@ -26,7 +34,7 @@ class FirebaseBookingRepositoryTest {
     @Test
     fun rejectsInvalidEmailBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
-        val repository = FirebaseBookingRepository(api)
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
 
         val result = repository.createBooking(validRequest().copy(customerEmail = "not-an-email"))
 
@@ -38,7 +46,7 @@ class FirebaseBookingRepositoryTest {
     @Test
     fun normalizesRequestBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
-        val repository = FirebaseBookingRepository(api)
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
 
         val result = repository.createBooking(
             validRequest().copy(
@@ -53,6 +61,31 @@ class FirebaseBookingRepositoryTest {
         assertEquals("Bruno Ribeiro", api.lastRequest?.customerName)
         assertEquals("bruno@example.com", api.lastRequest?.customerEmail)
         assertEquals("Sem ambientador", api.lastRequest?.notes)
+        assertEquals("id-token-1", api.lastIdToken)
+    }
+
+    @Test
+    fun rejectsHistoryWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.getMyBookings()
+
+        assertIs<BookingHistoryResult.Failure>(result)
+        assertIs<BookingHistoryError.Unauthenticated>(result.error)
+        assertEquals(0, api.historyCalls)
+    }
+
+    @Test
+    fun loadsHistoryWithAuthenticatedIdToken() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.getMyBookings()
+
+        assertIs<BookingHistoryResult.Success>(result)
+        assertEquals(1, api.historyCalls)
+        assertEquals("id-token-1", api.lastHistoryIdToken)
     }
 }
 
@@ -75,9 +108,17 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         )
     }
 
-    override suspend fun createReservation(request: BookingCreateRequest): BookingCreateResult {
+    var historyCalls: Int = 0
+        private set
+    var lastIdToken: String? = null
+        private set
+    var lastHistoryIdToken: String? = null
+        private set
+
+    override suspend fun createReservation(request: BookingCreateRequest, idToken: String?): BookingCreateResult {
         calls += 1
         lastRequest = request
+        lastIdToken = idToken
         return BookingCreateResult.Success(
             BookingReceipt(
                 reservationId = "reservation-1",
@@ -85,6 +126,55 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
             ),
         )
     }
+
+    override suspend fun getMyReservations(idToken: String): BookingHistoryResult {
+        historyCalls += 1
+        lastHistoryIdToken = idToken
+        return BookingHistoryResult.Success(BookingHistory(reservations = emptyList()))
+    }
+}
+
+private class FakeAuthRepository(
+    authenticated: Boolean = false,
+) : AuthRepository {
+    override val sessionState: StateFlow<AuthSessionState> = MutableStateFlow(
+        if (authenticated) {
+            AuthSessionState.Authenticated(
+                AuthSession(
+                    user = AuthUser(
+                        uid = "uid-1",
+                        email = "bruno@example.com",
+                        displayName = "Bruno",
+                        phoneNumber = "",
+                    ),
+                    idToken = "id-token-1",
+                    refreshToken = "refresh-token-1",
+                    expiresInSeconds = 3600,
+                ),
+            )
+        } else {
+            AuthSessionState.Unauthenticated
+        },
+    )
+
+    override suspend fun signIn(email: String, password: String): AuthResult {
+        error("Not used")
+    }
+
+    override suspend fun register(
+        displayName: String,
+        email: String,
+        phoneNumber: String,
+        password: String,
+    ): AuthResult {
+        error("Not used")
+    }
+
+    override suspend fun sendPasswordReset(email: String): AuthActionResult {
+        error("Not used")
+    }
+
+    override fun signOut() = Unit
 }
 
 private fun validRequest(): BookingCreateRequest = BookingCreateRequest(

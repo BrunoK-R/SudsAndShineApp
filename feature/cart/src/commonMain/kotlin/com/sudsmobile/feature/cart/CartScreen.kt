@@ -22,10 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Recommend
 import androidx.compose.material.icons.filled.SentimentSatisfied
@@ -38,15 +36,18 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -60,29 +61,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 private enum class BookingsTab(val label: String) {
     Upcoming("Próximas"),
     Completed("Concluídas"),
 }
-
-private enum class BookingStatus(val label: String) {
-    Confirmed("Confirmado"),
-    Completed("Concluído"),
-    Cancelled("Cancelado"),
-}
-
-private data class BookingSummary(
-    val id: Int,
-    val service: String,
-    val date: String,
-    val time: String,
-    val vehicle: String,
-    val price: String,
-    val status: BookingStatus,
-    val icon: ImageVector,
-    val showLocation: Boolean,
-)
 
 private data class RatingTag(
     val id: String,
@@ -97,66 +82,19 @@ private val ratingTags = listOf(
     RatingTag("recommend", "Recomendo", Icons.Filled.Recommend),
 )
 
-private val upcomingBookings = listOf(
-    BookingSummary(
-        id = 1,
-        service = "Lavagem Premium",
-        date = "25 de Março, 2026",
-        time = "14:30",
-        vehicle = "BMW 320d",
-        price = "32,00€",
-        status = BookingStatus.Confirmed,
-        icon = Icons.Filled.AutoAwesome,
-        showLocation = true,
-    ),
-    BookingSummary(
-        id = 2,
-        service = "Lavagem Standard",
-        date = "28 de Março, 2026",
-        time = "10:00",
-        vehicle = "VW Golf",
-        price = "25,00€",
-        status = BookingStatus.Confirmed,
-        icon = Icons.Filled.DirectionsCar,
-        showLocation = true,
-    ),
-)
-
-private val completedBookings = listOf(
-    BookingSummary(
-        id = 3,
-        service = "Lavagem Premium",
-        date = "15 de Março, 2026",
-        time = "15:00",
-        vehicle = "BMW 320d",
-        price = "32,00€",
-        status = BookingStatus.Completed,
-        icon = Icons.Filled.AutoAwesome,
-        showLocation = false,
-    ),
-    BookingSummary(
-        id = 4,
-        service = "Lavagem Exterior",
-        date = "10 de Março, 2026",
-        time = "11:30",
-        vehicle = "BMW 320d",
-        price = "16,00€",
-        status = BookingStatus.Completed,
-        icon = Icons.Filled.DirectionsCar,
-        showLocation = false,
-    ),
-)
-
 @Composable
 fun CartScreen(
     contentPadding: PaddingValues,
     onRateService: () -> Unit = {},
+    onRequestSignIn: () -> Unit = {},
 ) {
+    val viewModel: CartBookingsViewModel = koinViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedTabName by rememberSaveable { mutableStateOf(BookingsTab.Upcoming.name) }
     val selectedTab = BookingsTab.valueOf(selectedTabName)
-    val bookings = when (selectedTab) {
-        BookingsTab.Upcoming -> upcomingBookings
-        BookingsTab.Completed -> completedBookings
+
+    LaunchedEffect(Unit) {
+        viewModel.loadBookings()
     }
 
     Column(
@@ -175,20 +113,14 @@ fun CartScreen(
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            BookingsSegmentedTabs(
+            BookingsContent(
+                uiState = uiState,
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTabName = it.name },
+                onRetry = viewModel::loadBookings,
+                onRequestSignIn = onRequestSignIn,
+                onRateService = onRateService,
             )
-
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                bookings.forEach { booking ->
-                    BookingSummaryCard(
-                        booking = booking,
-                        showRatingAction = selectedTab == BookingsTab.Completed,
-                        onRateService = onRateService,
-                    )
-                }
-            }
         }
     }
 }
@@ -277,8 +209,170 @@ private fun BookingsSegmentedTabs(
 }
 
 @Composable
+private fun BookingsContent(
+    uiState: CartBookingsUiState,
+    selectedTab: BookingsTab,
+    onTabSelected: (BookingsTab) -> Unit,
+    onRetry: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onRateService: () -> Unit,
+) {
+    when (uiState) {
+        CartBookingsUiState.Idle,
+        CartBookingsUiState.Loading -> BookingsStatusCard(
+            title = "A carregar marcações",
+            body = "Estamos a consultar as suas reservas em tempo real.",
+            loading = true,
+        )
+
+        CartBookingsUiState.Unauthenticated -> BookingsStatusCard(
+            title = "Sessão necessária",
+            body = "Entre na sua conta para ver marcações associadas ao seu perfil.",
+            actionLabel = "Entrar ou criar conta",
+            onAction = onRequestSignIn,
+        )
+
+        CartBookingsUiState.Empty -> BookingsStatusCard(
+            title = "Sem marcações",
+            body = "As suas próximas marcações e lavagens concluídas aparecem aqui.",
+            actionLabel = "Atualizar",
+            onAction = onRetry,
+        )
+
+        is CartBookingsUiState.Error -> BookingsStatusCard(
+            title = "Não foi possível carregar",
+            body = uiState.message,
+            actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+            onAction = if (uiState.retryable) onRetry else null,
+        )
+
+        is CartBookingsUiState.Loaded -> {
+            val bookings = when (selectedTab) {
+                BookingsTab.Upcoming -> uiState.upcoming
+                BookingsTab.Completed -> uiState.completed
+            }
+
+            BookingsSegmentedTabs(
+                selectedTab = selectedTab,
+                onTabSelected = onTabSelected,
+            )
+
+            if (bookings.isEmpty()) {
+                BookingsStatusCard(
+                    title = if (selectedTab == BookingsTab.Upcoming) {
+                        "Sem próximas marcações"
+                    } else {
+                        "Sem lavagens concluídas"
+                    },
+                    body = if (selectedTab == BookingsTab.Upcoming) {
+                        "Quando marcar uma lavagem, ela aparece nesta lista."
+                    } else {
+                        "As lavagens finalizadas ficam guardadas neste histórico."
+                    },
+                    actionLabel = "Atualizar",
+                    onAction = onRetry,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    bookings.forEach { booking ->
+                        BookingSummaryCard(
+                            booking = booking,
+                            showRatingAction = selectedTab == BookingsTab.Completed &&
+                                booking.status == BookingStatusUi.Completed,
+                            onRateService = onRateService,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingsStatusCard(
+    title: String,
+    body: String,
+    loading: Boolean = false,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.34f),
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (actionLabel != null && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.tertiary,
+                    ),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BookingSummaryCard(
-    booking: BookingSummary,
+    booking: BookingSummaryUi,
     showRatingAction: Boolean,
     onRateService: () -> Unit,
 ) {
@@ -839,21 +933,21 @@ private fun ratingLabel(rating: Int): String = when (rating) {
 }
 
 @Composable
-private fun BookingStatusBadge(status: BookingStatus) {
+private fun BookingStatusBadge(status: BookingStatusUi) {
     val containerColor = when (status) {
-        BookingStatus.Confirmed -> MaterialTheme.colorScheme.tertiaryContainer
-        BookingStatus.Completed -> MaterialTheme.colorScheme.primaryContainer
-        BookingStatus.Cancelled -> MaterialTheme.colorScheme.errorContainer
+        BookingStatusUi.Confirmed -> MaterialTheme.colorScheme.tertiaryContainer
+        BookingStatusUi.Completed -> MaterialTheme.colorScheme.primaryContainer
+        BookingStatusUi.Cancelled -> MaterialTheme.colorScheme.errorContainer
     }
     val contentColor = when (status) {
-        BookingStatus.Confirmed -> MaterialTheme.colorScheme.onTertiaryContainer
-        BookingStatus.Completed -> MaterialTheme.colorScheme.onPrimaryContainer
-        BookingStatus.Cancelled -> MaterialTheme.colorScheme.onErrorContainer
+        BookingStatusUi.Confirmed -> MaterialTheme.colorScheme.onTertiaryContainer
+        BookingStatusUi.Completed -> MaterialTheme.colorScheme.onPrimaryContainer
+        BookingStatusUi.Cancelled -> MaterialTheme.colorScheme.onErrorContainer
     }
     val icon = when (status) {
-        BookingStatus.Confirmed,
-        BookingStatus.Completed -> Icons.Filled.CheckCircle
-        BookingStatus.Cancelled -> Icons.Filled.RadioButtonUnchecked
+        BookingStatusUi.Confirmed,
+        BookingStatusUi.Completed -> Icons.Filled.CheckCircle
+        BookingStatusUi.Cancelled -> Icons.Filled.RadioButtonUnchecked
     }
 
     Surface(

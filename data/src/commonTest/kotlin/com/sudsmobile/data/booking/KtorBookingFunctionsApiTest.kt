@@ -8,6 +8,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.http.fullPath
 import io.ktor.serialization.kotlinx.json.json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -97,7 +98,7 @@ class KtorBookingFunctionsApiTest {
             config = testConfig(),
         )
 
-        val result = api.createReservation(validRequest())
+        val result = api.createReservation(validRequest(), idToken = null)
 
         val success = assertIs<BookingCreateResult.Success>(result)
         assertEquals("reservation-1", success.receipt.reservationId)
@@ -120,16 +121,86 @@ class KtorBookingFunctionsApiTest {
             config = testConfig(),
         )
 
-        val result = api.createReservation(validRequest())
+        val result = api.createReservation(validRequest(), idToken = null)
 
         val failure = assertIs<BookingCreateResult.Failure>(result)
         assertIs<BookingCreateError.Conflict>(failure.error)
         assertEquals("Este horário deixou de estar disponível.", failure.error.message)
     }
+
+    @Test
+    fun sendsAuthorizationHeaderWhenCreatingReservationWithSession() = runTest {
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "reservationId": "reservation-1",
+                    "reservationCode": "SS-ABCDEFGH"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.createReservation(validRequest(), idToken = "id-token-1")
+
+        assertIs<BookingCreateResult.Success>(result)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+    }
+
+    @Test
+    fun mapsMyReservationsResponseToHistory() = runTest {
+        var requestedPath: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "reservations": [
+                      {
+                        "id": "reservation-1",
+                        "reservationCode": "SS-ABCDEFGH",
+                        "serviceId": "premium",
+                        "serviceName": "Lavagem Premium",
+                        "slotStart": "2026-05-20T09:30:00.000Z",
+                        "slotEnd": "2026-05-20T10:15:00.000Z",
+                        "status": "pending",
+                        "vehicleType": "suv",
+                        "priceCents": 3400,
+                        "upcoming": true
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getMyReservations("id-token-1")
+
+        val success = assertIs<BookingHistoryResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getMyReservations", requestedPath)
+        assertEquals("reservation-1", success.history.reservations.first().id)
+        assertEquals(3400, success.history.reservations.first().priceCents)
+        assertEquals(true, success.history.reservations.first().upcoming)
+    }
 }
 
-private fun mockClient(responseJson: String): HttpClient {
+private fun mockClient(
+    responseJson: String,
+    onRequest: (io.ktor.client.request.HttpRequestData) -> Unit = {},
+): HttpClient {
     val engine = MockEngine {
+        onRequest(it)
         respond(
             content = responseJson,
             status = HttpStatusCode.OK,

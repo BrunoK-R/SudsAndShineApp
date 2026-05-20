@@ -18,6 +18,23 @@ data class BookingReceipt(
     val reservationCode: String,
 )
 
+data class BookingHistory(
+    val reservations: List<BookingHistoryReservation>,
+)
+
+data class BookingHistoryReservation(
+    val id: String,
+    val reservationCode: String,
+    val serviceId: String,
+    val serviceName: String,
+    val slotStartIso: String,
+    val slotEndIso: String,
+    val status: String,
+    val vehicleType: String,
+    val priceCents: Int?,
+    val upcoming: Boolean,
+)
+
 data class BookingAvailabilityRequest(
     val anchorDate: String? = null,
     val serviceDurationMinutes: Int = 30,
@@ -55,6 +72,11 @@ sealed interface BookingAvailabilityResult {
     data class Failure(val error: BookingAvailabilityError) : BookingAvailabilityResult
 }
 
+sealed interface BookingHistoryResult {
+    data class Success(val history: BookingHistory) : BookingHistoryResult
+    data class Failure(val error: BookingHistoryError) : BookingHistoryResult
+}
+
 sealed interface BookingCreateError {
     val message: String
 
@@ -76,7 +98,17 @@ sealed interface BookingAvailabilityError {
     data class Backend(override val message: String) : BookingAvailabilityError
 }
 
+sealed interface BookingHistoryError {
+    val message: String
+
+    data class Permission(override val message: String) : BookingHistoryError
+    data class Unauthenticated(override val message: String) : BookingHistoryError
+    data class Unavailable(override val message: String) : BookingHistoryError
+    data class Backend(override val message: String) : BookingHistoryError
+}
+
 interface BookingRepository {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult
+    suspend fun getMyBookings(): BookingHistoryResult
 }

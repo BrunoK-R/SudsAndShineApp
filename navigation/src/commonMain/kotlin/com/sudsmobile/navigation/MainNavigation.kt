@@ -116,6 +116,7 @@ fun MainNavigation(
                 CartScreen(
                     contentPadding = paddingValues,
                     onRateService = { navController.navigate(Routes.Rating) },
+                    onRequestSignIn = onRequestSignIn,
                 )
             }
             composable(Routes.Rating) {

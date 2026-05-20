@@ -1,7 +1,11 @@
 package com.sudsmobile.data.booking
 
+import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSessionState
+
 class FirebaseBookingRepository(
     private val api: BookingFunctionsApi,
+    private val authRepository: AuthRepository,
 ) : BookingRepository {
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
         val validationError = validate(request)
@@ -18,7 +22,16 @@ class FirebaseBookingRepository(
             return BookingCreateResult.Failure(validationError)
         }
 
-        return api.createReservation(request.normalized())
+        return api.createReservation(request.normalized(), currentIdTokenOrNull())
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
+            ?: return BookingHistoryResult.Failure(
+                BookingHistoryError.Unauthenticated("Inicie sessão para ver as suas marcações."),
+            )
+
+        return api.getMyReservations(session.session.idToken)
     }
 
     private fun validate(request: BookingAvailabilityRequest): BookingAvailabilityError? {
@@ -56,6 +69,11 @@ class FirebaseBookingRepository(
         vehicleType = vehicleType.trim(),
         notes = notes.trim(),
     )
+
+    private fun currentIdTokenOrNull(): String? {
+        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
+        return session?.session?.idToken
+    }
 }
 
 private fun isValidDateId(dateId: String): Boolean {

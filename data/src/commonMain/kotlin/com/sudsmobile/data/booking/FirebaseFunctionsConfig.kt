@@ -27,6 +27,13 @@ data class FirebaseFunctionsConfig(
             "https://$region-$projectId.cloudfunctions.net/getServiceCatalog"
         }
 
+    val getMyReservationsUrl: String
+        get() = if (useEmulator) {
+            "http://$emulatorHost:5001/$projectId/$region/getMyReservations"
+        } else {
+            "https://$region-$projectId.cloudfunctions.net/getMyReservations"
+        }
+
     companion object {
         fun default(isDebugBuild: Boolean, platformName: String): FirebaseFunctionsConfig {
             val normalizedPlatform = platformName.lowercase()

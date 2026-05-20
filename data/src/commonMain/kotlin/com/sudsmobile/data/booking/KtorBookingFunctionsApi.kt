@@ -40,10 +40,10 @@ class KtorBookingFunctionsApi(
         }
     }
 
-    override suspend fun createReservation(request: BookingCreateRequest): BookingCreateResult {
+    override suspend fun createReservation(request: BookingCreateRequest, idToken: String?): BookingCreateResult {
         return try {
             val response = httpClient.post(config.createReservationUrl) {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                callableHeaders(idToken)
                 setBody(CallableCreateReservationRequest(CreateReservationPayload.from(request)))
             }
             val body = response.body<CallableCreateReservationResponse>()
@@ -70,6 +70,39 @@ class KtorBookingFunctionsApi(
             )
         }
     }
+
+    override suspend fun getMyReservations(idToken: String): BookingHistoryResult {
+        return try {
+            val response = httpClient.post(config.getMyReservationsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableMyReservationsRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableMyReservationsResponse>()
+            val error = body.error
+            when {
+                error != null -> BookingHistoryResult.Failure(error.toHistoryError())
+                body.result != null -> BookingHistoryResult.Success(body.result.toHistory())
+                else -> BookingHistoryResult.Failure(
+                    BookingHistoryError.Backend("A resposta das marcações veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingHistoryResult.Failure(
+                BookingHistoryError.Unavailable(
+                    "Não foi possível carregar as suas marcações. Tente novamente.",
+                ),
+            )
+        }
+    }
+
+    private fun io.ktor.client.request.HttpRequestBuilder.callableHeaders(idToken: String? = null) {
+        header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+        if (!idToken.isNullOrBlank()) {
+            header(HttpHeaders.Authorization, "Bearer $idToken")
+        }
+    }
 }
 
 @Serializable
@@ -80,6 +113,11 @@ private data class CallableGetAvailabilityRequest(
 @Serializable
 private data class CallableCreateReservationRequest(
     val data: CreateReservationPayload,
+)
+
+@Serializable
+private data class CallableMyReservationsRequest(
+    val data: Map<String, String>,
 )
 
 @Serializable
@@ -139,6 +177,12 @@ private data class CallableCreateReservationResponse(
 )
 
 @Serializable
+private data class CallableMyReservationsResponse(
+    val result: MyReservationsResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class GetAvailabilityResult(
     val monthTitle: String,
     val leadingEmptyCells: Int,
@@ -191,6 +235,42 @@ private data class CreateReservationResult(
 )
 
 @Serializable
+private data class MyReservationsResult(
+    val reservations: List<MyReservationItem>,
+) {
+    fun toHistory(): BookingHistory = BookingHistory(
+        reservations = reservations.map { it.toReservation() },
+    )
+}
+
+@Serializable
+private data class MyReservationItem(
+    val id: String,
+    val reservationCode: String = "",
+    val serviceId: String = "",
+    val serviceName: String = "",
+    val slotStart: String,
+    val slotEnd: String,
+    val status: String = "pending",
+    val vehicleType: String = "passageiros",
+    val priceCents: Int? = null,
+    val upcoming: Boolean = true,
+) {
+    fun toReservation(): BookingHistoryReservation = BookingHistoryReservation(
+        id = id,
+        reservationCode = reservationCode,
+        serviceId = serviceId,
+        serviceName = serviceName,
+        slotStartIso = slotStart,
+        slotEndIso = slotEnd,
+        status = status,
+        vehicleType = vehicleType,
+        priceCents = priceCents,
+        upcoming = upcoming,
+    )
+}
+
+@Serializable
 private data class CallableError(
     val status: String? = null,
     val code: String? = null,
@@ -218,6 +298,17 @@ private data class CallableError(
             "UNAUTHENTICATED" -> BookingCreateError.Unauthenticated("Inicie sessão para continuar.")
             "UNAVAILABLE" -> BookingCreateError.Unavailable("O serviço de marcações está indisponível.")
             else -> BookingCreateError.Backend(fallbackMessage)
+        }
+    }
+
+    fun toHistoryError(): BookingHistoryError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível carregar as suas marcações."
+        return when (normalizedCode) {
+            "PERMISSION_DENIED" -> BookingHistoryError.Permission("Não tem permissões para consultar estas marcações.")
+            "UNAUTHENTICATED" -> BookingHistoryError.Unauthenticated("Inicie sessão para ver as suas marcações.")
+            "UNAVAILABLE" -> BookingHistoryError.Unavailable("O serviço de marcações está indisponível.")
+            else -> BookingHistoryError.Backend(fallbackMessage)
         }
     }
 }

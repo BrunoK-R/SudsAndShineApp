@@ -35,7 +35,7 @@ val dataModule = module {
     single<AuthApi> { KtorIdentityToolkitAuthApi(get(), get()) }
     single<AuthRepository> { FirebaseAuthRepository(get()) }
     single<BookingFunctionsApi> { KtorBookingFunctionsApi(get(), get()) }
-    single<BookingRepository> { FirebaseBookingRepository(get()) }
+    single<BookingRepository> { FirebaseBookingRepository(get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }
     single<ServiceCatalogRepository> { FirebaseServiceCatalogRepository(get()) }
     single<AppRepository> { AppRepositoryImpl() }
