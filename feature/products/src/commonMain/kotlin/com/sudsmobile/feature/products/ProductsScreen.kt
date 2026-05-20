@@ -129,6 +129,7 @@ fun ProductsScreen(
     val availabilityState by viewModel.availabilityState.collectAsStateWithLifecycle()
     val submitState by viewModel.submitState.collectAsStateWithLifecycle()
     val vehiclesState by viewModel.vehiclesState.collectAsStateWithLifecycle()
+    val contactProfileState by viewModel.contactProfileState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
@@ -140,12 +141,15 @@ fun ProductsScreen(
         contentPadding = contentPadding,
         catalogState = catalogState,
         vehiclesState = vehiclesState,
+        contactProfileState = contactProfileState,
         sessionState = sessionState,
         availabilityState = availabilityState,
         submitState = submitState,
         onLoadCatalog = catalogViewModel::loadCatalog,
         onLoadVehicles = viewModel::loadVehicles,
         onRefreshVehiclesForSession = viewModel::refreshVehiclesForSession,
+        onLoadContactProfile = viewModel::loadContactProfile,
+        onRefreshContactProfileForSession = viewModel::refreshContactProfileForSession,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onClearSubmitError = viewModel::clearSubmitError,
@@ -163,12 +167,15 @@ private fun ProductsScreenContent(
     contentPadding: PaddingValues,
     catalogState: ProductCatalogUiState,
     vehiclesState: BookingVehiclesUiState,
+    contactProfileState: BookingContactProfileUiState,
     sessionState: AuthSessionState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
     onLoadCatalog: () -> Unit,
     onLoadVehicles: () -> Unit,
     onRefreshVehiclesForSession: () -> Unit,
+    onLoadContactProfile: () -> Unit,
+    onRefreshContactProfileForSession: () -> Unit,
     onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
@@ -191,11 +198,15 @@ private fun ProductsScreenContent(
     var contactEmail by rememberSaveable { mutableStateOf("") }
     var contactNotes by rememberSaveable { mutableStateOf("") }
     var acceptsPrivacy by rememberSaveable { mutableStateOf(false) }
+    var appliedContactProfileUid by rememberSaveable { mutableStateOf<String?>(null) }
+    var appliedContactName by rememberSaveable { mutableStateOf<String?>(null) }
+    var appliedContactEmail by rememberSaveable { mutableStateOf<String?>(null) }
+    var appliedContactPhone by rememberSaveable { mutableStateOf<String?>(null) }
     var reservationCode by rememberSaveable { mutableStateOf<String?>(null) }
     val currentStep = BookingStep.valueOf(currentStepName)
     val contactFormValid = contactName.isNotBlank() &&
-        contactPhone.isNotBlank() &&
-        contactEmail.isNotBlank() &&
+        contactPhone.trim().length >= 6 &&
+        contactEmail.trim().contains("@") &&
         acceptsPrivacy
     val loadedServices = (catalogState as? ProductCatalogUiState.Loaded)?.services.orEmpty()
     val selectedService = loadedServices.firstOrNull { it.id == selectedServiceId }
@@ -220,6 +231,31 @@ private fun ProductsScreenContent(
         acceptsPrivacy = acceptsPrivacy,
     )
 
+    fun clearAppliedContactProfileIfUnchanged() {
+        appliedContactName?.let { if (contactName == it) contactName = "" }
+        appliedContactEmail?.let { if (contactEmail == it) contactEmail = "" }
+        appliedContactPhone?.let { if (contactPhone == it) contactPhone = "" }
+        appliedContactProfileUid = null
+        appliedContactName = null
+        appliedContactEmail = null
+        appliedContactPhone = null
+    }
+
+    fun applyContactProfile(profile: BookingContactProfileUi, replaceExisting: Boolean) {
+        val nextName = profile.displayName.takeIf { it.isNotBlank() && (replaceExisting || contactName.isBlank()) }
+        val nextEmail = profile.email.takeIf { it.isNotBlank() && (replaceExisting || contactEmail.isBlank()) }
+        val nextPhone = profile.phoneNumber.takeIf { it.isNotBlank() && (replaceExisting || contactPhone.isBlank()) }
+
+        nextName?.let { contactName = it }
+        nextEmail?.let { contactEmail = it }
+        nextPhone?.let { contactPhone = it }
+
+        appliedContactProfileUid = profile.uid
+        appliedContactName = nextName
+        appliedContactEmail = nextEmail
+        appliedContactPhone = nextPhone
+    }
+
     LaunchedEffect(submitState) {
         val state = submitState
         if (state is BookingSubmitUiState.Success) {
@@ -238,6 +274,9 @@ private fun ProductsScreenContent(
     LaunchedEffect(currentStep, sessionState) {
         if (currentStep == BookingStep.Vehicle) {
             onRefreshVehiclesForSession()
+        }
+        if (currentStep == BookingStep.Contact) {
+            onRefreshContactProfileForSession()
         }
     }
 
@@ -271,6 +310,22 @@ private fun ProductsScreenContent(
     LaunchedEffect(vehiclesState) {
         if (selectedVehicleId != null && vehicleOptions.none { it.id == selectedVehicleId }) {
             selectedVehicleId = null
+        }
+    }
+
+    LaunchedEffect(contactProfileState) {
+        when (val state = contactProfileState) {
+            is BookingContactProfileUiState.Loaded -> {
+                if (appliedContactProfileUid != state.profile.uid) {
+                    clearAppliedContactProfileIfUnchanged()
+                    applyContactProfile(state.profile, replaceExisting = false)
+                }
+            }
+            BookingContactProfileUiState.Unauthenticated -> clearAppliedContactProfileIfUnchanged()
+            BookingContactProfileUiState.Empty,
+            is BookingContactProfileUiState.Error,
+            BookingContactProfileUiState.Idle,
+            BookingContactProfileUiState.Loading -> Unit
         }
     }
 
@@ -396,6 +451,7 @@ private fun ProductsScreenContent(
                     )
 
                     BookingContactContent(
+                        contactProfileState = contactProfileState,
                         name = contactName,
                         phone = contactPhone,
                         email = contactEmail,
@@ -419,6 +475,12 @@ private fun ProductsScreenContent(
                         },
                         onAcceptsPrivacyChange = {
                             acceptsPrivacy = it
+                            onClearSubmitError()
+                        },
+                        onRetryContactProfile = onLoadContactProfile,
+                        onRequestSignIn = onRequestSignIn,
+                        onApplyContactProfile = { profile ->
+                            applyContactProfile(profile, replaceExisting = true)
                             onClearSubmitError()
                         },
                     )
@@ -1292,7 +1354,132 @@ private fun ConfirmationSentCard() {
 }
 
 @Composable
+private fun BookingContactProfileCard(
+    state: BookingContactProfileUiState,
+    onRetry: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onApplyProfile: (BookingContactProfileUi) -> Unit,
+) {
+    when (state) {
+        BookingContactProfileUiState.Idle -> Unit
+
+        BookingContactProfileUiState.Loading -> ContactProfileMessageCard(
+            icon = Icons.Filled.Person,
+            title = "A carregar dados da conta",
+            body = "Estamos a consultar o perfil associado a esta sessão.",
+            loading = true,
+        )
+
+        BookingContactProfileUiState.Unauthenticated -> ContactProfileMessageCard(
+            icon = Icons.Filled.Lock,
+            title = "Entrar para preencher dados",
+            body = "Pode continuar como convidado ou usar os dados guardados na sua conta.",
+            actionLabel = "Entrar",
+            actionIcon = Icons.Filled.Lock,
+            onAction = onRequestSignIn,
+        )
+
+        BookingContactProfileUiState.Empty -> ContactProfileMessageCard(
+            icon = Icons.Filled.Info,
+            title = "Perfil sem contactos guardados",
+            body = "Preencha os dados para esta marcação. Pode guardá-los no perfil mais tarde.",
+        )
+
+        is BookingContactProfileUiState.Error -> ContactProfileMessageCard(
+            icon = Icons.Filled.Info,
+            title = "Não foi possível carregar dados da conta",
+            body = state.message,
+            actionLabel = if (state.retryable) "Tentar novamente" else null,
+            actionIcon = Icons.Filled.Refresh,
+            onAction = if (state.retryable) onRetry else null,
+        )
+
+        is BookingContactProfileUiState.Loaded -> {
+            ContactProfileMessageCard(
+                icon = Icons.Filled.CheckCircle,
+                title = "Dados da conta prontos",
+                body = state.profile.contactSummary(),
+                actionLabel = "Usar dados da conta",
+                actionIcon = Icons.Filled.Check,
+                onAction = { onApplyProfile(state.profile) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ContactProfileMessageCard(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    loading: Boolean = false,
+    actionLabel: String? = null,
+    actionIcon: ImageVector = Icons.Filled.Refresh,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (actionLabel != null && onAction != null) {
+                    OutlinedButton(
+                        onClick = onAction,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.tertiary,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = actionIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(actionLabel, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BookingContactContent(
+    contactProfileState: BookingContactProfileUiState,
     name: String,
     phone: String,
     email: String,
@@ -1303,6 +1490,9 @@ private fun BookingContactContent(
     onEmailChange: (String) -> Unit,
     onNotesChange: (String) -> Unit,
     onAcceptsPrivacyChange: (Boolean) -> Unit,
+    onRetryContactProfile: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onApplyContactProfile: (BookingContactProfileUi) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1312,6 +1502,13 @@ private fun BookingContactContent(
             .padding(top = 0.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        BookingContactProfileCard(
+            state = contactProfileState,
+            onRetry = onRetryContactProfile,
+            onRequestSignIn = onRequestSignIn,
+            onApplyProfile = onApplyContactProfile,
+        )
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -1388,6 +1585,19 @@ private fun BookingContactContent(
                 )
             }
         }
+    }
+}
+
+private fun BookingContactProfileUi.contactSummary(): String {
+    val parts = listOfNotNull(
+        displayName.takeIf { it.isNotBlank() },
+        email.takeIf { it.isNotBlank() },
+        phoneNumber.takeIf { it.isNotBlank() },
+    )
+    return if (parts.isEmpty()) {
+        "O perfil não tem dados de contacto completos."
+    } else {
+        parts.joinToString(separator = " / ")
     }
 }
 

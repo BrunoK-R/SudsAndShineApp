@@ -11,6 +11,12 @@ import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingReceipt
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.profile.UserProfile
+import com.sudsmobile.data.profile.UserProfileError
+import com.sudsmobile.data.profile.UserProfileMutationResult
+import com.sudsmobile.data.profile.UserProfileRepository
+import com.sudsmobile.data.profile.UserProfileResult
+import com.sudsmobile.data.profile.UserProfileSaveRequest
 import com.sudsmobile.data.auth.AuthActionResult
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
@@ -162,6 +168,90 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun loadContactProfileRequiresAuthenticatedSession() = runTest {
+        val profileRepository = FakeProductsProfileRepository(
+            profileResult = UserProfileResult.Success(userProfile()),
+        )
+        val viewModel = productsBookingViewModel(
+            authRepository = FakeProductsAuthRepository(authenticated = false),
+            profileRepository = profileRepository,
+        )
+
+        viewModel.loadContactProfile()
+        runCurrent()
+
+        assertIs<BookingContactProfileUiState.Unauthenticated>(viewModel.contactProfileState.value)
+        assertEquals(0, profileRepository.getCalls)
+    }
+
+    @Test
+    fun loadContactProfileMapsAuthenticatedProfile() = runTest {
+        val profileRepository = FakeProductsProfileRepository(
+            profileResult = UserProfileResult.Success(
+                userProfile(
+                    displayName = "Bruno Ribeiro",
+                    phoneNumber = "+351913005855",
+                ),
+            ),
+        )
+        val viewModel = productsBookingViewModel(profileRepository = profileRepository)
+
+        viewModel.loadContactProfile()
+        runCurrent()
+
+        val loaded = assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+        assertEquals("uid-1", loaded.profile.uid)
+        assertEquals("Bruno Ribeiro", loaded.profile.displayName)
+        assertEquals("bruno@example.com", loaded.profile.email)
+        assertEquals("+351913005855", loaded.profile.phoneNumber)
+        assertEquals(1, profileRepository.getCalls)
+    }
+
+    @Test
+    fun refreshContactProfileReloadsWhenAuthenticatedUserChanges() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val profileRepository = FakeProductsProfileRepository(
+            profileResult = UserProfileResult.Success(userProfile(uid = "uid-1")),
+        )
+        val viewModel = productsBookingViewModel(
+            authRepository = authRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.refreshContactProfileForSession()
+        runCurrent()
+        assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+
+        profileRepository.profileResult = UserProfileResult.Success(userProfile(uid = "uid-2", email = "ana@example.com"))
+        authRepository.authenticate(uid = "uid-2")
+        viewModel.refreshContactProfileForSession()
+        runCurrent()
+
+        val loaded = assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+        assertEquals("uid-2", loaded.profile.uid)
+        assertEquals("ana@example.com", loaded.profile.email)
+        assertEquals(2, profileRepository.getCalls)
+    }
+
+    @Test
+    fun loadContactProfileMapsBackendErrorToRetryableState() = runTest {
+        val viewModel = productsBookingViewModel(
+            profileRepository = FakeProductsProfileRepository(
+                profileResult = UserProfileResult.Failure(
+                    UserProfileError.Unavailable("Não foi possível carregar os dados pessoais."),
+                ),
+            ),
+        )
+
+        viewModel.loadContactProfile()
+        runCurrent()
+
+        val error = assertIs<BookingContactProfileUiState.Error>(viewModel.contactProfileState.value)
+        assertEquals("Não foi possível carregar os dados pessoais.", error.message)
+        assertEquals(true, error.retryable)
+    }
+
+    @Test
     fun submitBookingMapsConflictToChangeSlotResolution() = runTest {
         val viewModel = productsBookingViewModel(
             bookingRepository = FakeBookingRepository(
@@ -208,10 +298,14 @@ private fun productsBookingViewModel(
     vehicleRepository: UserVehicleRepository = FakeProductsVehicleRepository(
         listResult = UserVehicleListResult.Success(emptyList()),
     ),
+    profileRepository: UserProfileRepository = FakeProductsProfileRepository(
+        profileResult = UserProfileResult.Success(userProfile()),
+    ),
 ): ProductsBookingViewModel = ProductsBookingViewModel(
     bookingRepository = bookingRepository,
     authRepository = authRepository,
     userVehicleRepository = vehicleRepository,
+    userProfileRepository = profileRepository,
 )
 
 private class FakeBookingRepository(
@@ -260,6 +354,22 @@ private class FakeProductsVehicleRepository(
     }
 
     override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult {
+        error("Not used")
+    }
+}
+
+private class FakeProductsProfileRepository(
+    var profileResult: UserProfileResult,
+) : UserProfileRepository {
+    var getCalls: Int = 0
+        private set
+
+    override suspend fun getMyProfile(): UserProfileResult {
+        getCalls += 1
+        return profileResult
+    }
+
+    override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
         error("Not used")
     }
 }
@@ -384,6 +494,19 @@ private fun userVehicle(
     plate = "AA-00-BB",
     color = "Preto",
     type = type,
+)
+
+private fun userProfile(
+    uid: String = "uid-1",
+    email: String = "bruno@example.com",
+    displayName: String = "Bruno",
+    phoneNumber: String = "",
+): UserProfile = UserProfile(
+    uid = uid,
+    email = email,
+    displayName = displayName,
+    phoneNumber = phoneNumber,
+    marketingOptIn = false,
 )
 
 private fun validDraft(): ProductsBookingDraft = ProductsBookingDraft(

@@ -13,6 +13,10 @@ import com.sudsmobile.data.booking.BookingCreateRequest
 import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingReceipt
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.profile.UserProfile
+import com.sudsmobile.data.profile.UserProfileError
+import com.sudsmobile.data.profile.UserProfileRepository
+import com.sudsmobile.data.profile.UserProfileResult
 import com.sudsmobile.data.vehicle.UserVehicle
 import com.sudsmobile.data.vehicle.UserVehicleError
 import com.sudsmobile.data.vehicle.UserVehicleListResult
@@ -47,6 +51,13 @@ data class BookingVehicleUi(
     val vehicleLabel: String?,
 )
 
+data class BookingContactProfileUi(
+    val uid: String,
+    val displayName: String,
+    val email: String,
+    val phoneNumber: String,
+)
+
 sealed interface BookingSubmitUiState {
     data object Idle : BookingSubmitUiState
     data object Loading : BookingSubmitUiState
@@ -73,6 +84,15 @@ sealed interface BookingAvailabilityUiState {
     data class Error(val message: String, val retryable: Boolean) : BookingAvailabilityUiState
 }
 
+sealed interface BookingContactProfileUiState {
+    data object Idle : BookingContactProfileUiState
+    data object Loading : BookingContactProfileUiState
+    data object Unauthenticated : BookingContactProfileUiState
+    data object Empty : BookingContactProfileUiState
+    data class Loaded(val profile: BookingContactProfileUi) : BookingContactProfileUiState
+    data class Error(val message: String, val retryable: Boolean) : BookingContactProfileUiState
+}
+
 sealed interface BookingVehiclesUiState {
     data object Idle : BookingVehiclesUiState
     data object Loading : BookingVehiclesUiState
@@ -86,6 +106,7 @@ class ProductsBookingViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
     private val userVehicleRepository: UserVehicleRepository,
+    private val userProfileRepository: UserProfileRepository,
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     private val _availabilityState = MutableStateFlow<BookingAvailabilityUiState>(BookingAvailabilityUiState.Idle)
@@ -97,6 +118,56 @@ class ProductsBookingViewModel(
     private val _vehiclesState = MutableStateFlow<BookingVehiclesUiState>(BookingVehiclesUiState.Idle)
     val vehiclesState: StateFlow<BookingVehiclesUiState> = _vehiclesState.asStateFlow()
     private var loadedVehiclesUid: String? = null
+
+    private val _contactProfileState = MutableStateFlow<BookingContactProfileUiState>(BookingContactProfileUiState.Idle)
+    val contactProfileState: StateFlow<BookingContactProfileUiState> = _contactProfileState.asStateFlow()
+    private var loadedContactProfileUid: String? = null
+
+    fun refreshContactProfileForSession() {
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedContactProfileUid = null
+            _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+            return
+        }
+
+        val uid = session.session.user.uid
+        val alreadyLoadedForUser = loadedContactProfileUid == uid &&
+            (
+                _contactProfileState.value is BookingContactProfileUiState.Loaded ||
+                    _contactProfileState.value is BookingContactProfileUiState.Empty
+                )
+        if (alreadyLoadedForUser) return
+        loadContactProfile()
+    }
+
+    fun loadContactProfile() {
+        if (_contactProfileState.value is BookingContactProfileUiState.Loading) return
+
+        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedContactProfileUid = null
+            _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+            return
+        }
+
+        val requestedUid = session.session.user.uid
+        viewModelScope.launch {
+            _contactProfileState.value = BookingContactProfileUiState.Loading
+            val nextState = when (val result = userProfileRepository.getMyProfile()) {
+                is UserProfileResult.Success -> result.profile.toContactProfileUiState()
+                is UserProfileResult.Failure -> result.error.toContactProfileUiState()
+            }
+            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid == requestedUid) {
+                loadedContactProfileUid = requestedUid
+                _contactProfileState.value = nextState
+            } else {
+                loadedContactProfileUid = null
+                _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+            }
+        }
+    }
 
     fun refreshVehiclesForSession() {
         val session = sessionState.value as? AuthSessionState.Authenticated
@@ -231,6 +302,34 @@ class ProductsBookingViewModel(
         val retryable = this is BookingAvailabilityError.Unavailable ||
             this is BookingAvailabilityError.Backend
         return BookingAvailabilityUiState.Error(message = message, retryable = retryable)
+    }
+
+    private fun UserProfile.toContactProfileUiState(): BookingContactProfileUiState {
+        val profile = BookingContactProfileUi(
+            uid = uid,
+            displayName = displayName.trim(),
+            email = email.trim(),
+            phoneNumber = phoneNumber.trim(),
+        )
+        return if (
+            profile.displayName.isBlank() &&
+            profile.email.isBlank() &&
+            profile.phoneNumber.isBlank()
+        ) {
+            BookingContactProfileUiState.Empty
+        } else {
+            BookingContactProfileUiState.Loaded(profile)
+        }
+    }
+
+    private fun UserProfileError.toContactProfileUiState(): BookingContactProfileUiState {
+        return when (this) {
+            is UserProfileError.Unauthenticated -> BookingContactProfileUiState.Unauthenticated
+            is UserProfileError.Permission,
+            is UserProfileError.Validation -> BookingContactProfileUiState.Error(message = message, retryable = false)
+            is UserProfileError.Unavailable,
+            is UserProfileError.Backend -> BookingContactProfileUiState.Error(message = message, retryable = true)
+        }
     }
 
     private fun List<UserVehicle>.toVehiclesUiState(): BookingVehiclesUiState {
