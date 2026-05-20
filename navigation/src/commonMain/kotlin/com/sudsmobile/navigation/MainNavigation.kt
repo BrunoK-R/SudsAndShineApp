@@ -80,6 +80,7 @@ fun MainNavigation(
                     onViewBookings = { navController.navigate(Routes.Cart) },
                     onOpenRewards = { navController.navigate(Routes.Loyalty) },
                     onOpenProfile = { navController.navigate(Routes.Profile) },
+                    onRequestSignIn = onRequestSignIn,
                 )
             }
             composable(Routes.Services) {

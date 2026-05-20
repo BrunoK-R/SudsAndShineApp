@@ -3,6 +3,7 @@ package com.sudsmobile.feature.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -29,13 +30,13 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -43,13 +44,19 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -60,6 +67,42 @@ fun HomeScreen(
     onViewBookings: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
+    onRequestSignIn: () -> Unit = {},
+) {
+    val viewModel: HomeViewModel = koinViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
+
+    LaunchedEffect(sessionState, bookingRevision) {
+        viewModel.refreshForSession()
+    }
+
+    HomeScreenContent(
+        contentPadding = contentPadding,
+        uiState = uiState,
+        onBookService = onBookService,
+        onViewServices = onViewServices,
+        onViewBookings = onViewBookings,
+        onOpenRewards = onOpenRewards,
+        onOpenProfile = onOpenProfile,
+        onRequestSignIn = onRequestSignIn,
+        onRetry = viewModel::retry,
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HomeScreenContent(
+    contentPadding: PaddingValues,
+    uiState: HomeUiState,
+    onBookService: () -> Unit,
+    onViewServices: () -> Unit,
+    onViewBookings: () -> Unit,
+    onOpenRewards: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -69,6 +112,7 @@ fun HomeScreen(
             .padding(bottom = contentPadding.calculateBottomPadding()),
     ) {
         HomeHeader(
+            identity = uiState.identityOrDefault(),
             onBookService = onBookService,
             onOpenProfile = onOpenProfile,
         )
@@ -80,11 +124,25 @@ fun HomeScreen(
                 .padding(top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            UpcomingBookingCard(onViewBookings = onViewBookings)
-            LoyaltyCard(onOpenRewards = onOpenRewards)
+            HomeBookingSummary(
+                uiState = uiState,
+                onBookService = onBookService,
+                onViewBookings = onViewBookings,
+                onRequestSignIn = onRequestSignIn,
+                onRetry = onRetry,
+            )
+            HomeLoyaltyCard(
+                uiState = uiState,
+                onOpenRewards = onOpenRewards,
+                onRequestSignIn = onRequestSignIn,
+            )
             FeaturedServices(
+                services = uiState.featuredServicesOrEmpty(),
+                warningMessage = uiState.warningMessageOrNull(),
+                warningRetryable = uiState.warningRetryableOrFalse(),
                 onBookService = onBookService,
                 onViewServices = onViewServices,
+                onRetry = onRetry,
             )
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -103,6 +161,7 @@ fun HomeScreen(
 
 @Composable
 private fun HomeHeader(
+    identity: HomeIdentityUi,
     onBookService: () -> Unit,
     onOpenProfile: () -> Unit,
 ) {
@@ -125,19 +184,26 @@ private fun HomeHeader(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column {
+            Column(
+                modifier = Modifier.weight(1f),
+            ) {
                 Text(
-                    text = "Olá, João!",
+                    text = identity.greeting,
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Bem-vindo de volta",
+                    text = identity.subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+            Spacer(Modifier.width(16.dp))
             Surface(
                 modifier = Modifier
                     .size(48.dp)
@@ -153,14 +219,18 @@ private fun HomeHeader(
                     ),
                 ),
             ) {
-                Text(
-                    text = "JS",
-                    modifier = Modifier.padding(top = 13.dp),
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = identity.initials,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
 
@@ -198,7 +268,66 @@ private fun HomeHeader(
 }
 
 @Composable
-private fun UpcomingBookingCard(onViewBookings: () -> Unit) {
+private fun HomeBookingSummary(
+    uiState: HomeUiState,
+    onBookService: () -> Unit,
+    onViewBookings: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    when (uiState) {
+        HomeUiState.Idle,
+        HomeUiState.Loading -> HomeStatusCard(
+            title = "A carregar marcações",
+            body = "Estamos a consultar os seus dados em tempo real.",
+            loading = true,
+        )
+
+        is HomeUiState.Unauthenticated -> HomeStatusCard(
+            title = "Acompanhe as suas marcações",
+            body = "Entre na conta para ver a próxima lavagem e guardar o histórico.",
+            actionLabel = "Entrar ou criar conta",
+            onAction = onRequestSignIn,
+        )
+
+        is HomeUiState.Empty -> HomeStatusCard(
+            title = "Sem próxima marcação",
+            body = "Escolha um serviço e reserve um horário disponível.",
+            actionLabel = "Marcar agora",
+            onAction = onBookService,
+        )
+
+        is HomeUiState.Error -> HomeStatusCard(
+            title = "Não foi possível carregar",
+            body = uiState.message,
+            actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+            onAction = if (uiState.retryable) onRetry else null,
+        )
+
+        is HomeUiState.Loaded -> {
+            val booking = uiState.nextBooking
+            if (booking == null) {
+                HomeStatusCard(
+                    title = "Sem próxima marcação",
+                    body = "O histórico está atualizado. Reserve a próxima lavagem quando quiser.",
+                    actionLabel = "Marcar agora",
+                    onAction = onBookService,
+                )
+            } else {
+                UpcomingBookingCard(
+                    booking = booking,
+                    onViewBookings = onViewBookings,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpcomingBookingCard(
+    booking: HomeBookingUi,
+    onViewBookings: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -222,17 +351,18 @@ private fun UpcomingBookingCard(onViewBookings: () -> Unit) {
                     shape = CircleShape,
                 ) {
                     Text(
-                        "Confirmado",
+                        booking.statusLabel,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                     )
                 }
             }
-            DetailRow(Icons.Filled.AutoAwesome, "Lavagem Premium", true)
-            DetailRow(Icons.Filled.CalendarMonth, "25 de Março, 2026")
-            DetailRow(Icons.Filled.AccessTime, "14:30")
-            DetailRow(Icons.Filled.Place, "Shopping Norte Sul, Piso -1")
+            DetailRow(booking.icon, booking.service, true)
+            DetailRow(Icons.Filled.CalendarMonth, booking.date)
+            DetailRow(Icons.Filled.AccessTime, booking.time)
+            DetailRow(Icons.Filled.DirectionsCar, booking.vehicle)
+            DetailRow(Icons.Filled.Star, booking.price, true)
             OutlinedButton(
                 onClick = onViewBookings,
                 modifier = Modifier.fillMaxWidth(),
@@ -242,6 +372,86 @@ private fun UpcomingBookingCard(onViewBookings: () -> Unit) {
                 ),
             ) {
                 Text("Ver Detalhes")
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeStatusCard(
+    title: String,
+    body: String,
+    loading: Boolean = false,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f),
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (actionLabel != null && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Text(actionLabel)
+                }
             }
         }
     }
@@ -265,11 +475,80 @@ private fun DetailRow(icon: ImageVector, text: String, highlighted: Boolean = fa
 }
 
 @Composable
-private fun LoyaltyCard(onOpenRewards: () -> Unit) {
+private fun HomeLoyaltyCard(
+    uiState: HomeUiState,
+    onOpenRewards: () -> Unit,
+    onRequestSignIn: () -> Unit,
+) {
+    when (uiState) {
+        HomeUiState.Idle,
+        HomeUiState.Loading -> LoyaltyCard(
+            title = "Programa de Fidelização",
+            progressLabel = "A calcular lavagens",
+            remainingLabel = "",
+            progress = 0f,
+            body = "O progresso será atualizado assim que a sessão estiver pronta.",
+            onClick = onOpenRewards,
+        )
+
+        is HomeUiState.Unauthenticated -> LoyaltyCard(
+            title = "Programa de Fidelização",
+            progressLabel = "Entre para acumular lavagens",
+            remainingLabel = "Conta necessária",
+            progress = 0f,
+            body = "As lavagens concluídas contam automaticamente para a próxima oferta.",
+            onClick = onRequestSignIn,
+        )
+
+        is HomeUiState.Empty -> LoyaltyCard(
+            loyalty = uiState.loyalty,
+            onOpenRewards = onOpenRewards,
+        )
+
+        is HomeUiState.Loaded -> LoyaltyCard(
+            loyalty = uiState.loyalty,
+            onOpenRewards = onOpenRewards,
+        )
+
+        is HomeUiState.Error -> LoyaltyCard(
+            title = "Programa de Fidelização",
+            progressLabel = "Progresso indisponível",
+            remainingLabel = "",
+            progress = 0f,
+            body = "Tente novamente para recuperar o histórico da sua conta.",
+            onClick = onOpenRewards,
+        )
+    }
+}
+
+@Composable
+private fun LoyaltyCard(
+    loyalty: HomeLoyaltyUi,
+    onOpenRewards: () -> Unit,
+) {
+    LoyaltyCard(
+        title = "Programa de Fidelização",
+        progressLabel = "${loyalty.completedWashes} de ${loyalty.targetWashes} lavagens",
+        remainingLabel = "${loyalty.remainingWashes} restantes",
+        progress = loyalty.progress,
+        body = "Mais ${loyalty.remainingWashes} lavagens para ganhar 1 lavagem grátis!",
+        onClick = onOpenRewards,
+    )
+}
+
+@Composable
+private fun LoyaltyCard(
+    title: String,
+    progressLabel: String,
+    remainingLabel: String,
+    progress: Float,
+    body: String,
+    onClick: () -> Unit,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpenRewards),
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface),
         shape = RoundedCornerShape(18.dp),
     ) {
@@ -279,7 +558,7 @@ private fun LoyaltyCard(onOpenRewards: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    "Programa de Fidelização",
+                    title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
                     fontWeight = FontWeight.Bold,
@@ -295,19 +574,19 @@ private fun LoyaltyCard(onOpenRewards: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    "7 de 10 lavagens",
+                    progressLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
                 )
                 Text(
-                    "3 restantes",
+                    remainingLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     fontWeight = FontWeight.Bold,
                 )
             }
             LinearProgressIndicator(
-                progress = { 0.70f },
+                progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
@@ -316,7 +595,7 @@ private fun LoyaltyCard(onOpenRewards: () -> Unit) {
                 trackColor = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.12f),
             )
             Text(
-                "Mais 3 lavagens para ganhar 1 lavagem grátis!",
+                body,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.70f),
             )
@@ -326,8 +605,12 @@ private fun LoyaltyCard(onOpenRewards: () -> Unit) {
 
 @Composable
 private fun FeaturedServices(
+    services: List<HomeFeaturedServiceUi>,
+    warningMessage: String?,
+    warningRetryable: Boolean,
     onBookService: () -> Unit,
     onViewServices: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -348,23 +631,36 @@ private fun FeaturedServices(
                 fontWeight = FontWeight.Bold,
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ServiceCard(
-                icon = Icons.Filled.AutoAwesome,
-                title = "Lavagem Premium",
-                price = "32,00€",
-                duration = "45 min",
-                modifier = Modifier.weight(1f),
-                onClick = onBookService,
+        if (services.isEmpty()) {
+            HomeStatusCard(
+                title = "Serviços indisponíveis",
+                body = warningMessage ?: "Não foi possível carregar os serviços em destaque.",
+                actionLabel = if (warningRetryable) "Tentar novamente" else null,
+                onAction = if (warningRetryable) onRetry else null,
             )
-            ServiceCard(
-                icon = Icons.Filled.DirectionsCar,
-                title = "Lavagem Standard",
-                price = "25,00€",
-                duration = "30 min",
-                modifier = Modifier.weight(1f),
-                onClick = onBookService,
-            )
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                services.forEach { service ->
+                    ServiceCard(
+                        icon = service.icon,
+                        title = service.name,
+                        price = service.price,
+                        duration = service.duration,
+                        modifier = Modifier.weight(1f),
+                        onClick = onBookService,
+                    )
+                }
+                if (services.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+            if (warningMessage != null) {
+                Text(
+                    text = warningMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -396,6 +692,8 @@ private fun ServiceCard(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
