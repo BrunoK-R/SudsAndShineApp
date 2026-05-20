@@ -127,9 +127,11 @@ fun ProfileScreen(
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
+    val profileRevision by viewModel.profileRevision.collectAsStateWithLifecycle()
     val statsState by viewModel.statsState.collectAsStateWithLifecycle()
+    val preferencesState by viewModel.preferencesState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(sessionState, bookingRevision, vehicleRevision) {
+    LaunchedEffect(sessionState, bookingRevision, vehicleRevision, profileRevision) {
         viewModel.refreshForSession()
     }
 
@@ -137,9 +139,12 @@ fun ProfileScreen(
         contentPadding = contentPadding,
         sessionState = sessionState,
         statsState = statsState,
+        preferencesState = preferencesState,
         onRequestSignIn = onRequestSignIn,
         onSignOut = viewModel::signOut,
         onRetryStats = viewModel::loadStats,
+        onRetryPreferences = viewModel::loadPreferences,
+        onMarketingOptInChange = viewModel::updateMarketingOptIn,
         onOpenPersonalData = onOpenPersonalData,
         onManageVehicles = onManageVehicles,
         onOpenHistory = onOpenHistory,
@@ -153,9 +158,12 @@ private fun ProfileScreenContent(
     contentPadding: PaddingValues,
     sessionState: AuthSessionState,
     statsState: ProfileStatsUiState,
+    preferencesState: ProfilePreferencesUiState,
     onRequestSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onRetryStats: () -> Unit,
+    onRetryPreferences: () -> Unit,
+    onMarketingOptInChange: (Boolean) -> Unit,
     onOpenPersonalData: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
@@ -200,7 +208,11 @@ private fun ProfileScreenContent(
                     onOpenContact = onOpenContact,
                     onOpenRewards = onOpenRewards,
                 )
-                PreferencesCard()
+                PreferencesCard(
+                    preferencesState = preferencesState,
+                    onMarketingOptInChange = onMarketingOptInChange,
+                    onRetryPreferences = onRetryPreferences,
+                )
                 LogoutButton(onClick = onSignOut)
             } else if (isRestoringSession) {
                 RestoringSessionCard()
@@ -810,7 +822,16 @@ private fun ProfileMenuRow(
 }
 
 @Composable
-private fun PreferencesCard() {
+private fun PreferencesCard(
+    preferencesState: ProfilePreferencesUiState,
+    onMarketingOptInChange: (Boolean) -> Unit,
+    onRetryPreferences: () -> Unit,
+) {
+    val preferences = preferencesState.preferencesOrNull()
+    val marketingChecked = preferences?.marketingOptIn ?: false
+    val saving = preferencesState is ProfilePreferencesUiState.Saving
+    val marketingEnabled = preferences != null && !saving
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -830,11 +851,25 @@ private fun PreferencesCard() {
             PreferenceRow(
                 title = "Notificações Push",
                 description = "Receber lembretes de marcações",
+                checked = false,
+                enabled = false,
+                onCheckedChange = {},
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             PreferenceRow(
                 title = "Email Marketing",
                 description = "Receber ofertas e promoções",
+                checked = marketingChecked,
+                enabled = marketingEnabled,
+                loading = saving,
+                onCheckedChange = onMarketingOptInChange,
+            )
+            ProfilePreferencesStatus(
+                preferencesState = preferencesState,
+                onRetryPreferences = onRetryPreferences,
+                onRetrySave = {
+                    preferences?.let { onMarketingOptInChange(!it.marketingOptIn) }
+                },
             )
         }
     }
@@ -844,6 +879,10 @@ private fun PreferencesCard() {
 private fun PreferenceRow(
     title: String,
     description: String,
+    checked: Boolean,
+    enabled: Boolean,
+    loading: Boolean = false,
+    onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -866,15 +905,183 @@ private fun PreferenceRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(
-            checked = true,
-            onCheckedChange = null,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onTertiary,
-                checkedTrackColor = MaterialTheme.colorScheme.tertiary,
-                checkedBorderColor = MaterialTheme.colorScheme.tertiary,
-            ),
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = MaterialTheme.colorScheme.tertiary,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Switch(
+                checked = checked,
+                enabled = enabled,
+                onCheckedChange = if (enabled) onCheckedChange else null,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onTertiary,
+                    checkedTrackColor = MaterialTheme.colorScheme.tertiary,
+                    checkedBorderColor = MaterialTheme.colorScheme.tertiary,
+                    uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+                    disabledUncheckedThumbColor = MaterialTheme.colorScheme.outlineVariant,
+                    disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainer,
+                    disabledUncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfilePreferencesStatus(
+    preferencesState: ProfilePreferencesUiState,
+    onRetryPreferences: () -> Unit,
+    onRetrySave: () -> Unit,
+) {
+    val status = when (preferencesState) {
+        ProfilePreferencesUiState.Idle,
+        is ProfilePreferencesUiState.Loaded -> return
+
+        ProfilePreferencesUiState.Loading -> PreferenceStatusUi(
+            title = "A carregar preferências",
+            body = "Estamos a consultar as preferências associadas à conta.",
+            loading = true,
+            error = false,
+            actionLabel = null,
+            onAction = null,
         )
+
+        ProfilePreferencesUiState.Unauthenticated -> PreferenceStatusUi(
+            title = "Sessão necessária",
+            body = "Entre novamente para atualizar preferências.",
+            loading = false,
+            error = true,
+            actionLabel = null,
+            onAction = null,
+        )
+
+        is ProfilePreferencesUiState.Error -> PreferenceStatusUi(
+            title = "Não foi possível carregar preferências",
+            body = preferencesState.message,
+            loading = false,
+            error = true,
+            actionLabel = if (preferencesState.retryable) "Tentar novamente" else null,
+            onAction = if (preferencesState.retryable) onRetryPreferences else null,
+        )
+
+        is ProfilePreferencesUiState.Saving -> PreferenceStatusUi(
+            title = "A guardar preferências",
+            body = "Estamos a atualizar a preferência de marketing.",
+            loading = true,
+            error = false,
+            actionLabel = null,
+            onAction = null,
+        )
+
+        is ProfilePreferencesUiState.Saved -> PreferenceStatusUi(
+            title = "Preferências atualizadas",
+            body = preferencesState.message,
+            loading = false,
+            error = false,
+            actionLabel = null,
+            onAction = null,
+        )
+
+        is ProfilePreferencesUiState.SaveError -> PreferenceStatusUi(
+            title = "Não foi possível guardar",
+            body = preferencesState.message,
+            loading = false,
+            error = true,
+            actionLabel = if (preferencesState.retryable) "Tentar novamente" else null,
+            onAction = if (preferencesState.retryable) onRetrySave else null,
+        )
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = if (status.error) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
+        },
+        contentColor = if (status.error) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (status.loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = if (status.error) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondary
+                    },
+                    strokeWidth = 2.dp,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = status.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = status.body,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+            if (status.actionLabel != null && status.onAction != null) {
+                TextButton(
+                    onClick = status.onAction,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = if (status.error) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.secondary
+                        },
+                    ),
+                ) {
+                    Text(
+                        text = status.actionLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class PreferenceStatusUi(
+    val title: String,
+    val body: String,
+    val loading: Boolean,
+    val error: Boolean,
+    val actionLabel: String?,
+    val onAction: (() -> Unit)?,
+)
+
+private fun ProfilePreferencesUiState.preferencesOrNull(): ProfilePreferencesUi? {
+    return when (this) {
+        is ProfilePreferencesUiState.Loaded -> preferences
+        is ProfilePreferencesUiState.Saving -> preferences
+        is ProfilePreferencesUiState.Saved -> preferences
+        is ProfilePreferencesUiState.SaveError -> preferences
+        ProfilePreferencesUiState.Idle,
+        ProfilePreferencesUiState.Loading,
+        ProfilePreferencesUiState.Unauthenticated,
+        is ProfilePreferencesUiState.Error -> null
     }
 }
 

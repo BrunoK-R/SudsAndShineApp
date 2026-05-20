@@ -16,6 +16,12 @@ import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
+import com.sudsmobile.data.profile.UserProfile
+import com.sudsmobile.data.profile.UserProfileMutationResult
+import com.sudsmobile.data.profile.UserProfileRepository
+import com.sudsmobile.data.profile.UserProfileResult
+import com.sudsmobile.data.profile.UserProfileSaveRequest
 import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicle
 import com.sudsmobile.data.vehicle.UserVehicleDeleteResult
@@ -66,6 +72,9 @@ class ProfileViewModelTest {
             authRepository = ProfileStatsFakeAuthRepository(authenticated = false),
             bookingRepository = bookingRepository,
             userVehicleRepository = vehicleRepository,
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
         )
 
         viewModel.loadStats()
@@ -106,6 +115,9 @@ class ProfileViewModelTest {
                     ),
                 ),
             ),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
         )
 
         viewModel.loadStats()
@@ -133,6 +145,9 @@ class ProfileViewModelTest {
                 UserVehicleListResult.Failure(
                     UserVehicleError.Unavailable("Veículos indisponíveis."),
                 ),
+            ),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
             ),
         )
 
@@ -165,6 +180,9 @@ class ProfileViewModelTest {
             authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
             bookingRepository = bookingRepository,
             userVehicleRepository = vehicleRepository,
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
             bookingChangeNotifier = bookingChangeNotifier,
             userVehicleChangeNotifier = vehicleChangeNotifier,
         )
@@ -211,6 +229,9 @@ class ProfileViewModelTest {
             userVehicleRepository = ProfileStatsFakeVehicleRepository(
                 UserVehicleListResult.Success(listOf(profileStatsVehicle("vehicle-1"))),
             ),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
         )
 
         viewModel.loadStats()
@@ -231,6 +252,9 @@ class ProfileViewModelTest {
             userVehicleRepository = ProfileStatsFakeVehicleRepository(
                 UserVehicleListResult.Success(listOf(profileStatsVehicle("vehicle-1"))),
             ),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
         )
 
         viewModel.loadStats()
@@ -249,6 +273,135 @@ class ProfileViewModelTest {
         runCurrent()
 
         assertIs<ProfileStatsUiState.Unauthenticated>(viewModel.statsState.value)
+    }
+
+    @Test
+    fun loadPreferencesRequiresAuthenticatedSession() = runTest {
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = true)),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = false),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+
+        assertIs<ProfilePreferencesUiState.Unauthenticated>(viewModel.preferencesState.value)
+        assertEquals(0, profileRepository.loadCalls)
+    }
+
+    @Test
+    fun loadPreferencesMapsMarketingOptInFromProfile() = runTest {
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = true)),
+            ),
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+
+        val loaded = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(true, loaded.preferences.marketingOptIn)
+    }
+
+    @Test
+    fun updateMarketingOptInSavesProfilePreference() = runTest {
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            profileResult = UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = false)),
+            mutationResult = UserProfileMutationResult.Success(profilePreferencesProfile(marketingOptIn = true)),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.updateMarketingOptIn(true)
+        runCurrent()
+
+        val saved = assertIs<ProfilePreferencesUiState.Saved>(viewModel.preferencesState.value)
+        assertEquals(true, saved.preferences.marketingOptIn)
+        assertEquals(true, profileRepository.lastRequest?.marketingOptIn)
+        assertEquals("Bruno Ribeiro", profileRepository.lastRequest?.displayName)
+        assertEquals(1, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun updateMarketingOptInValidatesIncompleteProfileBeforeSaving() = runTest {
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            UserProfileResult.Success(profilePreferencesProfile(phoneNumber = "")),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.updateMarketingOptIn(true)
+        runCurrent()
+
+        val error = assertIs<ProfilePreferencesUiState.SaveError>(viewModel.preferencesState.value)
+        assertEquals(false, error.retryable)
+        assertEquals(0, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun refreshForSessionReloadsPreferencesWhenProfileRevisionChanges() = runTest {
+        val profileChangeNotifier = MutableUserProfileChangeNotifier()
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = false)),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+            userProfileChangeNotifier = profileChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(1, profileRepository.loadCalls)
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(1, profileRepository.loadCalls)
+
+        profileRepository.profileResult = UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = true))
+        profileChangeNotifier.notifyProfileChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val loaded = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(true, loaded.preferences.marketingOptIn)
+        assertEquals(2, profileRepository.loadCalls)
     }
 }
 
@@ -307,6 +460,31 @@ private class ProfileStatsFakeVehicleRepository(
 
     override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult {
         error("Not used")
+    }
+}
+
+private class ProfileStatsFakeProfileRepository(
+    var profileResult: UserProfileResult,
+    private val mutationResult: UserProfileMutationResult = UserProfileMutationResult.Success(
+        profilePreferencesProfile(),
+    ),
+) : UserProfileRepository {
+    var loadCalls: Int = 0
+        private set
+    var updateCalls: Int = 0
+        private set
+    var lastRequest: UserProfileSaveRequest? = null
+        private set
+
+    override suspend fun getMyProfile(): UserProfileResult {
+        loadCalls += 1
+        return profileResult
+    }
+
+    override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
+        updateCalls += 1
+        lastRequest = request
+        return mutationResult
     }
 }
 
@@ -388,4 +566,16 @@ private fun profileStatsVehicle(
     plate = plate,
     color = "Azul",
     type = "passenger",
+)
+
+private fun profilePreferencesProfile(
+    displayName: String = "Bruno Ribeiro",
+    phoneNumber: String = "913005855",
+    marketingOptIn: Boolean = false,
+): UserProfile = UserProfile(
+    uid = "uid-1",
+    email = "bruno@example.com",
+    displayName = displayName,
+    phoneNumber = phoneNumber,
+    marketingOptIn = marketingOptIn,
 )

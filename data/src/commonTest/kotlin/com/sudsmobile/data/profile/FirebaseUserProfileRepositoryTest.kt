@@ -29,7 +29,12 @@ class FirebaseUserProfileRepositoryTest {
     @Test
     fun normalizesUpdateRequestAndPassesIdToken() = runTest {
         val api = RecordingProfileFunctionsApi()
-        val repository = FirebaseUserProfileRepository(api, FakeProfileAuthRepository(authenticated = true))
+        val profileChangeNotifier = MutableUserProfileChangeNotifier()
+        val repository = FirebaseUserProfileRepository(
+            api,
+            FakeProfileAuthRepository(authenticated = true),
+            profileChangeNotifier,
+        )
 
         val result = repository.updateMyProfile(
             UserProfileSaveRequest(
@@ -44,6 +49,7 @@ class FirebaseUserProfileRepositoryTest {
         assertEquals("Bruno Ribeiro", api.lastRequest?.displayName)
         assertEquals("913 005 855", api.lastRequest?.phoneNumber)
         assertEquals(true, api.lastRequest?.marketingOptIn)
+        assertEquals(1L, profileChangeNotifier.revision.value)
     }
 
     @Test

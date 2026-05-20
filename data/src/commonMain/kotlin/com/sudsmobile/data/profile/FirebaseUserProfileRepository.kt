@@ -5,6 +5,7 @@ import com.sudsmobile.data.auth.AuthRepository
 class FirebaseUserProfileRepository(
     private val api: ProfileFunctionsApi,
     private val authRepository: AuthRepository,
+    private val profileChangeNotifier: MutableUserProfileChangeNotifier = MutableUserProfileChangeNotifier(),
 ) : UserProfileRepository {
     override suspend fun getMyProfile(): UserProfileResult {
         val idToken = currentIdTokenOrNull()
@@ -23,6 +24,11 @@ class FirebaseUserProfileRepository(
         }
 
         return api.updateMyProfile(request.normalized(), idToken)
+            .also { result ->
+                if (result is UserProfileMutationResult.Success) {
+                    profileChangeNotifier.notifyProfileChanged()
+                }
+            }
     }
 
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken
