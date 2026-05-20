@@ -53,6 +53,15 @@ data class BookingReviewReceipt(
     val reservationId: String,
 )
 
+data class BookingCancelRequest(
+    val reservationId: String,
+)
+
+data class BookingCancelReceipt(
+    val reservationId: String,
+    val status: String,
+)
+
 data class BookingAvailabilityRequest(
     val anchorDate: String? = null,
     val serviceDurationMinutes: Int = 30,
@@ -100,6 +109,11 @@ sealed interface BookingReviewResult {
     data class Failure(val error: BookingReviewError) : BookingReviewResult
 }
 
+sealed interface BookingCancelResult {
+    data class Success(val receipt: BookingCancelReceipt) : BookingCancelResult
+    data class Failure(val error: BookingCancelError) : BookingCancelResult
+}
+
 sealed interface BookingCreateError {
     val message: String
 
@@ -142,6 +156,18 @@ sealed interface BookingReviewError {
     data class Backend(override val message: String) : BookingReviewError
 }
 
+sealed interface BookingCancelError {
+    val message: String
+
+    data class Validation(override val message: String) : BookingCancelError
+    data class Permission(override val message: String) : BookingCancelError
+    data class Unauthenticated(override val message: String) : BookingCancelError
+    data class NotFound(override val message: String) : BookingCancelError
+    data class NotCancelable(override val message: String) : BookingCancelError
+    data class Unavailable(override val message: String) : BookingCancelError
+    data class Backend(override val message: String) : BookingCancelError
+}
+
 interface BookingRepository {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult
@@ -149,6 +175,12 @@ interface BookingRepository {
     suspend fun submitReview(request: BookingReviewRequest): BookingReviewResult {
         return BookingReviewResult.Failure(
             BookingReviewError.Unavailable("O envio de avaliações ainda não está disponível."),
+        )
+    }
+
+    suspend fun cancelBooking(request: BookingCancelRequest): BookingCancelResult {
+        return BookingCancelResult.Failure(
+            BookingCancelError.Unavailable("O cancelamento de marcações ainda não está disponível."),
         )
     }
 }

@@ -131,6 +131,40 @@ class KtorBookingFunctionsApi(
         }
     }
 
+    override suspend fun cancelMyReservation(
+        request: BookingCancelRequest,
+        idToken: String,
+    ): BookingCancelResult {
+        return try {
+            val response = httpClient.post(config.cancelMyReservationUrl) {
+                callableHeaders(idToken)
+                setBody(CallableCancelRequest(CancelPayload.from(request)))
+            }
+            val body = response.body<CallableCancelResponse>()
+            val error = body.error
+            when {
+                error != null -> BookingCancelResult.Failure(error.toCancelError())
+                body.result != null -> BookingCancelResult.Success(
+                    BookingCancelReceipt(
+                        reservationId = body.result.reservationId,
+                        status = body.result.status,
+                    ),
+                )
+                else -> BookingCancelResult.Failure(
+                    BookingCancelError.Backend("A resposta do cancelamento veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingCancelResult.Failure(
+                BookingCancelError.Unavailable(
+                    "Não foi possível cancelar a marcação. Tente novamente.",
+                ),
+            )
+        }
+    }
+
     private fun io.ktor.client.request.HttpRequestBuilder.callableHeaders(idToken: String? = null) {
         header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
         if (!idToken.isNullOrBlank()) {
@@ -157,6 +191,11 @@ private data class CallableMyReservationsRequest(
 @Serializable
 private data class CallableReviewRequest(
     val data: ReviewPayload,
+)
+
+@Serializable
+private data class CallableCancelRequest(
+    val data: CancelPayload,
 )
 
 @Serializable
@@ -225,6 +264,17 @@ private data class ReviewPayload(
 }
 
 @Serializable
+private data class CancelPayload(
+    val reservationId: String,
+) {
+    companion object {
+        fun from(request: BookingCancelRequest): CancelPayload = CancelPayload(
+            reservationId = request.reservationId,
+        )
+    }
+}
+
+@Serializable
 private data class CallableGetAvailabilityResponse(
     val result: GetAvailabilityResult? = null,
     val error: CallableError? = null,
@@ -245,6 +295,12 @@ private data class CallableMyReservationsResponse(
 @Serializable
 private data class CallableReviewResponse(
     val result: ReviewResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableCancelResponse(
+    val result: CancelResult? = null,
     val error: CallableError? = null,
 )
 
@@ -305,6 +361,13 @@ private data class ReviewResult(
     val ok: Boolean = false,
     val reviewId: String,
     val reservationId: String,
+)
+
+@Serializable
+private data class CancelResult(
+    val ok: Boolean = false,
+    val reservationId: String,
+    val status: String = "cancelled",
 )
 
 @Serializable
@@ -404,6 +467,20 @@ private data class CallableError(
             "FAILED_PRECONDITION" -> BookingReviewError.NotReviewable(fallbackMessage)
             "UNAVAILABLE" -> BookingReviewError.Unavailable("O serviço de avaliações está indisponível.")
             else -> BookingReviewError.Backend(fallbackMessage)
+        }
+    }
+
+    fun toCancelError(): BookingCancelError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível cancelar a marcação."
+        return when (normalizedCode) {
+            "INVALID_ARGUMENT" -> BookingCancelError.Validation(fallbackMessage)
+            "PERMISSION_DENIED" -> BookingCancelError.Permission("Esta marcação não pertence à sessão atual.")
+            "UNAUTHENTICATED" -> BookingCancelError.Unauthenticated("Inicie sessão para cancelar esta marcação.")
+            "NOT_FOUND" -> BookingCancelError.NotFound("A marcação selecionada já não existe.")
+            "FAILED_PRECONDITION" -> BookingCancelError.NotCancelable(fallbackMessage)
+            "UNAVAILABLE" -> BookingCancelError.Unavailable("O serviço de cancelamentos está indisponível.")
+            else -> BookingCancelError.Backend(fallbackMessage)
         }
     }
 }

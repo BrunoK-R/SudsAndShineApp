@@ -8,6 +8,10 @@ import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
 import com.sudsmobile.data.booking.BookingAvailabilityRequest
 import com.sudsmobile.data.booking.BookingAvailabilityResult
+import com.sudsmobile.data.booking.BookingCancelError
+import com.sudsmobile.data.booking.BookingCancelReceipt
+import com.sudsmobile.data.booking.BookingCancelRequest
+import com.sudsmobile.data.booking.BookingCancelResult
 import com.sudsmobile.data.booking.BookingCreateRequest
 import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingHistory
@@ -206,12 +210,69 @@ class CartBookingsViewModelTest {
         assertIs<CartBookingsUiState.Empty>(viewModel.uiState.value)
         assertEquals(2, repository.historyCalls)
     }
+
+    @Test
+    fun cancelBookingPublishesSuccessState() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+            cancelResult = BookingCancelResult.Success(
+                BookingCancelReceipt(
+                    reservationId = "reservation-1",
+                    status = "cancelled",
+                ),
+            ),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+        )
+
+        viewModel.cancelBooking("reservation-1")
+        runCurrent()
+
+        val success = assertIs<BookingCancellationUiState.Success>(viewModel.cancellationState.value)
+        assertEquals("reservation-1", success.reservationId)
+        assertEquals(1, repository.cancelCalls)
+        assertEquals("reservation-1", repository.lastCancelRequest?.reservationId)
+    }
+
+    @Test
+    fun cancelBookingMapsBackendError() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+            cancelResult = BookingCancelResult.Failure(
+                BookingCancelError.NotCancelable("Reservation can no longer be cancelled"),
+            ),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+        )
+
+        viewModel.cancelBooking("reservation-1")
+        runCurrent()
+
+        val error = assertIs<BookingCancellationUiState.Error>(viewModel.cancellationState.value)
+        assertEquals("reservation-1", error.reservationId)
+        assertEquals("Reservation can no longer be cancelled", error.message)
+        assertEquals(false, error.retryable)
+    }
 }
 
 private class FakeBookingRepository(
     private val historyResult: BookingHistoryResult,
+    private val cancelResult: BookingCancelResult = BookingCancelResult.Success(
+        BookingCancelReceipt(
+            reservationId = "reservation-1",
+            status = "cancelled",
+        ),
+    ),
 ) : BookingRepository {
     var historyCalls: Int = 0
+        private set
+    var cancelCalls: Int = 0
+        private set
+    var lastCancelRequest: BookingCancelRequest? = null
         private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
@@ -225,6 +286,12 @@ private class FakeBookingRepository(
     override suspend fun getMyBookings(): BookingHistoryResult {
         historyCalls += 1
         return historyResult
+    }
+
+    override suspend fun cancelBooking(request: BookingCancelRequest): BookingCancelResult {
+        cancelCalls += 1
+        lastCancelRequest = request
+        return cancelResult
     }
 }
 

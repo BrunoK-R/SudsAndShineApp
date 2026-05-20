@@ -151,6 +151,47 @@ class FirebaseBookingRepositoryTest {
         assertIs<BookingReviewResult.Success>(result)
         assertEquals(1L, changeNotifier.revision.value)
     }
+
+    @Test
+    fun rejectsCancelWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.cancelBooking(validCancelRequest())
+
+        assertIs<BookingCancelResult.Failure>(result)
+        assertIs<BookingCancelError.Unauthenticated>(result.error)
+        assertEquals(0, api.cancelCalls)
+    }
+
+    @Test
+    fun normalizesCancelBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.cancelBooking(BookingCancelRequest(" reservation-1 "))
+
+        assertIs<BookingCancelResult.Success>(result)
+        assertEquals(1, api.cancelCalls)
+        assertEquals("reservation-1", api.lastCancelRequest?.reservationId)
+        assertEquals("id-token-1", api.lastCancelIdToken)
+    }
+
+    @Test
+    fun successfulCancelNotifiesBookingHistoryObservers() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val changeNotifier = MutableBookingChangeNotifier()
+        val repository = FirebaseBookingRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+            bookingChangeNotifier = changeNotifier,
+        )
+
+        val result = repository.cancelBooking(validCancelRequest())
+
+        assertIs<BookingCancelResult.Success>(result)
+        assertEquals(1L, changeNotifier.revision.value)
+    }
 }
 
 private class RecordingBookingFunctionsApi : BookingFunctionsApi {
@@ -184,6 +225,12 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         private set
     var lastReviewIdToken: String? = null
         private set
+    var cancelCalls: Int = 0
+        private set
+    var lastCancelRequest: BookingCancelRequest? = null
+        private set
+    var lastCancelIdToken: String? = null
+        private set
 
     override suspend fun createReservation(request: BookingCreateRequest, idToken: String?): BookingCreateResult {
         calls += 1
@@ -211,6 +258,18 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
             BookingReviewReceipt(
                 reviewId = "review-1",
                 reservationId = request.reservationId,
+            ),
+        )
+    }
+
+    override suspend fun cancelMyReservation(request: BookingCancelRequest, idToken: String): BookingCancelResult {
+        cancelCalls += 1
+        lastCancelRequest = request
+        lastCancelIdToken = idToken
+        return BookingCancelResult.Success(
+            BookingCancelReceipt(
+                reservationId = request.reservationId,
+                status = "cancelled",
             ),
         )
     }
@@ -281,4 +340,8 @@ private fun validReviewRequest(): BookingReviewRequest = BookingReviewRequest(
     rating = 5,
     tags = listOf("Qualidade"),
     comment = "Muito bom.",
+)
+
+private fun validCancelRequest(): BookingCancelRequest = BookingCancelRequest(
+    reservationId = "reservation-1",
 )

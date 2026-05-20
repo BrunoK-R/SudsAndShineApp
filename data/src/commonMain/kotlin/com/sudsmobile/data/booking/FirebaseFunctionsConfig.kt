@@ -37,6 +37,9 @@ data class FirebaseFunctionsConfig(
     val submitReservationReviewUrl: String
         get() = functionUrl("submitReservationReview")
 
+    val cancelMyReservationUrl: String
+        get() = functionUrl("cancelMyReservation")
+
     val getMyVehiclesUrl: String
         get() = functionUrl("getMyVehicles")
 

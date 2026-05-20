@@ -255,6 +255,60 @@ class KtorBookingFunctionsApiTest {
         assertIs<BookingReviewError.NotReviewable>(failure.error)
         assertEquals("Reservation is not ready for review", failure.error.message)
     }
+
+    @Test
+    fun cancelsReservationWithAuthorizationHeader() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "reservationId": "reservation-1",
+                    "status": "cancelled"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.cancelMyReservation(validCancelRequest(), idToken = "id-token-1")
+
+        val success = assertIs<BookingCancelResult.Success>(result)
+        assertEquals("/test-project/europe-west1/cancelMyReservation", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("reservation-1", success.receipt.reservationId)
+        assertEquals("cancelled", success.receipt.status)
+    }
+
+    @Test
+    fun mapsCancelPreconditionErrorToNotCancelableState() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "FAILED_PRECONDITION",
+                    "message": "Reservation can no longer be cancelled"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.cancelMyReservation(validCancelRequest(), idToken = "id-token-1")
+
+        val failure = assertIs<BookingCancelResult.Failure>(result)
+        assertIs<BookingCancelError.NotCancelable>(failure.error)
+        assertEquals("Reservation can no longer be cancelled", failure.error.message)
+    }
 }
 
 private fun mockClient(
@@ -307,4 +361,8 @@ private fun validReviewRequest(): BookingReviewRequest = BookingReviewRequest(
     rating = 5,
     tags = listOf("Qualidade", "Rápido"),
     comment = "Ficou impecável.",
+)
+
+private fun validCancelRequest(): BookingCancelRequest = BookingCancelRequest(
+    reservationId = "reservation-1",
 )

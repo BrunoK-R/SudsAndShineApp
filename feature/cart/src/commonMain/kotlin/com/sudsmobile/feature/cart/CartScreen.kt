@@ -47,6 +47,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,13 +92,22 @@ fun CartScreen(
 ) {
     val viewModel: CartBookingsViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val cancellationState by viewModel.cancellationState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     var selectedTabName by rememberSaveable { mutableStateOf(BookingsTab.Upcoming.name) }
+    var pendingCancellationId by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedTab = BookingsTab.valueOf(selectedTabName)
 
     LaunchedEffect(sessionState, bookingRevision) {
         viewModel.refreshForSession()
+    }
+
+    LaunchedEffect(cancellationState) {
+        if (cancellationState is BookingCancellationUiState.Success) {
+            pendingCancellationId = null
+            viewModel.clearCancellationState()
+        }
     }
 
     Column(
@@ -118,11 +128,24 @@ fun CartScreen(
         ) {
             BookingsContent(
                 uiState = uiState,
+                cancellationState = cancellationState,
                 selectedTab = selectedTab,
+                pendingCancellationId = pendingCancellationId,
                 onTabSelected = { selectedTabName = it.name },
                 onRetry = viewModel::loadBookings,
                 onRequestSignIn = onRequestSignIn,
                 onRateService = onRateService,
+                onRequestCancellation = { reservationId ->
+                    viewModel.clearCancellationState()
+                    pendingCancellationId = reservationId
+                },
+                onDismissCancellation = { reservationId ->
+                    if (pendingCancellationId == reservationId) {
+                        pendingCancellationId = null
+                    }
+                    viewModel.clearCancellationState()
+                },
+                onConfirmCancellation = viewModel::cancelBooking,
             )
         }
     }
@@ -214,11 +237,16 @@ private fun BookingsSegmentedTabs(
 @Composable
 private fun BookingsContent(
     uiState: CartBookingsUiState,
+    cancellationState: BookingCancellationUiState,
     selectedTab: BookingsTab,
+    pendingCancellationId: String?,
     onTabSelected: (BookingsTab) -> Unit,
     onRetry: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRateService: (String) -> Unit,
+    onRequestCancellation: (String) -> Unit,
+    onDismissCancellation: (String) -> Unit,
+    onConfirmCancellation: (String) -> Unit,
 ) {
     when (uiState) {
         CartBookingsUiState.Idle,
@@ -283,7 +311,14 @@ private fun BookingsContent(
                             showRatingAction = selectedTab == BookingsTab.Completed &&
                                 booking.status == BookingStatusUi.Completed &&
                                 !booking.reviewed,
+                            showCancelAction = selectedTab == BookingsTab.Upcoming &&
+                                booking.status != BookingStatusUi.Cancelled,
+                            cancellationState = cancellationState.forReservation(booking.id),
+                            cancellationConfirmationVisible = pendingCancellationId == booking.id,
                             onRateService = { onRateService(booking.id) },
+                            onRequestCancellation = { onRequestCancellation(booking.id) },
+                            onDismissCancellation = { onDismissCancellation(booking.id) },
+                            onConfirmCancellation = { onConfirmCancellation(booking.id) },
                         )
                     }
                 }
@@ -378,7 +413,13 @@ private fun BookingsStatusCard(
 private fun BookingSummaryCard(
     booking: BookingSummaryUi,
     showRatingAction: Boolean,
+    showCancelAction: Boolean,
+    cancellationState: BookingCancellationUiState,
+    cancellationConfirmationVisible: Boolean,
     onRateService: () -> Unit,
+    onRequestCancellation: () -> Unit,
+    onDismissCancellation: () -> Unit,
+    onConfirmCancellation: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -483,6 +524,157 @@ private fun BookingSummaryCard(
                     fontWeight = FontWeight.Bold,
                 )
             }
+
+            if (showCancelAction) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                BookingCancellationAction(
+                    state = cancellationState,
+                    confirmationVisible = cancellationConfirmationVisible,
+                    onRequestCancellation = onRequestCancellation,
+                    onDismissCancellation = onDismissCancellation,
+                    onConfirmCancellation = onConfirmCancellation,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingCancellationAction(
+    state: BookingCancellationUiState,
+    confirmationVisible: Boolean,
+    onRequestCancellation: () -> Unit,
+    onDismissCancellation: () -> Unit,
+    onConfirmCancellation: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val loading = state is BookingCancellationUiState.Loading
+    val errorState = state as? BookingCancellationUiState.Error
+    val showConfirmAction = errorState?.retryable ?: true
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (confirmationVisible || errorState != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = if (errorState != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    },
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = if (state is BookingCancellationUiState.Error) {
+                            "Não foi possível cancelar"
+                        } else {
+                            "Cancelar esta marcação?"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (state is BookingCancellationUiState.Error) {
+                            state.message
+                        } else {
+                            "O horário fica disponível para outras marcações após confirmação."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TextButton(
+                    onClick = onDismissCancellation,
+                    enabled = !loading,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = if (errorState != null && !errorState.retryable) "Fechar" else "Manter",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                if (showConfirmAction) {
+                    OutlinedButton(
+                        onClick = onConfirmCancellation,
+                        enabled = !loading,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.error,
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.size(8.dp))
+                        }
+                        Text(
+                            text = when {
+                                loading -> "A cancelar"
+                                errorState != null -> "Tentar novamente"
+                                else -> "Cancelar"
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        } else {
+            Text(
+                text = "Cancelar marcação",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onRequestCancellation),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+private fun BookingCancellationUiState.forReservation(reservationId: String): BookingCancellationUiState {
+    return when (this) {
+        BookingCancellationUiState.Idle -> BookingCancellationUiState.Idle
+        is BookingCancellationUiState.Loading -> if (this.reservationId == reservationId) {
+            this
+        } else {
+            BookingCancellationUiState.Idle
+        }
+        is BookingCancellationUiState.Success -> if (this.reservationId == reservationId) {
+            this
+        } else {
+            BookingCancellationUiState.Idle
+        }
+        is BookingCancellationUiState.Error -> if (this.reservationId == reservationId) {
+            this
+        } else {
+            BookingCancellationUiState.Idle
         }
     }
 }

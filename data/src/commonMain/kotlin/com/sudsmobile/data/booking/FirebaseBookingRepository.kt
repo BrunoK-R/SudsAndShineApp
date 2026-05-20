@@ -58,6 +58,25 @@ class FirebaseBookingRepository(
             }
     }
 
+    override suspend fun cancelBooking(request: BookingCancelRequest): BookingCancelResult {
+        val validationError = validate(request)
+        if (validationError != null) {
+            return BookingCancelResult.Failure(validationError)
+        }
+
+        val session = authRepository.currentSession()
+            ?: return BookingCancelResult.Failure(
+                BookingCancelError.Unauthenticated("Inicie sessão para cancelar esta marcação."),
+            )
+
+        return api.cancelMyReservation(request.normalized(), session.idToken)
+            .also { result ->
+                if (result is BookingCancelResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
+    }
+
     private fun validate(request: BookingAvailabilityRequest): BookingAvailabilityError? {
         return when {
             request.anchorDate != null && !isValidDateId(request.anchorDate) ->
@@ -100,6 +119,16 @@ class FirebaseBookingRepository(
         }
     }
 
+    private fun validate(request: BookingCancelRequest): BookingCancelError? {
+        return when {
+            request.reservationId.isBlank() || request.reservationId.contains("/") ->
+                BookingCancelError.Validation("A marcação selecionada é inválida.")
+            request.reservationId.length > 160 ->
+                BookingCancelError.Validation("A marcação selecionada é inválida.")
+            else -> null
+        }
+    }
+
     private fun BookingCreateRequest.normalized(): BookingCreateRequest = copy(
         customerName = customerName.trim(),
         customerEmail = customerEmail.trim().lowercase(),
@@ -120,6 +149,10 @@ class FirebaseBookingRepository(
             .distinctBy { it.lowercase() }
             .take(8),
         comment = comment.trim(),
+    )
+
+    private fun BookingCancelRequest.normalized(): BookingCancelRequest = copy(
+        reservationId = reservationId.trim(),
     )
 
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken

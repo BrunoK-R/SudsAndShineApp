@@ -8,6 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.booking.BookingCancelError
+import com.sudsmobile.data.booking.BookingCancelRequest
+import com.sudsmobile.data.booking.BookingCancelResult
 import com.sudsmobile.data.booking.BookingChangeNotifier
 import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
@@ -52,6 +55,17 @@ internal sealed interface CartBookingsUiState {
     data class Error(val message: String, val retryable: Boolean) : CartBookingsUiState
 }
 
+internal sealed interface BookingCancellationUiState {
+    data object Idle : BookingCancellationUiState
+    data class Loading(val reservationId: String) : BookingCancellationUiState
+    data class Success(val reservationId: String) : BookingCancellationUiState
+    data class Error(
+        val reservationId: String,
+        val message: String,
+        val retryable: Boolean,
+    ) : BookingCancellationUiState
+}
+
 internal class CartBookingsViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
@@ -61,6 +75,8 @@ internal class CartBookingsViewModel(
     val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
     private val _uiState = MutableStateFlow<CartBookingsUiState>(CartBookingsUiState.Idle)
     val uiState: StateFlow<CartBookingsUiState> = _uiState.asStateFlow()
+    private val _cancellationState = MutableStateFlow<BookingCancellationUiState>(BookingCancellationUiState.Idle)
+    val cancellationState: StateFlow<BookingCancellationUiState> = _cancellationState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
 
@@ -69,6 +85,7 @@ internal class CartBookingsViewModel(
         if (session == null) {
             loadedUid = null
             loadedRevision = null
+            clearCancellationState()
             _uiState.value = CartBookingsUiState.Unauthenticated
             return
         }
@@ -88,6 +105,7 @@ internal class CartBookingsViewModel(
         if (session == null) {
             loadedUid = null
             loadedRevision = null
+            clearCancellationState()
             _uiState.value = CartBookingsUiState.Unauthenticated
             return
         }
@@ -113,6 +131,26 @@ internal class CartBookingsViewModel(
         }
     }
 
+    fun cancelBooking(reservationId: String) {
+        if (_cancellationState.value is BookingCancellationUiState.Loading) return
+
+        viewModelScope.launch {
+            _cancellationState.value = BookingCancellationUiState.Loading(reservationId)
+            _cancellationState.value = when (
+                val result = bookingRepository.cancelBooking(BookingCancelRequest(reservationId))
+            ) {
+                is BookingCancelResult.Success -> BookingCancellationUiState.Success(result.receipt.reservationId)
+                is BookingCancelResult.Failure -> result.error.toCancellationUiState(reservationId)
+            }
+        }
+    }
+
+    fun clearCancellationState() {
+        if (_cancellationState.value !is BookingCancellationUiState.Loading) {
+            _cancellationState.value = BookingCancellationUiState.Idle
+        }
+    }
+
     private fun BookingHistory.toUiState(): CartBookingsUiState {
         val mapped = reservations.mapNotNull { it.toUiModelOrNull() }
         if (mapped.isEmpty()) return CartBookingsUiState.Empty
@@ -130,6 +168,16 @@ internal class CartBookingsViewModel(
             is BookingHistoryError.Unavailable,
             is BookingHistoryError.Backend -> CartBookingsUiState.Error(message = message, retryable = true)
         }
+    }
+
+    private fun BookingCancelError.toCancellationUiState(reservationId: String): BookingCancellationUiState.Error {
+        val retryable = this is BookingCancelError.Unavailable ||
+            this is BookingCancelError.Backend
+        return BookingCancellationUiState.Error(
+            reservationId = reservationId,
+            message = message,
+            retryable = retryable,
+        )
     }
 }
 
