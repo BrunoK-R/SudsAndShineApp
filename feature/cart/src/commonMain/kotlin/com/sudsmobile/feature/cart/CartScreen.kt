@@ -91,10 +91,11 @@ fun CartScreen(
     val viewModel: CartBookingsViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     var selectedTabName by rememberSaveable { mutableStateOf(BookingsTab.Upcoming.name) }
     val selectedTab = BookingsTab.valueOf(selectedTabName)
 
-    LaunchedEffect(sessionState) {
+    LaunchedEffect(sessionState, bookingRevision) {
         viewModel.refreshForSession()
     }
 

@@ -51,7 +51,18 @@ sealed interface BookingSubmitUiState {
     data object Idle : BookingSubmitUiState
     data object Loading : BookingSubmitUiState
     data class Success(val receipt: BookingReceipt) : BookingSubmitUiState
-    data class Error(val message: String, val retryable: Boolean) : BookingSubmitUiState
+    data class Error(
+        val message: String,
+        val retryable: Boolean,
+        val resolution: BookingSubmitResolution,
+    ) : BookingSubmitUiState
+}
+
+enum class BookingSubmitResolution {
+    None,
+    Retry,
+    ChangeSlot,
+    SignIn,
 }
 
 sealed interface BookingAvailabilityUiState {
@@ -163,6 +174,7 @@ class ProductsBookingViewModel(
             _submitState.value = BookingSubmitUiState.Error(
                 message = "Complete os dados da marcação antes de confirmar.",
                 retryable = false,
+                resolution = BookingSubmitResolution.None,
             )
             return
         }
@@ -189,10 +201,30 @@ class ProductsBookingViewModel(
     }
 
     private fun BookingCreateError.toUiState(): BookingSubmitUiState.Error {
-        val retryable = this is BookingCreateError.Conflict ||
-            this is BookingCreateError.Unavailable ||
-            this is BookingCreateError.Backend
-        return BookingSubmitUiState.Error(message = message, retryable = retryable)
+        return when (this) {
+            is BookingCreateError.Conflict -> BookingSubmitUiState.Error(
+                message = message,
+                retryable = false,
+                resolution = BookingSubmitResolution.ChangeSlot,
+            )
+            is BookingCreateError.Unauthenticated -> BookingSubmitUiState.Error(
+                message = message,
+                retryable = false,
+                resolution = BookingSubmitResolution.SignIn,
+            )
+            is BookingCreateError.Unavailable,
+            is BookingCreateError.Backend -> BookingSubmitUiState.Error(
+                message = message,
+                retryable = true,
+                resolution = BookingSubmitResolution.Retry,
+            )
+            is BookingCreateError.Validation,
+            is BookingCreateError.Permission -> BookingSubmitUiState.Error(
+                message = message,
+                retryable = false,
+                resolution = BookingSubmitResolution.None,
+            )
+        }
     }
 
     private fun BookingAvailabilityError.toUiState(): BookingAvailabilityUiState.Error {

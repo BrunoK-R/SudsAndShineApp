@@ -15,6 +15,7 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -142,6 +143,37 @@ class CartBookingsViewModelTest {
         runCurrent()
 
         assertIs<CartBookingsUiState.Unauthenticated>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun refreshForSessionReloadsWhenBookingRevisionChanges() = runTest {
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<CartBookingsUiState.Empty>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(1, repository.historyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<CartBookingsUiState.Empty>(viewModel.uiState.value)
+        assertEquals(2, repository.historyCalls)
     }
 }
 

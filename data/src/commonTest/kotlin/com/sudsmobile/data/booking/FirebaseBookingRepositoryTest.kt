@@ -65,6 +65,22 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun successfulBookingNotifiesBookingHistoryObservers() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val changeNotifier = MutableBookingChangeNotifier()
+        val repository = FirebaseBookingRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+            bookingChangeNotifier = changeNotifier,
+        )
+
+        val result = repository.createBooking(validRequest())
+
+        assertIs<BookingCreateResult.Success>(result)
+        assertEquals(1L, changeNotifier.revision.value)
+    }
+
+    @Test
     fun rejectsHistoryWhenUnauthenticatedBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api, FakeAuthRepository())

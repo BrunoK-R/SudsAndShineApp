@@ -6,7 +6,9 @@ import com.sudsmobile.data.booking.BookingAvailabilityRequest
 import com.sudsmobile.data.booking.BookingAvailabilityResult
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import com.sudsmobile.data.booking.BookingCreateRequest
+import com.sudsmobile.data.booking.BookingCreateError
 import com.sudsmobile.data.booking.BookingCreateResult
+import com.sudsmobile.data.booking.BookingReceipt
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.auth.AuthActionResult
@@ -158,6 +160,44 @@ class ProductsBookingViewModelTest {
 
         assertIs<BookingVehiclesUiState.Unauthenticated>(viewModel.vehiclesState.value)
     }
+
+    @Test
+    fun submitBookingMapsConflictToChangeSlotResolution() = runTest {
+        val viewModel = productsBookingViewModel(
+            bookingRepository = FakeBookingRepository(
+                availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+                createResult = BookingCreateResult.Failure(
+                    BookingCreateError.Conflict("Este horário deixou de estar disponível."),
+                ),
+            ),
+        )
+
+        viewModel.submitBooking(validDraft())
+        runCurrent()
+
+        val error = assertIs<BookingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals(BookingSubmitResolution.ChangeSlot, error.resolution)
+        assertEquals(false, error.retryable)
+    }
+
+    @Test
+    fun submitBookingMapsUnavailableBackendToRetryResolution() = runTest {
+        val viewModel = productsBookingViewModel(
+            bookingRepository = FakeBookingRepository(
+                availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+                createResult = BookingCreateResult.Failure(
+                    BookingCreateError.Unavailable("Não foi possível contactar o serviço de marcações."),
+                ),
+            ),
+        )
+
+        viewModel.submitBooking(validDraft())
+        runCurrent()
+
+        val error = assertIs<BookingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals(BookingSubmitResolution.Retry, error.resolution)
+        assertEquals(true, error.retryable)
+    }
 }
 
 private fun productsBookingViewModel(
@@ -176,6 +216,12 @@ private fun productsBookingViewModel(
 
 private class FakeBookingRepository(
     private val availabilityResult: BookingAvailabilityResult,
+    private val createResult: BookingCreateResult = BookingCreateResult.Success(
+        BookingReceipt(
+            reservationId = "reservation-1",
+            reservationCode = "SS-ABCDEFGH",
+        ),
+    ),
 ) : BookingRepository {
     var lastAvailabilityRequest: BookingAvailabilityRequest? = null
         private set
@@ -186,7 +232,7 @@ private class FakeBookingRepository(
     }
 
     override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
-        error("Not used")
+        return createResult
     }
 
     override suspend fun getMyBookings(): BookingHistoryResult {
@@ -338,4 +384,18 @@ private fun userVehicle(
     plate = "AA-00-BB",
     color = "Preto",
     type = type,
+)
+
+private fun validDraft(): ProductsBookingDraft = ProductsBookingDraft(
+    customerName = "Bruno Ribeiro",
+    customerEmail = "bruno@example.com",
+    customerPhone = "+351913005855",
+    serviceId = "premium",
+    serviceName = "Lavagem Premium",
+    dateId = "2026-05-20",
+    time = "09:30",
+    serviceDurationMinutes = 45,
+    vehicleType = "passenger",
+    gdprConsent = true,
+    notes = "",
 )

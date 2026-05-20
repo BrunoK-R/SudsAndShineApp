@@ -5,6 +5,7 @@ import com.sudsmobile.data.auth.AuthRepository
 class FirebaseBookingRepository(
     private val api: BookingFunctionsApi,
     private val authRepository: AuthRepository,
+    private val bookingChangeNotifier: MutableBookingChangeNotifier = MutableBookingChangeNotifier(),
 ) : BookingRepository {
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
         val validationError = validate(request)
@@ -22,6 +23,11 @@ class FirebaseBookingRepository(
         }
 
         return api.createReservation(request.normalized(), currentIdTokenOrNull())
+            .also { result ->
+                if (result is BookingCreateResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
     }
 
     override suspend fun getMyBookings(): BookingHistoryResult {

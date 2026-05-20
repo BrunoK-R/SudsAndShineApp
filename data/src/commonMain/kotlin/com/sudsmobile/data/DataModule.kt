@@ -1,10 +1,12 @@
 package com.sudsmobile.data
 
 import com.sudsmobile.data.booking.BookingFunctionsApi
+import com.sudsmobile.data.booking.BookingChangeNotifier
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.FirebaseBookingRepository
 import com.sudsmobile.data.booking.FirebaseFunctionsConfig
 import com.sudsmobile.data.booking.KtorBookingFunctionsApi
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.auth.AuthApi
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionStore
@@ -40,7 +42,9 @@ val dataModule = module {
     single<AuthApi> { KtorIdentityToolkitAuthApi(get(), get()) }
     single<AuthRepository> { FirebaseAuthRepository(get(), get<AuthSessionStore>()) }
     single<BookingFunctionsApi> { KtorBookingFunctionsApi(get(), get()) }
-    single<BookingRepository> { FirebaseBookingRepository(get(), get()) }
+    single { MutableBookingChangeNotifier() }
+    single<BookingChangeNotifier> { get<MutableBookingChangeNotifier>() }
+    single<BookingRepository> { FirebaseBookingRepository(get(), get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }
     single<ServiceCatalogRepository> { FirebaseServiceCatalogRepository(get()) }
     single<VehicleFunctionsApi> { KtorVehicleFunctionsApi(get(), get()) }

@@ -451,6 +451,21 @@ private fun ProductsScreenContent(
                             onClearSubmitError()
                         },
                         submitState = submitState,
+                        onSubmitErrorAction = { resolution ->
+                            when (resolution) {
+                                BookingSubmitResolution.ChangeSlot -> {
+                                    selectedTime = null
+                                    currentStepName = BookingStep.DateTime.name
+                                    onClearSubmitError()
+                                    selectedService?.let {
+                                        onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                    }
+                                }
+                                BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
+                                BookingSubmitResolution.SignIn -> onRequestSignIn()
+                                BookingSubmitResolution.None -> Unit
+                            }
+                        },
                     )
                 }
 
@@ -490,7 +505,22 @@ private fun ProductsScreenContent(
                         BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
                         BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
                         BookingStep.Contact -> currentStepName = BookingStep.Confirmation.name
-                        BookingStep.Confirmation -> onSubmitBooking(bookingDraft)
+                        BookingStep.Confirmation -> when (
+                            (submitState as? BookingSubmitUiState.Error)?.resolution
+                        ) {
+                            BookingSubmitResolution.ChangeSlot -> {
+                                selectedTime = null
+                                currentStepName = BookingStep.DateTime.name
+                                onClearSubmitError()
+                                selectedService?.let {
+                                    onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                }
+                            }
+                            BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
+                            BookingSubmitResolution.SignIn -> onRequestSignIn()
+                            BookingSubmitResolution.None,
+                            null -> onSubmitBooking(bookingDraft)
+                        }
                         BookingStep.Success -> Unit
                     }
                 },
@@ -498,8 +528,8 @@ private fun ProductsScreenContent(
                     BookingStep.Contact -> "Rever Marcação"
                     BookingStep.Confirmation -> if (submitState is BookingSubmitUiState.Loading) {
                         "A confirmar..."
-                    } else if (submitState is BookingSubmitUiState.Error && submitState.retryable) {
-                        "Tentar novamente"
+                    } else if (submitState is BookingSubmitUiState.Error) {
+                        submitState.resolution.continueLabel()
                     } else {
                         "Confirmar Marcação"
                     }
@@ -628,6 +658,7 @@ private fun BookingConfirmationContent(
     onEditDateTime: () -> Unit,
     onEditContact: () -> Unit,
     submitState: BookingSubmitUiState,
+    onSubmitErrorAction: (BookingSubmitResolution) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -694,13 +725,17 @@ private fun BookingConfirmationContent(
             price = service?.priceForVehicle(vehicle?.type) ?: "0,00€",
         )
 
-        BookingSubmitStatusCard(submitState)
+        BookingSubmitStatusCard(
+            submitState = submitState,
+            onAction = onSubmitErrorAction,
+        )
     }
 }
 
 @Composable
 private fun BookingSubmitStatusCard(
     submitState: BookingSubmitUiState,
+    onAction: (BookingSubmitResolution) -> Unit,
 ) {
     when (submitState) {
         BookingSubmitUiState.Idle, is BookingSubmitUiState.Success -> Unit
@@ -762,7 +797,7 @@ private fun BookingSubmitStatusCard(
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Não foi possível confirmar",
+                            text = submitState.resolution.errorTitle(),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                         )
@@ -770,10 +805,66 @@ private fun BookingSubmitStatusCard(
                             text = submitState.message,
                             style = MaterialTheme.typography.bodySmall,
                         )
+
+                        val actionLabel = submitState.resolution.actionLabel()
+                        if (actionLabel != null) {
+                            OutlinedButton(
+                                onClick = { onAction(submitState.resolution) },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.36f)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                ),
+                            ) {
+                                Icon(
+                                    imageVector = submitState.resolution.actionIcon(),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(actionLabel, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+private fun BookingSubmitResolution.continueLabel(): String {
+    return when (this) {
+        BookingSubmitResolution.ChangeSlot -> "Escolher outro horário"
+        BookingSubmitResolution.Retry -> "Tentar novamente"
+        BookingSubmitResolution.SignIn -> "Entrar para continuar"
+        BookingSubmitResolution.None -> "Confirmar Marcação"
+    }
+}
+
+private fun BookingSubmitResolution.errorTitle(): String {
+    return when (this) {
+        BookingSubmitResolution.ChangeSlot -> "Horário indisponível"
+        BookingSubmitResolution.Retry -> "Não foi possível confirmar"
+        BookingSubmitResolution.SignIn -> "Sessão necessária"
+        BookingSubmitResolution.None -> "Não foi possível confirmar"
+    }
+}
+
+private fun BookingSubmitResolution.actionLabel(): String? {
+    return when (this) {
+        BookingSubmitResolution.ChangeSlot -> "Escolher outro horário"
+        BookingSubmitResolution.Retry -> "Tentar novamente"
+        BookingSubmitResolution.SignIn -> "Entrar"
+        BookingSubmitResolution.None -> null
+    }
+}
+
+private fun BookingSubmitResolution.actionIcon(): ImageVector {
+    return when (this) {
+        BookingSubmitResolution.ChangeSlot -> Icons.Filled.CalendarMonth
+        BookingSubmitResolution.Retry -> Icons.Filled.Refresh
+        BookingSubmitResolution.SignIn -> Icons.Filled.Lock
+        BookingSubmitResolution.None -> Icons.Filled.Info
     }
 }
 
