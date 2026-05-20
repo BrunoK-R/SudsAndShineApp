@@ -165,6 +165,33 @@ class KtorBookingFunctionsApi(
         }
     }
 
+    override suspend fun redeemMyLoyaltyReward(idToken: String): BookingRewardRedemptionResult {
+        return try {
+            val response = httpClient.post(config.redeemMyLoyaltyRewardUrl) {
+                callableHeaders(idToken)
+                setBody(CallableRedeemRewardRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableRedeemRewardResponse>()
+            val error = body.error
+            val receipt = body.result?.toReceiptOrNull()
+            when {
+                error != null -> BookingRewardRedemptionResult.Failure(error.toRewardRedemptionError())
+                receipt != null -> BookingRewardRedemptionResult.Success(receipt)
+                else -> BookingRewardRedemptionResult.Failure(
+                    BookingRewardRedemptionError.Backend("A resposta da recompensa veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingRewardRedemptionResult.Failure(
+                BookingRewardRedemptionError.Unavailable(
+                    "Não foi possível resgatar a recompensa. Tente novamente.",
+                ),
+            )
+        }
+    }
+
     private fun io.ktor.client.request.HttpRequestBuilder.callableHeaders(idToken: String? = null) {
         header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
         if (!idToken.isNullOrBlank()) {
@@ -196,6 +223,11 @@ private data class CallableReviewRequest(
 @Serializable
 private data class CallableCancelRequest(
     val data: CancelPayload,
+)
+
+@Serializable
+private data class CallableRedeemRewardRequest(
+    val data: Map<String, String>,
 )
 
 @Serializable
@@ -305,6 +337,12 @@ private data class CallableCancelResponse(
 )
 
 @Serializable
+private data class CallableRedeemRewardResponse(
+    val result: RedeemRewardResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class GetAvailabilityResult(
     val monthTitle: String,
     val leadingEmptyCells: Int,
@@ -371,11 +409,65 @@ private data class CancelResult(
 )
 
 @Serializable
+private data class RedeemRewardResult(
+    val ok: Boolean = false,
+    val redemption: LoyaltyRedemptionPayload? = null,
+    val loyalty: LoyaltyPayload? = null,
+) {
+    fun toReceiptOrNull(): BookingRewardRedemptionReceipt? {
+        val redemption = redemption ?: return null
+        val loyalty = loyalty ?: return null
+        return BookingRewardRedemptionReceipt(
+            redemptionId = redemption.id,
+            rewardCode = redemption.rewardCode,
+            rewardNumber = redemption.rewardNumber,
+            status = redemption.status,
+            loyalty = loyalty.toSummary(),
+        )
+    }
+}
+
+@Serializable
+private data class LoyaltyRedemptionPayload(
+    val id: String,
+    val rewardCode: String,
+    val rewardNumber: Int,
+    val status: String = "issued",
+)
+
+@Serializable
+private data class LoyaltyPayload(
+    val totalWashes: Int,
+    val currentWashes: Int,
+    val targetWashes: Int,
+    val remainingWashes: Int,
+    val progress: Float,
+    val rewardReady: Boolean,
+    val completedRewards: Int,
+    val claimedRewards: Int,
+    val availableRewards: Int,
+) {
+    fun toSummary(): BookingLoyaltySummary = BookingLoyaltySummary(
+        totalWashes = totalWashes.coerceAtLeast(0),
+        currentWashes = currentWashes.coerceAtLeast(0),
+        targetWashes = targetWashes.coerceAtLeast(1),
+        remainingWashes = remainingWashes.coerceAtLeast(0),
+        progress = progress.coerceIn(0f, 1f),
+        rewardReady = rewardReady,
+        completedRewards = completedRewards.coerceAtLeast(0),
+        claimedRewards = claimedRewards.coerceAtLeast(0),
+        availableRewards = availableRewards.coerceAtLeast(0),
+    )
+}
+
+@Serializable
 private data class MyReservationsResult(
     val reservations: List<MyReservationItem>,
+    val loyalty: LoyaltyPayload? = null,
 ) {
     fun toHistory(): BookingHistory = BookingHistory(
         reservations = reservations.map { it.toReservation() },
+        loyalty = loyalty?.toSummary(),
     )
 }
 
@@ -481,6 +573,24 @@ private data class CallableError(
             "FAILED_PRECONDITION" -> BookingCancelError.NotCancelable(fallbackMessage)
             "UNAVAILABLE" -> BookingCancelError.Unavailable("O serviço de cancelamentos está indisponível.")
             else -> BookingCancelError.Backend(fallbackMessage)
+        }
+    }
+
+    fun toRewardRedemptionError(): BookingRewardRedemptionError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível resgatar a recompensa."
+        return when (normalizedCode) {
+            "PERMISSION_DENIED" ->
+                BookingRewardRedemptionError.Permission("Esta recompensa não pertence à sessão atual.")
+            "UNAUTHENTICATED" ->
+                BookingRewardRedemptionError.Unauthenticated("Inicie sessão para resgatar recompensas.")
+            "FAILED_PRECONDITION" ->
+                BookingRewardRedemptionError.NotAvailable("Ainda não tem uma recompensa disponível.")
+            "ALREADY_EXISTS" ->
+                BookingRewardRedemptionError.AlreadyClaimed("Esta recompensa já foi resgatada.")
+            "UNAVAILABLE" ->
+                BookingRewardRedemptionError.Unavailable("O serviço de recompensas está indisponível.")
+            else -> BookingRewardRedemptionError.Backend(fallbackMessage)
         }
     }
 }

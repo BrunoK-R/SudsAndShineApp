@@ -1,5 +1,7 @@
 package com.sudsmobile.data.booking
 
+import com.sudsmobile.shared.loyalty.LoyaltyProgress
+
 data class BookingCreateRequest(
     val customerName: String,
     val customerEmail: String,
@@ -22,6 +24,19 @@ data class BookingReceipt(
 
 data class BookingHistory(
     val reservations: List<BookingHistoryReservation>,
+    val loyalty: BookingLoyaltySummary? = null,
+)
+
+data class BookingLoyaltySummary(
+    val totalWashes: Int,
+    val currentWashes: Int,
+    val targetWashes: Int,
+    val remainingWashes: Int,
+    val progress: Float,
+    val rewardReady: Boolean,
+    val completedRewards: Int,
+    val claimedRewards: Int,
+    val availableRewards: Int,
 )
 
 data class BookingHistoryReservation(
@@ -60,6 +75,14 @@ data class BookingCancelRequest(
 data class BookingCancelReceipt(
     val reservationId: String,
     val status: String,
+)
+
+data class BookingRewardRedemptionReceipt(
+    val redemptionId: String,
+    val rewardCode: String,
+    val rewardNumber: Int,
+    val status: String,
+    val loyalty: BookingLoyaltySummary,
 )
 
 data class BookingAvailabilityRequest(
@@ -112,6 +135,11 @@ sealed interface BookingReviewResult {
 sealed interface BookingCancelResult {
     data class Success(val receipt: BookingCancelReceipt) : BookingCancelResult
     data class Failure(val error: BookingCancelError) : BookingCancelResult
+}
+
+sealed interface BookingRewardRedemptionResult {
+    data class Success(val receipt: BookingRewardRedemptionReceipt) : BookingRewardRedemptionResult
+    data class Failure(val error: BookingRewardRedemptionError) : BookingRewardRedemptionResult
 }
 
 sealed interface BookingCreateError {
@@ -168,6 +196,17 @@ sealed interface BookingCancelError {
     data class Backend(override val message: String) : BookingCancelError
 }
 
+sealed interface BookingRewardRedemptionError {
+    val message: String
+
+    data class Permission(override val message: String) : BookingRewardRedemptionError
+    data class Unauthenticated(override val message: String) : BookingRewardRedemptionError
+    data class NotAvailable(override val message: String) : BookingRewardRedemptionError
+    data class AlreadyClaimed(override val message: String) : BookingRewardRedemptionError
+    data class Unavailable(override val message: String) : BookingRewardRedemptionError
+    data class Backend(override val message: String) : BookingRewardRedemptionError
+}
+
 interface BookingRepository {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult
@@ -183,4 +222,22 @@ interface BookingRepository {
             BookingCancelError.Unavailable("O cancelamento de marcações ainda não está disponível."),
         )
     }
+
+    suspend fun redeemLoyaltyReward(): BookingRewardRedemptionResult {
+        return BookingRewardRedemptionResult.Failure(
+            BookingRewardRedemptionError.Unavailable("O resgate de recompensas ainda não está disponível."),
+        )
+    }
 }
+
+fun BookingLoyaltySummary.toLoyaltyProgress(): LoyaltyProgress = LoyaltyProgress(
+    totalWashes = totalWashes,
+    currentWashes = currentWashes,
+    targetWashes = targetWashes.coerceAtLeast(1),
+    remainingWashes = remainingWashes.coerceAtLeast(0),
+    progress = progress.coerceIn(0f, 1f),
+    rewardReady = rewardReady,
+    completedRewards = completedRewards.coerceAtLeast(0),
+    claimedRewards = claimedRewards.coerceAtLeast(0),
+    availableRewards = availableRewards.coerceAtLeast(0),
+)

@@ -40,6 +40,12 @@ data class FirebaseFunctionsConfig(
     val cancelMyReservationUrl: String
         get() = functionUrl("cancelMyReservation")
 
+    val getMyLoyaltyUrl: String
+        get() = functionUrl("getMyLoyalty")
+
+    val redeemMyLoyaltyRewardUrl: String
+        get() = functionUrl("redeemMyLoyaltyReward")
+
     val getMyVehiclesUrl: String
         get() = functionUrl("getMyVehicles")
 

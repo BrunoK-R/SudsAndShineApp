@@ -18,6 +18,7 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
 import com.sudsmobile.data.catalog.ServiceCatalog
 import com.sudsmobile.data.catalog.ServiceCatalogError
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
@@ -289,7 +290,7 @@ private fun BookingHistory.toHomeState(
 ): HomeUiState {
     val validReservations = reservations.filter { it.id.isNotBlank() && it.slotStartIso.isNotBlank() }
     val completedWashCount = validReservations.count { !it.upcoming && !it.isCancelled() }
-    val loyalty = completedWashCount.toLoyaltyUi()
+    val loyaltyProgress = this.loyalty?.toBackendLoyaltyProgress() ?: completedWashCount.toLoyaltyUi()
     val nextBooking = validReservations
         .filter { it.upcoming && !it.isCancelled() }
         .minByOrNull { it.slotStartIso }
@@ -298,7 +299,7 @@ private fun BookingHistory.toHomeState(
     return if (validReservations.isEmpty()) {
         HomeUiState.Empty(
             identity = identity,
-            loyalty = loyalty,
+            loyalty = loyaltyProgress,
             featuredServices = catalog.services,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
@@ -307,7 +308,7 @@ private fun BookingHistory.toHomeState(
         HomeUiState.Loaded(
             identity = identity,
             nextBooking = nextBooking,
-            loyalty = loyalty,
+            loyalty = loyaltyProgress,
             featuredServices = catalog.services,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,

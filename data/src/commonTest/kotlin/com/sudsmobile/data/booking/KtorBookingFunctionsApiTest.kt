@@ -162,6 +162,17 @@ class KtorBookingFunctionsApiTest {
                 """
                 {
                   "result": {
+                    "loyalty": {
+                      "totalWashes": 10,
+                      "currentWashes": 10,
+                      "targetWashes": 10,
+                      "remainingWashes": 0,
+                      "progress": 1.0,
+                      "rewardReady": true,
+                      "completedRewards": 1,
+                      "claimedRewards": 0,
+                      "availableRewards": 1
+                    },
                     "reservations": [
                       {
                         "id": "reservation-1",
@@ -200,6 +211,8 @@ class KtorBookingFunctionsApiTest {
         assertEquals(true, success.history.reservations.first().reviewed)
         assertEquals(5, success.history.reservations.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), success.history.reservations.first().reviewTags)
+        assertEquals(10, success.history.loyalty?.totalWashes)
+        assertEquals(1, success.history.loyalty?.availableRewards)
     }
 
     @Test
@@ -308,6 +321,77 @@ class KtorBookingFunctionsApiTest {
         val failure = assertIs<BookingCancelResult.Failure>(result)
         assertIs<BookingCancelError.NotCancelable>(failure.error)
         assertEquals("Reservation can no longer be cancelled", failure.error.message)
+    }
+
+    @Test
+    fun redeemsLoyaltyRewardWithAuthorizationHeader() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "redemption": {
+                      "id": "reward-0001",
+                      "rewardCode": "SS-FREE-UID1-0001",
+                      "rewardNumber": 1,
+                      "status": "issued"
+                    },
+                    "loyalty": {
+                      "totalWashes": 10,
+                      "currentWashes": 0,
+                      "targetWashes": 10,
+                      "remainingWashes": 10,
+                      "progress": 0.0,
+                      "rewardReady": false,
+                      "completedRewards": 1,
+                      "claimedRewards": 1,
+                      "availableRewards": 0
+                    }
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.redeemMyLoyaltyReward(idToken = "id-token-1")
+
+        val success = assertIs<BookingRewardRedemptionResult.Success>(result)
+        assertEquals("/test-project/europe-west1/redeemMyLoyaltyReward", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("reward-0001", success.receipt.redemptionId)
+        assertEquals("SS-FREE-UID1-0001", success.receipt.rewardCode)
+        assertEquals(1, success.receipt.loyalty.claimedRewards)
+        assertEquals(0, success.receipt.loyalty.availableRewards)
+    }
+
+    @Test
+    fun mapsRedeemPreconditionErrorToRewardUnavailableState() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "FAILED_PRECONDITION",
+                    "message": "No loyalty reward is available"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.redeemMyLoyaltyReward(idToken = "id-token-1")
+
+        val failure = assertIs<BookingRewardRedemptionResult.Failure>(result)
+        assertIs<BookingRewardRedemptionError.NotAvailable>(failure.error)
+        assertEquals("Ainda não tem uma recompensa disponível.", failure.error.message)
     }
 }
 

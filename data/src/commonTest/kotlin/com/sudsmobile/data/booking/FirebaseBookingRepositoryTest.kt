@@ -192,6 +192,46 @@ class FirebaseBookingRepositoryTest {
         assertIs<BookingCancelResult.Success>(result)
         assertEquals(1L, changeNotifier.revision.value)
     }
+
+    @Test
+    fun rejectsRewardRedemptionWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.redeemLoyaltyReward()
+
+        assertIs<BookingRewardRedemptionResult.Failure>(result)
+        assertIs<BookingRewardRedemptionError.Unauthenticated>(result.error)
+        assertEquals(0, api.rewardRedemptionCalls)
+    }
+
+    @Test
+    fun redeemsRewardWithAuthenticatedIdToken() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.redeemLoyaltyReward()
+
+        assertIs<BookingRewardRedemptionResult.Success>(result)
+        assertEquals(1, api.rewardRedemptionCalls)
+        assertEquals("id-token-1", api.lastRewardRedemptionIdToken)
+    }
+
+    @Test
+    fun successfulRewardRedemptionNotifiesBookingHistoryObservers() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val changeNotifier = MutableBookingChangeNotifier()
+        val repository = FirebaseBookingRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+            bookingChangeNotifier = changeNotifier,
+        )
+
+        val result = repository.redeemLoyaltyReward()
+
+        assertIs<BookingRewardRedemptionResult.Success>(result)
+        assertEquals(1L, changeNotifier.revision.value)
+    }
 }
 
 private class RecordingBookingFunctionsApi : BookingFunctionsApi {
@@ -230,6 +270,10 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
     var lastCancelRequest: BookingCancelRequest? = null
         private set
     var lastCancelIdToken: String? = null
+        private set
+    var rewardRedemptionCalls: Int = 0
+        private set
+    var lastRewardRedemptionIdToken: String? = null
         private set
 
     override suspend fun createReservation(request: BookingCreateRequest, idToken: String?): BookingCreateResult {
@@ -270,6 +314,30 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
             BookingCancelReceipt(
                 reservationId = request.reservationId,
                 status = "cancelled",
+            ),
+        )
+    }
+
+    override suspend fun redeemMyLoyaltyReward(idToken: String): BookingRewardRedemptionResult {
+        rewardRedemptionCalls += 1
+        lastRewardRedemptionIdToken = idToken
+        return BookingRewardRedemptionResult.Success(
+            BookingRewardRedemptionReceipt(
+                redemptionId = "reward-0001",
+                rewardCode = "SS-FREE-UID1-0001",
+                rewardNumber = 1,
+                status = "issued",
+                loyalty = BookingLoyaltySummary(
+                    totalWashes = 10,
+                    currentWashes = 0,
+                    targetWashes = 10,
+                    remainingWashes = 10,
+                    progress = 0f,
+                    rewardReady = false,
+                    completedRewards = 1,
+                    claimedRewards = 1,
+                    availableRewards = 0,
+                ),
             ),
         )
     }

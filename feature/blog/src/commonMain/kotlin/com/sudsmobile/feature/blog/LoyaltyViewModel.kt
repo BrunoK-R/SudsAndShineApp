@@ -11,6 +11,9 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.BookingRewardRedemptionError
+import com.sudsmobile.data.booking.BookingRewardRedemptionResult
+import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
 import com.sudsmobile.shared.loyalty.LoyaltyProgress
 import com.sudsmobile.shared.loyalty.toLoyaltyProgress
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,14 +30,29 @@ internal data class LoyaltyHistoryItemUi(
     val points: Int,
 )
 
+internal sealed interface LoyaltyRedemptionUiState {
+    data object Idle : LoyaltyRedemptionUiState
+    data object Redeeming : LoyaltyRedemptionUiState
+    data class Success(val message: String) : LoyaltyRedemptionUiState
+    data class Error(val message: String, val retryable: Boolean) : LoyaltyRedemptionUiState
+}
+
 internal sealed interface LoyaltyUiState {
     data object Idle : LoyaltyUiState
     data object Loading : LoyaltyUiState
     data object Unauthenticated : LoyaltyUiState
-    data class Empty(val progress: LoyaltyProgressUi) : LoyaltyUiState
+    data class Empty(
+        val progress: LoyaltyProgressUi,
+        val availableRewards: Int = progress.availableRewards,
+        val claimedRewards: Int = progress.claimedRewards,
+        val redemptionState: LoyaltyRedemptionUiState = LoyaltyRedemptionUiState.Idle,
+    ) : LoyaltyUiState
     data class Loaded(
         val progress: LoyaltyProgressUi,
         val history: List<LoyaltyHistoryItemUi>,
+        val availableRewards: Int = progress.availableRewards,
+        val claimedRewards: Int = progress.claimedRewards,
+        val redemptionState: LoyaltyRedemptionUiState = LoyaltyRedemptionUiState.Idle,
     ) : LoyaltyUiState
     data class Error(val message: String, val retryable: Boolean) : LoyaltyUiState
 }
@@ -76,6 +94,7 @@ internal class LoyaltyViewModel(
             is AuthSessionState.Authenticated -> {
                 val uid = state.session.user.uid
                 val revision = bookingRevision.value
+                if (_uiState.value.isRedeeming()) return
                 val hasReusableState = _uiState.value is LoyaltyUiState.Loaded ||
                     _uiState.value is LoyaltyUiState.Empty
                 if (loadedUid == uid && loadedRevision == revision && hasReusableState) return
@@ -85,7 +104,7 @@ internal class LoyaltyViewModel(
     }
 
     fun loadRewards() {
-        if (_uiState.value is LoyaltyUiState.Loading) return
+        if (_uiState.value is LoyaltyUiState.Loading || _uiState.value.isRedeeming()) return
 
         val session = sessionState.value as? AuthSessionState.Authenticated
         if (session == null) {
@@ -116,6 +135,57 @@ internal class LoyaltyViewModel(
             }
         }
     }
+
+    fun redeemReward() {
+        val content = _uiState.value.contentOrNull() ?: return
+        if (content.availableRewards <= 0 || content.redemptionState is LoyaltyRedemptionUiState.Redeeming) {
+            return
+        }
+
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedUid = null
+            loadedRevision = null
+            _uiState.value = LoyaltyUiState.Unauthenticated
+            return
+        }
+
+        val requestedUid = session.session.user.uid
+        viewModelScope.launch {
+            _uiState.value = content.toUiState(LoyaltyRedemptionUiState.Redeeming)
+            val nextState = when (val result = bookingRepository.redeemLoyaltyReward()) {
+                is BookingRewardRedemptionResult.Success -> {
+                    val progress = result.receipt.loyalty.toBackendLoyaltyProgress()
+                    content.copy(
+                        progress = progress,
+                        availableRewards = result.receipt.loyalty.availableRewards,
+                        claimedRewards = result.receipt.loyalty.claimedRewards,
+                    ).toUiState(
+                        LoyaltyRedemptionUiState.Success(
+                            "Recompensa ${result.receipt.rewardCode} emitida para validar na loja.",
+                        ),
+                    )
+                }
+                is BookingRewardRedemptionResult.Failure -> content.toUiState(
+                    LoyaltyRedemptionUiState.Error(
+                        message = result.error.message,
+                        retryable = result.error.isRetryable(),
+                    ),
+                )
+            }
+
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid == requestedUid) {
+                loadedUid = requestedUid
+                loadedRevision = bookingRevision.value
+                _uiState.value = nextState
+            } else {
+                loadedUid = null
+                loadedRevision = null
+                _uiState.value = LoyaltyUiState.Unauthenticated
+            }
+        }
+    }
 }
 
 private fun BookingHistory.toLoyaltyState(): LoyaltyUiState {
@@ -123,13 +193,19 @@ private fun BookingHistory.toLoyaltyState(): LoyaltyUiState {
         .filter { !it.upcoming && !it.isCancelled() }
         .mapNotNull { it.toLoyaltyHistoryItemOrNull() }
 
-    val progress = earnedItems.size.toLoyaltyProgress()
+    val progress = loyalty?.toBackendLoyaltyProgress() ?: earnedItems.size.toLoyaltyProgress()
     return if (earnedItems.isEmpty()) {
-        LoyaltyUiState.Empty(progress)
+        LoyaltyUiState.Empty(
+            progress = progress,
+            availableRewards = progress.availableRewards,
+            claimedRewards = progress.claimedRewards,
+        )
     } else {
         LoyaltyUiState.Loaded(
             progress = progress,
             history = earnedItems,
+            availableRewards = progress.availableRewards,
+            claimedRewards = progress.claimedRewards,
         )
     }
 }
@@ -170,6 +246,73 @@ private fun String.toDateLabel(): String {
 
 private fun AuthError.isRetryable(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
+}
+
+private data class LoyaltyContentSnapshot(
+    val progress: LoyaltyProgressUi,
+    val availableRewards: Int,
+    val claimedRewards: Int,
+    val history: List<LoyaltyHistoryItemUi>,
+    val redemptionState: LoyaltyRedemptionUiState,
+)
+
+private fun LoyaltyContentSnapshot.toUiState(
+    redemptionState: LoyaltyRedemptionUiState = this.redemptionState,
+): LoyaltyUiState {
+    return if (history.isEmpty()) {
+        LoyaltyUiState.Empty(
+            progress = progress,
+            availableRewards = availableRewards,
+            claimedRewards = claimedRewards,
+            redemptionState = redemptionState,
+        )
+    } else {
+        LoyaltyUiState.Loaded(
+            progress = progress,
+            history = history,
+            availableRewards = availableRewards,
+            claimedRewards = claimedRewards,
+            redemptionState = redemptionState,
+        )
+    }
+}
+
+private fun LoyaltyUiState.contentOrNull(): LoyaltyContentSnapshot? {
+    return when (this) {
+        is LoyaltyUiState.Empty -> LoyaltyContentSnapshot(
+            progress = progress,
+            availableRewards = availableRewards,
+            claimedRewards = claimedRewards,
+            history = emptyList(),
+            redemptionState = redemptionState,
+        )
+        is LoyaltyUiState.Loaded -> LoyaltyContentSnapshot(
+            progress = progress,
+            availableRewards = availableRewards,
+            claimedRewards = claimedRewards,
+            history = history,
+            redemptionState = redemptionState,
+        )
+        LoyaltyUiState.Idle,
+        LoyaltyUiState.Loading,
+        LoyaltyUiState.Unauthenticated,
+        is LoyaltyUiState.Error -> null
+    }
+}
+
+private fun LoyaltyUiState.isRedeeming(): Boolean {
+    return when (this) {
+        is LoyaltyUiState.Empty -> redemptionState is LoyaltyRedemptionUiState.Redeeming
+        is LoyaltyUiState.Loaded -> redemptionState is LoyaltyRedemptionUiState.Redeeming
+        LoyaltyUiState.Idle,
+        LoyaltyUiState.Loading,
+        LoyaltyUiState.Unauthenticated,
+        is LoyaltyUiState.Error -> false
+    }
+}
+
+private fun BookingRewardRedemptionError.isRetryable(): Boolean {
+    return this is BookingRewardRedemptionError.Unavailable || this is BookingRewardRedemptionError.Backend
 }
 
 private val monthNames = listOf(

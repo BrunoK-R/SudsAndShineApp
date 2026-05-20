@@ -14,7 +14,11 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingLoyaltySummary
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.BookingRewardRedemptionError
+import com.sudsmobile.data.booking.BookingRewardRedemptionReceipt
+import com.sudsmobile.data.booking.BookingRewardRedemptionResult
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -147,6 +151,45 @@ class LoyaltyViewModelTest {
     }
 
     @Test
+    fun loadRewardsUsesBackendClaimedRewardSummaryWhenPresent() = runTest {
+        val viewModel = loyaltyViewModel(
+            bookingRepository = FakeLoyaltyBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = (1..10).map {
+                            loyaltyReservation(
+                                id = "stamp-$it",
+                                slotStartIso = "2026-05-${it.twoDigits()}T09:00:00.000Z",
+                            )
+                        },
+                        loyalty = loyaltySummary(
+                            totalWashes = 10,
+                            currentWashes = 0,
+                            remainingWashes = 10,
+                            progress = 0f,
+                            rewardReady = false,
+                            completedRewards = 1,
+                            claimedRewards = 1,
+                            availableRewards = 0,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        val loaded = assertIs<LoyaltyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(10, loaded.progress.totalWashes)
+        assertEquals(0, loaded.progress.currentWashes)
+        assertEquals(10, loaded.progress.remainingWashes)
+        assertEquals(false, loaded.progress.rewardReady)
+        assertEquals(1, loaded.claimedRewards)
+        assertEquals(0, loaded.availableRewards)
+    }
+
+    @Test
     fun loadRewardsMapsNoCompletedReservationsToEmptyProgress() = runTest {
         val viewModel = loyaltyViewModel(
             bookingRepository = FakeLoyaltyBookingRepository(
@@ -220,6 +263,104 @@ class LoyaltyViewModelTest {
         assertIs<LoyaltyUiState.Empty>(viewModel.uiState.value)
         assertEquals(2, repository.historyCalls)
     }
+
+    @Test
+    fun redeemRewardUpdatesLoadedStateWithBackendReceipt() = runTest {
+        val repository = FakeLoyaltyBookingRepository(
+            historyResult = BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = (1..10).map {
+                        loyaltyReservation(
+                            id = "stamp-$it",
+                            slotStartIso = "2026-05-${it.twoDigits()}T09:00:00.000Z",
+                        )
+                    },
+                    loyalty = loyaltySummary(
+                        totalWashes = 10,
+                        currentWashes = 10,
+                        remainingWashes = 0,
+                        progress = 1f,
+                        rewardReady = true,
+                        completedRewards = 1,
+                        claimedRewards = 0,
+                        availableRewards = 1,
+                    ),
+                ),
+            ),
+            redemptionResult = BookingRewardRedemptionResult.Success(
+                BookingRewardRedemptionReceipt(
+                    redemptionId = "reward-0001",
+                    rewardCode = "SS-FREE-UID1-0001",
+                    rewardNumber = 1,
+                    status = "issued",
+                    loyalty = loyaltySummary(
+                        totalWashes = 10,
+                        currentWashes = 0,
+                        remainingWashes = 10,
+                        progress = 0f,
+                        rewardReady = false,
+                        completedRewards = 1,
+                        claimedRewards = 1,
+                        availableRewards = 0,
+                    ),
+                ),
+            ),
+        )
+        val viewModel = loyaltyViewModel(bookingRepository = repository)
+
+        viewModel.loadRewards()
+        runCurrent()
+        viewModel.redeemReward()
+        runCurrent()
+
+        val loaded = assertIs<LoyaltyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, repository.redemptionCalls)
+        assertEquals(0, loaded.progress.currentWashes)
+        assertEquals(0, loaded.availableRewards)
+        assertEquals(1, loaded.claimedRewards)
+        val success = assertIs<LoyaltyRedemptionUiState.Success>(loaded.redemptionState)
+        assertEquals(true, success.message.contains("SS-FREE-UID1-0001"))
+    }
+
+    @Test
+    fun redeemRewardMapsBackendFailureToInlineError() = runTest {
+        val repository = FakeLoyaltyBookingRepository(
+            historyResult = BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = (1..10).map {
+                        loyaltyReservation(
+                            id = "stamp-$it",
+                            slotStartIso = "2026-05-${it.twoDigits()}T09:00:00.000Z",
+                        )
+                    },
+                    loyalty = loyaltySummary(
+                        totalWashes = 10,
+                        currentWashes = 10,
+                        remainingWashes = 0,
+                        progress = 1f,
+                        rewardReady = true,
+                        completedRewards = 1,
+                        claimedRewards = 0,
+                        availableRewards = 1,
+                    ),
+                ),
+            ),
+            redemptionResult = BookingRewardRedemptionResult.Failure(
+                BookingRewardRedemptionError.Unavailable("Recompensas indisponíveis."),
+            ),
+        )
+        val viewModel = loyaltyViewModel(bookingRepository = repository)
+
+        viewModel.loadRewards()
+        runCurrent()
+        viewModel.redeemReward()
+        runCurrent()
+
+        val loaded = assertIs<LoyaltyUiState.Loaded>(viewModel.uiState.value)
+        val error = assertIs<LoyaltyRedemptionUiState.Error>(loaded.redemptionState)
+        assertEquals("Recompensas indisponíveis.", error.message)
+        assertEquals(true, error.retryable)
+    }
 }
 
 private fun loyaltyViewModel(
@@ -236,8 +377,13 @@ private fun loyaltyViewModel(
 
 private class FakeLoyaltyBookingRepository(
     private val historyResult: BookingHistoryResult,
+    private val redemptionResult: BookingRewardRedemptionResult = BookingRewardRedemptionResult.Failure(
+        BookingRewardRedemptionError.NotAvailable("Ainda não tem uma recompensa disponível."),
+    ),
 ) : BookingRepository {
     var historyCalls: Int = 0
+        private set
+    var redemptionCalls: Int = 0
         private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
@@ -251,6 +397,11 @@ private class FakeLoyaltyBookingRepository(
     override suspend fun getMyBookings(): BookingHistoryResult {
         historyCalls += 1
         return historyResult
+    }
+
+    override suspend fun redeemLoyaltyReward(): BookingRewardRedemptionResult {
+        redemptionCalls += 1
+        return redemptionResult
     }
 }
 
@@ -324,6 +475,27 @@ private fun loyaltyReservation(
     vehicleLabel = "BMW 320d",
     priceCents = 2500,
     upcoming = upcoming,
+)
+
+private fun loyaltySummary(
+    totalWashes: Int,
+    currentWashes: Int,
+    remainingWashes: Int,
+    progress: Float,
+    rewardReady: Boolean,
+    completedRewards: Int,
+    claimedRewards: Int,
+    availableRewards: Int,
+): BookingLoyaltySummary = BookingLoyaltySummary(
+    totalWashes = totalWashes,
+    currentWashes = currentWashes,
+    targetWashes = 10,
+    remainingWashes = remainingWashes,
+    progress = progress,
+    rewardReady = rewardReady,
+    completedRewards = completedRewards,
+    claimedRewards = claimedRewards,
+    availableRewards = availableRewards,
 )
 
 private fun Int.twoDigits(): String = toString().padStart(2, '0')

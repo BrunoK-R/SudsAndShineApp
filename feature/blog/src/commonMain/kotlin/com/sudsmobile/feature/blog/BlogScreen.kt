@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Lock
@@ -86,6 +87,7 @@ fun BlogScreen(
             LoyaltyContent(
                 uiState = uiState,
                 onRetry = viewModel::loadRewards,
+                onRedeemReward = viewModel::redeemReward,
                 onRequestSignIn = onRequestSignIn,
                 onBookWash = onBookWash,
             )
@@ -130,6 +132,7 @@ private fun LoyaltyHeader() {
 private fun LoyaltyContent(
     uiState: LoyaltyUiState,
     onRetry: () -> Unit,
+    onRedeemReward: () -> Unit,
     onRequestSignIn: () -> Unit,
     onBookWash: () -> Unit,
 ) {
@@ -165,6 +168,12 @@ private fun LoyaltyContent(
 
         is LoyaltyUiState.Empty -> {
             MainProgressCard(progress = uiState.progress)
+            RewardClaimCard(
+                availableRewards = uiState.availableRewards,
+                claimedRewards = uiState.claimedRewards,
+                redemptionState = uiState.redemptionState,
+                onRedeemReward = onRedeemReward,
+            )
             StampGridCard(progress = uiState.progress)
             HowItWorksCard()
             StampHistoryCard(history = emptyList())
@@ -173,10 +182,158 @@ private fun LoyaltyContent(
 
         is LoyaltyUiState.Loaded -> {
             MainProgressCard(progress = uiState.progress)
+            RewardClaimCard(
+                availableRewards = uiState.availableRewards,
+                claimedRewards = uiState.claimedRewards,
+                redemptionState = uiState.redemptionState,
+                onRedeemReward = onRedeemReward,
+            )
             StampGridCard(progress = uiState.progress)
             HowItWorksCard()
             StampHistoryCard(history = uiState.history)
             BookWashButton(onClick = onBookWash)
+        }
+    }
+}
+
+@Composable
+private fun RewardClaimCard(
+    availableRewards: Int,
+    claimedRewards: Int,
+    redemptionState: LoyaltyRedemptionUiState,
+    onRedeemReward: () -> Unit,
+) {
+    val shouldShow = availableRewards > 0 ||
+        claimedRewards > 0 ||
+        redemptionState !is LoyaltyRedemptionUiState.Idle
+    if (!shouldShow) return
+
+    val title: String
+    val body: String
+    val icon: ImageVector
+    val loading: Boolean
+    val actionLabel: String?
+    val actionEnabled: Boolean
+
+    when (redemptionState) {
+        LoyaltyRedemptionUiState.Idle -> {
+            title = if (availableRewards > 0) {
+                "Lavagem grátis disponível"
+            } else {
+                "Recompensas resgatadas"
+            }
+            body = if (availableRewards > 0) {
+                "Tem ${availableRewards.toRewardLabel()} pronta para emitir e validar na loja."
+            } else {
+                "${claimedRewards.toRewardLabel().replaceFirstChar { it.uppercase() }} já foi emitida neste ciclo."
+            }
+            icon = Icons.Filled.CardGiftcard
+            loading = false
+            actionLabel = if (availableRewards > 0) "Resgatar recompensa" else null
+            actionEnabled = availableRewards > 0
+        }
+        LoyaltyRedemptionUiState.Redeeming -> {
+            title = "A emitir recompensa"
+            body = "Estamos a guardar a sua lavagem grátis na conta."
+            icon = Icons.Filled.CardGiftcard
+            loading = true
+            actionLabel = null
+            actionEnabled = false
+        }
+        is LoyaltyRedemptionUiState.Success -> {
+            title = "Recompensa resgatada"
+            body = redemptionState.message
+            icon = Icons.Filled.CheckCircle
+            loading = false
+            actionLabel = null
+            actionEnabled = false
+        }
+        is LoyaltyRedemptionUiState.Error -> {
+            title = "Não foi possível resgatar"
+            body = redemptionState.message
+            icon = Icons.Filled.Refresh
+            loading = false
+            actionLabel = if (redemptionState.retryable && availableRewards > 0) {
+                "Tentar novamente"
+            } else {
+                null
+            }
+            actionEnabled = actionLabel != null
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f),
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (actionLabel != null) {
+                Button(
+                    onClick = onRedeemReward,
+                    enabled = actionEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                    ),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
         }
     }
 }
@@ -688,5 +845,13 @@ private fun LoyaltyProgressUi.progressMessage(): String {
         "Tem uma recompensa pronta para usar na próxima lavagem."
     } else {
         "Mais $remainingWashes lavagens para ganhar 1 lavagem grátis."
+    }
+}
+
+private fun Int.toRewardLabel(): String {
+    return if (this == 1) {
+        "1 recompensa"
+    } else {
+        "$this recompensas"
     }
 }

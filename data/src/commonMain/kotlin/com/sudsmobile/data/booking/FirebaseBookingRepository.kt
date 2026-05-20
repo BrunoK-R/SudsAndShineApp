@@ -77,6 +77,20 @@ class FirebaseBookingRepository(
             }
     }
 
+    override suspend fun redeemLoyaltyReward(): BookingRewardRedemptionResult {
+        val session = authRepository.currentSession()
+            ?: return BookingRewardRedemptionResult.Failure(
+                BookingRewardRedemptionError.Unauthenticated("Inicie sessão para resgatar recompensas."),
+            )
+
+        return api.redeemMyLoyaltyReward(session.idToken)
+            .also { result ->
+                if (result is BookingRewardRedemptionResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
+    }
+
     private fun validate(request: BookingAvailabilityRequest): BookingAvailabilityError? {
         return when {
             request.anchorDate != null && !isValidDateId(request.anchorDate) ->

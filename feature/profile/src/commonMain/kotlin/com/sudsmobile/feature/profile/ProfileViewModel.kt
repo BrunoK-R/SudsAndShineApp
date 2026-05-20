@@ -11,6 +11,7 @@ import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileChangeNotifier
@@ -313,7 +314,7 @@ private fun buildProfileStatsState(
 
 private fun BookingHistory.toProfileStats(vehicleCount: Int): ProfileStatsUi {
     val completedWashCount = reservations.count { !it.upcoming && !it.isCancelled() }
-    val loyaltyProgress = completedWashCount.toLoyaltyProgress()
+    val loyaltyProgress = this.loyalty?.toBackendLoyaltyProgress() ?: completedWashCount.toLoyaltyProgress()
 
     return ProfileStatsUi(
         washCount = completedWashCount.toString(),
