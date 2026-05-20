@@ -118,6 +118,8 @@ private val bookingVehicleCategories = listOf(
 @Composable
 fun ProductsScreen(
     contentPadding: PaddingValues,
+    initialServiceId: String? = null,
+    initialServiceRequestKey: Long = 0L,
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
@@ -140,6 +142,8 @@ fun ProductsScreen(
 
     ProductsScreenContent(
         contentPadding = contentPadding,
+        initialServiceId = initialServiceId,
+        initialServiceRequestKey = initialServiceRequestKey,
         catalogState = catalogState,
         vehiclesState = vehiclesState,
         vehicleRevision = vehicleRevision,
@@ -167,6 +171,8 @@ fun ProductsScreen(
 @Composable
 private fun ProductsScreenContent(
     contentPadding: PaddingValues,
+    initialServiceId: String?,
+    initialServiceRequestKey: Long,
     catalogState: ProductCatalogUiState,
     vehiclesState: BookingVehiclesUiState,
     vehicleRevision: Long,
@@ -206,6 +212,8 @@ private fun ProductsScreenContent(
     var appliedContactEmail by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedContactPhone by rememberSaveable { mutableStateOf<String?>(null) }
     var reservationCode by rememberSaveable { mutableStateOf<String?>(null) }
+    var appliedInitialServiceRequestKey by rememberSaveable { mutableStateOf<Long?>(null) }
+    var unavailableInitialServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     val currentStep = BookingStep.valueOf(currentStepName)
     val contactFormValid = contactName.isNotBlank() &&
         contactPhone.trim().length >= 6 &&
@@ -297,6 +305,36 @@ private fun ProductsScreenContent(
         }
     }
 
+    LaunchedEffect(initialServiceId, initialServiceRequestKey, catalogState) {
+        val loadedCatalog = catalogState as? ProductCatalogUiState.Loaded ?: return@LaunchedEffect
+        val requestedServiceId = initialServiceId.normalizedInitialServiceId() ?: return@LaunchedEffect
+        if (appliedInitialServiceRequestKey == initialServiceRequestKey) return@LaunchedEffect
+
+        val resolvedServiceId = resolveInitialServiceId(
+            initialServiceId = requestedServiceId,
+            serviceIds = loadedCatalog.services.map { it.id },
+        )
+        if (resolvedServiceId == null) {
+            if (selectedServiceId == requestedServiceId) {
+                selectedServiceId = null
+                selectedDateId = null
+                selectedTime = null
+            }
+            unavailableInitialServiceId = requestedServiceId
+            currentStepName = BookingStep.Service.name
+        } else {
+            appliedInitialServiceRequestKey = initialServiceRequestKey
+            selectedServiceId = resolvedServiceId
+            selectedDateId = null
+            selectedTime = null
+            availabilityAnchorDate = null
+            minimumAvailabilityMonthAnchor = null
+            unavailableInitialServiceId = null
+            currentStepName = BookingStep.Vehicle.name
+            onClearSubmitError()
+        }
+    }
+
     LaunchedEffect(availabilityMonth) {
         val days = availabilityMonth?.days.orEmpty()
         if (days.isEmpty()) return@LaunchedEffect
@@ -360,6 +398,7 @@ private fun ProductsScreenContent(
                         BookingServiceStepContent(
                             catalogState = catalogState,
                             selectedServiceId = selectedServiceId,
+                            unavailableInitialServiceId = unavailableInitialServiceId,
                             onRetryCatalog = onLoadCatalog,
                             onServiceSelected = { service ->
                                 if (selectedServiceId != service.id) {
@@ -368,6 +407,7 @@ private fun ProductsScreenContent(
                                     availabilityAnchorDate = null
                                     minimumAvailabilityMonthAnchor = null
                                 }
+                                unavailableInitialServiceId = null
                                 selectedServiceId = service.id
                                 onClearSubmitError()
                             },
@@ -2180,9 +2220,18 @@ private fun SectionHeader(
 private fun BookingServiceStepContent(
     catalogState: ProductCatalogUiState,
     selectedServiceId: String?,
+    unavailableInitialServiceId: String?,
     onRetryCatalog: () -> Unit,
     onServiceSelected: (ProductServiceUi) -> Unit,
 ) {
+    if (unavailableInitialServiceId != null) {
+        AvailabilityStatusCard(
+            title = "Serviço indisponível",
+            body = "O serviço escolhido já não está disponível no catálogo. Escolha outra opção.",
+            onRetry = onRetryCatalog,
+        )
+    }
+
     when (catalogState) {
         ProductCatalogUiState.Idle,
         ProductCatalogUiState.Loading -> CatalogLoadingCard()
@@ -2713,6 +2762,18 @@ private fun buildBookingDraft(
         notes = notes,
     )
 }
+
+internal fun resolveInitialServiceId(
+    initialServiceId: String?,
+    serviceIds: List<String>,
+): String? {
+    val normalizedServiceId = initialServiceId.normalizedInitialServiceId() ?: return null
+    return serviceIds.firstOrNull { it == normalizedServiceId }
+}
+
+private fun String?.normalizedInitialServiceId(): String? = this
+    ?.trim()
+    ?.takeIf { it.isNotBlank() }
 
 private fun ProductServiceUi.priceForVehicle(vehicleType: String?): String {
     return if (vehicleType == "suv") suvPrice else passengerPrice

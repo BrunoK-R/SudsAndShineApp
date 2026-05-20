@@ -18,6 +18,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +53,26 @@ fun MainNavigation(
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
     val showBottomBar = currentRoute == Routes.Services || mainDestinations.any { it.route == currentRoute }
+    var initialBookingServiceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var initialBookingRequestKey by rememberSaveable { mutableStateOf(0L) }
+
+    fun navigateToBooking(serviceId: String? = null) {
+        initialBookingServiceId = serviceId
+        initialBookingRequestKey += 1
+        navController.navigate(Routes.Products)
+    }
+
+    fun navigateToBookingFromLeaf(serviceId: String? = null) {
+        initialBookingServiceId = serviceId
+        initialBookingRequestKey += 1
+        navController.navigate(Routes.Products) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -57,6 +80,9 @@ fun MainNavigation(
                 SudsBottomBar(
                     currentRoute = currentRoute,
                     onDestinationClick = { route ->
+                        if (route == Routes.Products) {
+                            initialBookingServiceId = null
+                        }
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true
@@ -76,7 +102,8 @@ fun MainNavigation(
             composable(Routes.Home) {
                 HomeScreen(
                     contentPadding = paddingValues,
-                    onBookService = { navController.navigate(Routes.Products) },
+                    onBookService = { navigateToBooking() },
+                    onBookSelectedService = { serviceId -> navigateToBooking(serviceId) },
                     onViewServices = { navController.navigate(Routes.Services) },
                     onViewBookings = { navController.navigate(Routes.Cart) },
                     onOpenRewards = { navController.navigate(Routes.Loyalty) },
@@ -88,12 +115,14 @@ fun MainNavigation(
                 ServicesScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
-                    onBookService = { navController.navigate(Routes.Products) },
+                    onBookService = { serviceId -> navigateToBooking(serviceId) },
                 )
             }
             composable(Routes.Products) {
                 ProductsScreen(
                     contentPadding = paddingValues,
+                    initialServiceId = initialBookingServiceId,
+                    initialServiceRequestKey = initialBookingRequestKey,
                     onBack = { navController.popBackStack() },
                     onViewBooking = {
                         navController.navigate(Routes.Cart) {
@@ -180,13 +209,7 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onBookWash = {
-                        navController.navigate(Routes.Products) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navigateToBookingFromLeaf()
                     },
                 )
             }
@@ -195,13 +218,7 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onRequestSignIn = onRequestSignIn,
                     onBookWash = {
-                        navController.navigate(Routes.Products) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navigateToBookingFromLeaf()
                     },
                 )
             }

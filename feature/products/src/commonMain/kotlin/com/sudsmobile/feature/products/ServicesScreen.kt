@@ -71,7 +71,7 @@ private val serviceExtras = listOf(
 fun ServicesScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
-    onBookService: () -> Unit,
+    onBookService: (String) -> Unit,
 ) {
     val catalogViewModel: ProductsCatalogViewModel = koinViewModel()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
@@ -190,7 +190,7 @@ private fun ServicesHeader(onBack: () -> Unit) {
 private fun ServicesCatalogContent(
     catalogState: ProductCatalogUiState,
     onRetryCatalog: () -> Unit,
-    onBookService: () -> Unit,
+    onBookService: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         when (catalogState) {
@@ -201,7 +201,7 @@ private fun ServicesCatalogContent(
                 catalogState.services.forEach { service ->
                     ServiceCatalogCard(
                         service = service,
-                        onClick = onBookService,
+                        onClick = { onBookService(service.id) },
                     )
                 }
             }

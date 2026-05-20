@@ -63,6 +63,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun HomeScreen(
     contentPadding: PaddingValues,
     onBookService: () -> Unit = {},
+    onBookSelectedService: (String) -> Unit = { onBookService() },
     onViewServices: () -> Unit = {},
     onViewBookings: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
@@ -82,6 +83,7 @@ fun HomeScreen(
         contentPadding = contentPadding,
         uiState = uiState,
         onBookService = onBookService,
+        onBookSelectedService = onBookSelectedService,
         onViewServices = onViewServices,
         onViewBookings = onViewBookings,
         onOpenRewards = onOpenRewards,
@@ -97,6 +99,7 @@ private fun HomeScreenContent(
     contentPadding: PaddingValues,
     uiState: HomeUiState,
     onBookService: () -> Unit,
+    onBookSelectedService: (String) -> Unit,
     onViewServices: () -> Unit,
     onViewBookings: () -> Unit,
     onOpenRewards: () -> Unit,
@@ -140,7 +143,7 @@ private fun HomeScreenContent(
                 services = uiState.featuredServicesOrEmpty(),
                 warningMessage = uiState.warningMessageOrNull(),
                 warningRetryable = uiState.warningRetryableOrFalse(),
-                onBookService = onBookService,
+                onBookSelectedService = onBookSelectedService,
                 onViewServices = onViewServices,
                 onRetry = onRetry,
             )
@@ -608,7 +611,7 @@ private fun FeaturedServices(
     services: List<HomeFeaturedServiceUi>,
     warningMessage: String?,
     warningRetryable: Boolean,
-    onBookService: () -> Unit,
+    onBookSelectedService: (String) -> Unit,
     onViewServices: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -647,7 +650,7 @@ private fun FeaturedServices(
                         price = service.price,
                         duration = service.duration,
                         modifier = Modifier.weight(1f),
-                        onClick = onBookService,
+                        onClick = { onBookSelectedService(service.id) },
                     )
                 }
                 if (services.size == 1) {

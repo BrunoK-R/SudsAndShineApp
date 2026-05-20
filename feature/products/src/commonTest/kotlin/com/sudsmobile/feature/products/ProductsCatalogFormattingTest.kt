@@ -10,4 +10,13 @@ class ProductsCatalogFormattingTest {
         assertEquals("18,50€", 1850.toEuroLabel())
         assertEquals("0,05€", 5.toEuroLabel())
     }
+
+    @Test
+    fun resolvesInitialServiceIdFromLoadedCatalogIds() {
+        val serviceIds = listOf("standard", "premium", "interior")
+
+        assertEquals("premium", resolveInitialServiceId(" premium ", serviceIds))
+        assertEquals(null, resolveInitialServiceId("missing", serviceIds))
+        assertEquals(null, resolveInitialServiceId(" ", serviceIds))
+    }
 }
