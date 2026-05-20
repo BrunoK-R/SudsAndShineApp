@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -62,6 +65,7 @@ private data class ProfileStat(
     val value: String,
     val label: String,
     val highlighted: Boolean = false,
+    val loading: Boolean = false,
 )
 
 private data class ProfileMenuItem(
@@ -77,12 +81,6 @@ private enum class ProfileMenuAction {
     History,
     Contact,
 }
-
-private val profileStats = listOf(
-    ProfileStat(value = "0", label = "Lavagens"),
-    ProfileStat(value = "0", label = "Faltam", highlighted = true),
-    ProfileStat(value = "0", label = "Veículos"),
-)
 
 private val menuItems = listOf(
     ProfileMenuItem(icon = Icons.Filled.Person, label = "Dados Pessoais"),
@@ -121,12 +119,19 @@ fun ProfileScreen(
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val statsState by viewModel.statsState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(sessionState) {
+        viewModel.loadStats()
+    }
 
     ProfileScreenContent(
         contentPadding = contentPadding,
         sessionState = sessionState,
+        statsState = statsState,
         onRequestSignIn = onRequestSignIn,
         onSignOut = viewModel::signOut,
+        onRetryStats = viewModel::loadStats,
         onManageVehicles = onManageVehicles,
         onOpenHistory = onOpenHistory,
         onOpenContact = onOpenContact,
@@ -138,8 +143,10 @@ fun ProfileScreen(
 private fun ProfileScreenContent(
     contentPadding: PaddingValues,
     sessionState: AuthSessionState,
+    statsState: ProfileStatsUiState,
     onRequestSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    onRetryStats: () -> Unit,
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
@@ -155,7 +162,11 @@ private fun ProfileScreenContent(
             .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
     ) {
         if (authenticatedUser != null) {
-            ProfileHeader(user = authenticatedUser)
+            ProfileHeader(
+                user = authenticatedUser,
+                statsState = statsState,
+                onRetryStats = onRetryStats,
+            )
         } else {
             GuestProfileHeader(onRequestSignIn = onRequestSignIn)
         }
@@ -186,7 +197,11 @@ private fun ProfileScreenContent(
 }
 
 @Composable
-private fun ProfileHeader(user: AuthUser) {
+private fun ProfileHeader(
+    user: AuthUser,
+    statsState: ProfileStatsUiState,
+    onRetryStats: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -244,13 +259,18 @@ private fun ProfileHeader(user: AuthUser) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            profileStats.forEach { stat ->
+            statsState.toProfileStats().forEach { stat ->
                 ProfileStatCard(
                     stat = stat,
                     modifier = Modifier.weight(1f),
                 )
             }
         }
+
+        ProfileStatsStatus(
+            statsState = statsState,
+            onRetryStats = onRetryStats,
+        )
     }
 }
 
@@ -400,16 +420,28 @@ private fun ProfileStatCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = stat.value,
-                style = MaterialTheme.typography.headlineSmall,
-                color = if (stat.highlighted) {
-                    MaterialTheme.colorScheme.tertiaryContainer
-                } else {
-                    MaterialTheme.colorScheme.inverseOnSurface
-                },
-                fontWeight = FontWeight.Bold,
-            )
+            if (stat.loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(26.dp),
+                    color = if (stat.highlighted) {
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.inverseOnSurface
+                    },
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text(
+                    text = stat.value,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = if (stat.highlighted) {
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.inverseOnSurface
+                    },
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Text(
                 text = stat.label,
                 style = MaterialTheme.typography.labelSmall,
@@ -417,6 +449,73 @@ private fun ProfileStatCard(
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+@Composable
+private fun ProfileStatsStatus(
+    statsState: ProfileStatsUiState,
+    onRetryStats: () -> Unit,
+) {
+    val error = statsState as? ProfileStatsUiState.Error ?: return
+
+    Spacer(Modifier.height(12.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = error.message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
+            )
+            if (error.retryable) {
+                TextButton(
+                    onClick = onRetryStats,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    ),
+                ) {
+                    Text(
+                        text = "Atualizar",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun ProfileStatsUiState.toProfileStats(): List<ProfileStat> {
+    return when (this) {
+        ProfileStatsUiState.Idle,
+        ProfileStatsUiState.Loading -> listOf(
+            ProfileStat(value = "", label = "Lavagens", loading = true),
+            ProfileStat(value = "", label = "Faltam", highlighted = true, loading = true),
+            ProfileStat(value = "", label = "Veículos", loading = true),
+        )
+
+        is ProfileStatsUiState.Loaded -> listOf(
+            ProfileStat(value = stats.washCount, label = "Lavagens"),
+            ProfileStat(value = stats.loyaltyRemaining, label = "Faltam", highlighted = true),
+            ProfileStat(value = stats.vehicleCount, label = "Veículos"),
+        )
+
+        ProfileStatsUiState.Unauthenticated,
+        is ProfileStatsUiState.Error -> listOf(
+            ProfileStat(value = "0", label = "Lavagens"),
+            ProfileStat(value = "0", label = "Faltam", highlighted = true),
+            ProfileStat(value = "0", label = "Veículos"),
+        )
     }
 }
 
