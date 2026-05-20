@@ -11,18 +11,14 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.shared.loyalty.LoyaltyProgress
+import com.sudsmobile.shared.loyalty.toLoyaltyProgress
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-internal data class LoyaltyProgressUi(
-    val totalWashes: Int,
-    val currentWashes: Int,
-    val targetWashes: Int,
-    val remainingWashes: Int,
-    val progress: Float,
-)
+internal typealias LoyaltyProgressUi = LoyaltyProgress
 
 internal data class LoyaltyHistoryItemUi(
     val id: String,
@@ -122,8 +118,6 @@ internal class LoyaltyViewModel(
     }
 }
 
-private const val LoyaltyRewardInterval = 10
-
 private fun BookingHistory.toLoyaltyState(): LoyaltyUiState {
     val earnedItems = reservations
         .filter { !it.upcoming && !it.isCancelled() }
@@ -162,22 +156,6 @@ private fun BookingHistoryReservation.toLoyaltyHistoryItemOrNull(): LoyaltyHisto
 private fun BookingHistoryReservation.isCancelled(): Boolean {
     val normalized = status.lowercase()
     return normalized in setOf("cancelled", "canceled", "cancelado")
-}
-
-private fun Int.toLoyaltyProgress(): LoyaltyProgressUi {
-    val currentCycle = this % LoyaltyRewardInterval
-    val currentWashes = if (this > 0 && currentCycle == 0) {
-        LoyaltyRewardInterval
-    } else {
-        currentCycle
-    }
-    return LoyaltyProgressUi(
-        totalWashes = this,
-        currentWashes = currentWashes,
-        targetWashes = LoyaltyRewardInterval,
-        remainingWashes = LoyaltyRewardInterval - currentWashes,
-        progress = currentWashes.toFloat() / LoyaltyRewardInterval.toFloat(),
-    )
 }
 
 private fun String.toDateLabel(): String {

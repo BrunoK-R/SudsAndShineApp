@@ -137,7 +137,36 @@ class HomeViewModelTest {
         assertEquals("BMW 320d", loaded.nextBooking?.vehicle)
         assertEquals(3, loaded.loyalty.completedWashes)
         assertEquals(7, loaded.loyalty.remainingWashes)
+        assertEquals(false, loaded.loyalty.rewardReady)
         assertEquals("Lavagem Premium", loaded.featuredServices.first().name)
+    }
+
+    @Test
+    fun authenticatedHomeMarksLoyaltyRewardReadyOnTenthCompletedWash() = runTest {
+        val viewModel = homeViewModel(
+            bookingRepository = FakeHomeBookingRepository(
+                historyResult = BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = (1..10).map {
+                            homeReservation(
+                                id = "completed-$it",
+                                slotStartIso = "2026-05-${it.toString().padStart(2, '0')}T09:00:00.000Z",
+                                upcoming = false,
+                            )
+                        },
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val loaded = assertIs<HomeUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(10, loaded.loyalty.completedWashes)
+        assertEquals(0, loaded.loyalty.remainingWashes)
+        assertEquals(1.0f, loaded.loyalty.progress)
+        assertEquals(true, loaded.loyalty.rewardReady)
     }
 
     @Test
@@ -316,7 +345,7 @@ private fun homeReservation(
     id: String,
     slotStartIso: String,
     upcoming: Boolean,
-    priceCents: Int?,
+    priceCents: Int? = 3200,
     vehicleLabel: String? = null,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,

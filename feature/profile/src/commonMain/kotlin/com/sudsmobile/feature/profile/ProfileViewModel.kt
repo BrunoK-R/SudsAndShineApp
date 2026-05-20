@@ -25,6 +25,7 @@ import com.sudsmobile.data.vehicle.UserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicleError
 import com.sudsmobile.data.vehicle.UserVehicleListResult
 import com.sudsmobile.data.vehicle.UserVehicleRepository
+import com.sudsmobile.shared.loyalty.toLoyaltyProgress
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -289,8 +290,6 @@ internal class ProfileViewModel(
     }
 }
 
-private const val LoyaltyRewardInterval = 5
-
 private fun buildProfileStatsState(
     historyResult: BookingHistoryResult,
     vehiclesResult: UserVehicleListResult,
@@ -314,11 +313,11 @@ private fun buildProfileStatsState(
 
 private fun BookingHistory.toProfileStats(vehicleCount: Int): ProfileStatsUi {
     val completedWashCount = reservations.count { !it.upcoming && !it.isCancelled() }
-    val remainingToReward = LoyaltyRewardInterval - (completedWashCount % LoyaltyRewardInterval)
+    val loyaltyProgress = completedWashCount.toLoyaltyProgress()
 
     return ProfileStatsUi(
         washCount = completedWashCount.toString(),
-        loyaltyRemaining = remainingToReward.toString(),
+        loyaltyRemaining = loyaltyProgress.remainingWashes.toString(),
         vehicleCount = vehicleCount.toString(),
     )
 }

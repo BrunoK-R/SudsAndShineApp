@@ -142,6 +142,8 @@ class LoyaltyViewModelTest {
         assertEquals(10, loaded.progress.currentWashes)
         assertEquals(0, loaded.progress.remainingWashes)
         assertEquals(1.0f, loaded.progress.progress)
+        assertEquals(true, loaded.progress.rewardReady)
+        assertEquals(1, loaded.progress.completedRewards)
     }
 
     @Test

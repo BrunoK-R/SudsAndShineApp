@@ -684,7 +684,7 @@ private fun SectionTitle(
 }
 
 private fun LoyaltyProgressUi.progressMessage(): String {
-    return if (remainingWashes == 0) {
+    return if (rewardReady) {
         "Tem uma recompensa pronta para usar na próxima lavagem."
     } else {
         "Mais $remainingWashes lavagens para ganhar 1 lavagem grátis."

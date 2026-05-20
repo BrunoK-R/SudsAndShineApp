@@ -156,10 +156,39 @@ class ProfileViewModelTest {
 
         val loaded = assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
         assertEquals("1", loaded.stats.washCount)
-        assertEquals("4", loaded.stats.loyaltyRemaining)
+        assertEquals("9", loaded.stats.loyaltyRemaining)
         assertEquals("0", loaded.stats.vehicleCount)
         assertEquals("Veículos indisponíveis.", loaded.warningMessage)
         assertEquals(true, loaded.warningRetryable)
+    }
+
+    @Test
+    fun loadStatsShowsNoRemainingWashesWhenRewardIsReady() = runTest {
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = (1..10).map {
+                            profileStatsHistoryReservation("completed-$it", upcoming = false)
+                        },
+                    ),
+                ),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(
+                UserVehicleListResult.Success(emptyList()),
+            ),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
+        )
+
+        viewModel.loadStats()
+        runCurrent()
+
+        val loaded = assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
+        assertEquals("10", loaded.stats.washCount)
+        assertEquals("0", loaded.stats.loyaltyRemaining)
     }
 
     @Test

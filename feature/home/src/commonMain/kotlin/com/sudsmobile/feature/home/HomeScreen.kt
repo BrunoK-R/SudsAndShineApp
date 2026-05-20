@@ -532,9 +532,17 @@ private fun LoyaltyCard(
     LoyaltyCard(
         title = "Programa de Fidelização",
         progressLabel = "${loyalty.completedWashes} de ${loyalty.targetWashes} lavagens",
-        remainingLabel = "${loyalty.remainingWashes} restantes",
+        remainingLabel = if (loyalty.rewardReady) {
+            "Oferta pronta"
+        } else {
+            "${loyalty.remainingWashes} restantes"
+        },
         progress = loyalty.progress,
-        body = "Mais ${loyalty.remainingWashes} lavagens para ganhar 1 lavagem grátis!",
+        body = if (loyalty.rewardReady) {
+            "Tem uma lavagem grátis disponível para a próxima visita."
+        } else {
+            "Mais ${loyalty.remainingWashes} lavagens para ganhar 1 lavagem grátis!"
+        },
         onClick = onOpenRewards,
     )
 }

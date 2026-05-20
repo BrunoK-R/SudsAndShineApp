@@ -23,6 +23,8 @@ import com.sudsmobile.data.catalog.ServiceCatalogError
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
 import com.sudsmobile.data.catalog.ServiceCatalogResult
 import com.sudsmobile.data.catalog.ServiceCatalogService
+import com.sudsmobile.shared.loyalty.LoyaltyProgress
+import com.sudsmobile.shared.loyalty.toLoyaltyProgress
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,12 +49,7 @@ internal data class HomeBookingUi(
     val icon: ImageVector,
 )
 
-internal data class HomeLoyaltyUi(
-    val completedWashes: Int,
-    val targetWashes: Int,
-    val remainingWashes: Int,
-    val progress: Float,
-)
+internal typealias HomeLoyaltyUi = LoyaltyProgress
 
 internal data class HomeFeaturedServiceUi(
     val id: String,
@@ -443,20 +440,7 @@ private fun BookingHistoryReservation.isCancelled(): Boolean {
     return normalized in setOf("cancelled", "canceled", "cancelado")
 }
 
-private fun Int.toLoyaltyUi(): HomeLoyaltyUi {
-    val currentCycle = this % LoyaltyRewardInterval
-    val remaining = if (currentCycle == 0 && this > 0) {
-        LoyaltyRewardInterval
-    } else {
-        LoyaltyRewardInterval - currentCycle
-    }
-    return HomeLoyaltyUi(
-        completedWashes = currentCycle,
-        targetWashes = LoyaltyRewardInterval,
-        remainingWashes = remaining,
-        progress = currentCycle.toFloat() / LoyaltyRewardInterval.toFloat(),
-    )
-}
+private fun Int.toLoyaltyUi(): HomeLoyaltyUi = toLoyaltyProgress()
 
 private fun String.toVehicleLabel(): String = when (lowercase()) {
     "suv" -> "SUV"
@@ -512,7 +496,6 @@ private val LoadingIdentity = HomeIdentityUi(
 )
 
 private const val GuestSessionKey = "guest"
-private const val LoyaltyRewardInterval = 10
 private val monthNames = listOf(
     "janeiro",
     "fevereiro",
