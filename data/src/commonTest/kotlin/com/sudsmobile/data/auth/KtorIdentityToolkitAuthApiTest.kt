@@ -6,6 +6,7 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
@@ -85,13 +86,51 @@ class KtorIdentityToolkitAuthApiTest {
 
         assertEquals(AuthActionResult.Success, result)
     }
+
+    @Test
+    fun refreshesSessionWithSecureTokenEndpoint() = runTest {
+        var requestUrl = ""
+        var requestMethod: HttpMethod? = null
+        val api = KtorIdentityToolkitAuthApi(
+            httpClient = mockClient(
+                responseJson = """
+                {
+                  "user_id": "user-1",
+                  "id_token": "new-id-token",
+                  "refresh_token": "new-refresh-token",
+                  "expires_in": "3600"
+                }
+                """.trimIndent(),
+                onRequest = {
+                    requestUrl = it.url.toString()
+                    requestMethod = it.method
+                },
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.refreshSession("old-refresh-token")
+
+        val success = assertIs<AuthResult.Success>(result)
+        assertEquals(HttpMethod.Post, requestMethod)
+        assertEquals(
+            "http://127.0.0.1:9099/securetoken.googleapis.com/v1/token?key=test-api-key",
+            requestUrl,
+        )
+        assertEquals("user-1", success.session.user.uid)
+        assertEquals("new-id-token", success.session.idToken)
+        assertEquals("new-refresh-token", success.session.refreshToken)
+        assertEquals(3600L, success.session.expiresInSeconds)
+    }
 }
 
 private fun mockClient(
     responseJson: String,
     status: HttpStatusCode = HttpStatusCode.OK,
+    onRequest: (io.ktor.client.request.HttpRequestData) -> Unit = {},
 ): HttpClient {
     val engine = MockEngine {
+        onRequest(it)
         respond(
             content = responseJson,
             status = status,

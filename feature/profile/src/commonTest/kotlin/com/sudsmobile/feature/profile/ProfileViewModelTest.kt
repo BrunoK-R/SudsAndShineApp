@@ -281,6 +281,10 @@ private class ProfileStatsFakeAuthRepository(
 
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
 
+    override suspend fun currentSession(): AuthSession? {
+        return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
         error("Not used")
     }

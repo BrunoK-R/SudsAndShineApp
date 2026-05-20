@@ -1,21 +1,47 @@
 package com.sudsmobile.data.auth
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class FirebaseAuthRepository(
     private val api: AuthApi,
+    private val sessionStore: AuthSessionStore = NoopAuthSessionStore,
+    private val nowEpochSeconds: () -> Long = ::currentEpochSeconds,
+    restoreOnStart: Boolean = true,
+    private val repositoryScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : AuthRepository {
-    private val _sessionState = MutableStateFlow<AuthSessionState>(AuthSessionState.Unauthenticated)
+    private val _sessionState = MutableStateFlow<AuthSessionState>(
+        if (restoreOnStart) AuthSessionState.Restoring else AuthSessionState.Unauthenticated,
+    )
     override val sessionState: StateFlow<AuthSessionState> = _sessionState.asStateFlow()
+
+    init {
+        if (restoreOnStart) {
+            repositoryScope.launch {
+                restorePersistedSession()
+            }
+        }
+    }
+
+    override suspend fun currentSession(): AuthSession? {
+        val authenticated = _sessionState.value as? AuthSessionState.Authenticated ?: return null
+        val session = authenticated.session
+        if (!session.needsRefresh(nowEpochSeconds())) return session
+
+        return refreshSession(session)
+    }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
         val validationError = validateCredentials(email, password)
         if (validationError != null) return AuthResult.Failure(validationError)
 
         val result = api.signIn(email = email.trim().lowercase(), password = password)
-        return result.also(::updateSessionFromResult)
+        return result.applyAuthenticatedSession()
     }
 
     override suspend fun register(
@@ -42,7 +68,7 @@ class FirebaseAuthRepository(
             displayName = sanitizedDisplayName,
             phoneNumber = sanitizedPhoneNumber,
         )
-        return finalResult.also(::updateSessionFromResult)
+        return finalResult.applyAuthenticatedSession()
     }
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
@@ -54,13 +80,96 @@ class FirebaseAuthRepository(
     }
 
     override fun signOut() {
+        clearStoredSession()
         _sessionState.value = AuthSessionState.Unauthenticated
     }
 
-    private fun updateSessionFromResult(result: AuthResult) {
-        if (result is AuthResult.Success) {
-            _sessionState.value = AuthSessionState.Authenticated(result.session)
+    private suspend fun restorePersistedSession() {
+        val persistedSession = readStoredSession()
+        if (persistedSession == null) {
+            completeRestore(AuthSessionState.Unauthenticated)
+            return
         }
+
+        refreshSession(persistedSession, onlyIfRestoring = true)
+    }
+
+    private fun completeRestore(state: AuthSessionState) {
+        if (_sessionState.value == AuthSessionState.Restoring) {
+            _sessionState.value = state
+        }
+    }
+
+    private suspend fun refreshSession(
+        session: AuthSession,
+        onlyIfRestoring: Boolean = false,
+    ): AuthSession? {
+        if (onlyIfRestoring && _sessionState.value != AuthSessionState.Restoring) {
+            return (_sessionState.value as? AuthSessionState.Authenticated)?.session
+        }
+
+        if (session.refreshToken.isBlank()) {
+            clearStoredSession()
+            completeRestore(AuthSessionState.Unauthenticated)
+            return null
+        }
+
+        return when (val result = api.refreshSession(session.refreshToken)) {
+            is AuthResult.Success -> {
+                if (onlyIfRestoring && _sessionState.value != AuthSessionState.Restoring) {
+                    return (_sessionState.value as? AuthSessionState.Authenticated)?.session
+                }
+                val refreshedSession = session.mergeRefresh(result.session, nowEpochSeconds())
+                writeStoredSession(refreshedSession)
+                _sessionState.value = AuthSessionState.Authenticated(refreshedSession)
+                refreshedSession
+            }
+            is AuthResult.Failure -> {
+                if (onlyIfRestoring && _sessionState.value != AuthSessionState.Restoring) {
+                    return (_sessionState.value as? AuthSessionState.Authenticated)?.session
+                }
+                when (result.error) {
+                    is AuthError.InvalidCredentials,
+                    is AuthError.Permission,
+                    is AuthError.Validation -> {
+                        clearStoredSession()
+                        _sessionState.value = AuthSessionState.Unauthenticated
+                    }
+                    else -> {
+                        if (onlyIfRestoring) {
+                            completeRestore(AuthSessionState.RestoreFailed(result.error))
+                        } else {
+                            return session
+                        }
+                    }
+                }
+                null
+            }
+        }
+    }
+
+    private fun AuthResult.applyAuthenticatedSession(): AuthResult {
+        return when (this) {
+            is AuthResult.Failure -> this
+            is AuthResult.Success -> {
+                val issuedSession = session.copy(issuedAtEpochSeconds = nowEpochSeconds())
+                writeStoredSession(issuedSession)
+                _sessionState.value = AuthSessionState.Authenticated(issuedSession)
+                copy(session = issuedSession)
+            }
+        }
+    }
+
+    private fun readStoredSession(): AuthSession? = runCatching {
+        sessionStore.readSession()
+    }.getOrNull()
+
+    private fun writeStoredSession(session: AuthSession) {
+        runCatching { sessionStore.writeSession(session) }
+    }
+
+    private fun clearStoredSession() {
+        runCatching { sessionStore.clearSession() }
     }
 
     private fun validateRegistration(
@@ -82,6 +191,28 @@ class FirebaseAuthRepository(
         }
     }
 }
+
+private fun AuthSession.needsRefresh(nowEpochSeconds: Long): Boolean {
+    val expiresAt = issuedAtEpochSeconds + expiresInSeconds
+    return issuedAtEpochSeconds <= 0L ||
+        expiresInSeconds <= 0L ||
+        nowEpochSeconds >= expiresAt - RefreshSkewSeconds
+}
+
+private fun AuthSession.mergeRefresh(
+    refreshedSession: AuthSession,
+    issuedAtEpochSeconds: Long,
+): AuthSession = copy(
+    user = user.copy(
+        uid = refreshedSession.user.uid.ifBlank { user.uid },
+    ),
+    idToken = refreshedSession.idToken,
+    refreshToken = refreshedSession.refreshToken.ifBlank { refreshToken },
+    expiresInSeconds = refreshedSession.expiresInSeconds,
+    issuedAtEpochSeconds = issuedAtEpochSeconds,
+)
+
+private const val RefreshSkewSeconds = 300L
 
 private fun AuthResult.withLocalProfile(
     displayName: String,

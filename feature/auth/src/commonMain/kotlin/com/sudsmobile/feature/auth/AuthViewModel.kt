@@ -6,6 +6,7 @@ import com.sudsmobile.data.auth.AuthActionResult
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
+import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +26,35 @@ class AuthViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            authRepository.sessionState.collect { sessionState ->
+                when (sessionState) {
+                    AuthSessionState.Restoring -> {
+                        if (_uiState.value == AuthUiState.Idle) {
+                            _uiState.value = AuthUiState.Loading
+                        }
+                    }
+                    is AuthSessionState.Authenticated -> {
+                        _uiState.value = AuthUiState.Authenticated(sessionState.session.user)
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        if (_uiState.value == AuthUiState.Loading || _uiState.value == AuthUiState.Idle) {
+                            _uiState.value = sessionState.error.toUiState()
+                        }
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        if (_uiState.value == AuthUiState.Loading ||
+                            _uiState.value is AuthUiState.Authenticated
+                        ) {
+                            _uiState.value = AuthUiState.Idle
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     fun signIn(email: String, password: String) {
         if (_uiState.value is AuthUiState.Loading) return

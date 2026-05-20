@@ -7,6 +7,7 @@ data class AuthSession(
     val idToken: String,
     val refreshToken: String,
     val expiresInSeconds: Long,
+    val issuedAtEpochSeconds: Long = 0L,
 )
 
 data class AuthUser(
@@ -20,7 +21,9 @@ data class AuthUser(
 }
 
 sealed interface AuthSessionState {
+    data object Restoring : AuthSessionState
     data object Unauthenticated : AuthSessionState
+    data class RestoreFailed(val error: AuthError) : AuthSessionState
     data class Authenticated(val session: AuthSession) : AuthSessionState
 }
 
@@ -48,6 +51,7 @@ sealed interface AuthError {
 interface AuthRepository {
     val sessionState: StateFlow<AuthSessionState>
 
+    suspend fun currentSession(): AuthSession?
     suspend fun signIn(email: String, password: String): AuthResult
     suspend fun register(
         displayName: String,

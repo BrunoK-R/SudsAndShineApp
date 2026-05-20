@@ -1,7 +1,6 @@
 package com.sudsmobile.data.vehicle
 
 import com.sudsmobile.data.auth.AuthRepository
-import com.sudsmobile.data.auth.AuthSessionState
 
 class FirebaseUserVehicleRepository(
     private val api: VehicleFunctionsApi,
@@ -43,10 +42,7 @@ class FirebaseUserVehicleRepository(
         return api.deleteVehicle(normalizedVehicleId, idToken)
     }
 
-    private fun currentIdTokenOrNull(): String? {
-        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
-        return session?.session?.idToken
-    }
+    private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken
 
     private fun validate(
         request: UserVehicleSaveRequest,

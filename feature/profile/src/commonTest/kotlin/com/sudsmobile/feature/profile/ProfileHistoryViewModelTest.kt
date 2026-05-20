@@ -202,6 +202,10 @@ private class FakeProfileHistoryAuthRepository(
     )
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
 
+    override suspend fun currentSession(): AuthSession? {
+        return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
+    }
+
     fun authenticate(uid: String = "uid-1") {
         mutableSessionState.value = authenticatedSession(uid)
     }

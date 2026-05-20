@@ -3,8 +3,12 @@ package com.sudsmobile.data.auth
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FirebaseAuthRepositoryTest {
     @Test
     fun rejectsInvalidLoginBeforeCallingApi() = runTest {
@@ -42,7 +46,12 @@ class FirebaseAuthRepositoryTest {
 
     @Test
     fun signOutClearsAuthenticatedSession() = runTest {
-        val repository = FirebaseAuthRepository(RecordingAuthApi())
+        val store = RecordingAuthSessionStore()
+        val repository = FirebaseAuthRepository(
+            api = RecordingAuthApi(),
+            sessionStore = store,
+            restoreOnStart = false,
+        )
 
         repository.signIn(email = "bruno@example.com", password = "secret123")
         assertIs<AuthSessionState.Authenticated>(repository.sessionState.value)
@@ -50,6 +59,70 @@ class FirebaseAuthRepositoryTest {
         repository.signOut()
 
         assertEquals(AuthSessionState.Unauthenticated, repository.sessionState.value)
+        assertNull(store.savedSession)
+    }
+
+    @Test
+    fun signInPersistsIssuedSession() = runTest {
+        val store = RecordingAuthSessionStore()
+        val repository = FirebaseAuthRepository(
+            api = RecordingAuthApi(),
+            sessionStore = store,
+            nowEpochSeconds = { 1_000L },
+            restoreOnStart = false,
+        )
+
+        val result = repository.signIn(email = "bruno@example.com", password = "secret123")
+
+        val success = assertIs<AuthResult.Success>(result)
+        assertEquals(1_000L, success.session.issuedAtEpochSeconds)
+        assertEquals("id-token", store.savedSession?.idToken)
+        assertEquals(1_000L, store.savedSession?.issuedAtEpochSeconds)
+    }
+
+    @Test
+    fun restoresPersistedSessionWithRefreshedToken() = runTest {
+        val store = RecordingAuthSessionStore(savedSession = testSession(
+            email = "bruno@example.com",
+            displayName = "Bruno Ribeiro",
+        ))
+        val api = RecordingAuthApi()
+        val repository = FirebaseAuthRepository(
+            api = api,
+            sessionStore = store,
+            nowEpochSeconds = { 2_000L },
+            repositoryScope = this,
+        )
+
+        advanceUntilIdle()
+
+        val sessionState = assertIs<AuthSessionState.Authenticated>(repository.sessionState.value)
+        assertEquals("refresh-token", api.lastRefreshToken)
+        assertEquals("refreshed-id-token", sessionState.session.idToken)
+        assertEquals("Bruno Ribeiro", sessionState.session.user.displayName)
+        assertEquals(2_000L, sessionState.session.issuedAtEpochSeconds)
+        assertEquals("refreshed-id-token", store.savedSession?.idToken)
+    }
+
+    @Test
+    fun currentSessionRefreshesExpiredToken() = runTest {
+        var now = 1_000L
+        val store = RecordingAuthSessionStore()
+        val api = RecordingAuthApi()
+        val repository = FirebaseAuthRepository(
+            api = api,
+            sessionStore = store,
+            nowEpochSeconds = { now },
+            restoreOnStart = false,
+        )
+        repository.signIn(email = "bruno@example.com", password = "secret123")
+        now = 4_600L
+
+        val session = repository.currentSession()
+
+        assertEquals("refresh-token", api.lastRefreshToken)
+        assertEquals("refreshed-id-token", session?.idToken)
+        assertEquals("refreshed-id-token", store.savedSession?.idToken)
     }
 }
 
@@ -59,6 +132,8 @@ private class RecordingAuthApi : AuthApi {
     var lastSignUpEmail: String? = null
         private set
     var lastDisplayName: String? = null
+        private set
+    var lastRefreshToken: String? = null
         private set
 
     override suspend fun signIn(email: String, password: String): AuthResult {
@@ -81,8 +156,39 @@ private class RecordingAuthApi : AuthApi {
         )
     }
 
+    override suspend fun refreshSession(refreshToken: String): AuthResult {
+        lastRefreshToken = refreshToken
+        return AuthResult.Success(
+            AuthSession(
+                user = AuthUser(
+                    uid = "user-1",
+                    email = "",
+                    displayName = "",
+                    phoneNumber = "",
+                ),
+                idToken = "refreshed-id-token",
+                refreshToken = "refreshed-refresh-token",
+                expiresInSeconds = 3600,
+            ),
+        )
+    }
+
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
         return AuthActionResult.Success
+    }
+}
+
+private class RecordingAuthSessionStore(
+    var savedSession: AuthSession? = null,
+) : AuthSessionStore {
+    override fun readSession(): AuthSession? = savedSession
+
+    override fun writeSession(session: AuthSession) {
+        savedSession = session
+    }
+
+    override fun clearSession() {
+        savedSession = null
     }
 }
 

@@ -12,6 +12,13 @@ data class FirebaseAuthConfig(
             "https://identitytoolkit.googleapis.com/v1"
         }
 
+    val secureTokenBaseUrl: String
+        get() = if (useEmulator) {
+            "http://$emulatorHost:9099/securetoken.googleapis.com/v1"
+        } else {
+            "https://securetoken.googleapis.com/v1"
+        }
+
     companion object {
         private const val PublicWebApiKey = "AIzaSyDULIWnAxdusCJn_NYyfmfqooelIrC4B6I"
 

@@ -153,6 +153,7 @@ private fun ProfileScreenContent(
     onOpenRewards: () -> Unit = {},
 ) {
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
+    val isRestoringSession = sessionState == AuthSessionState.Restoring
 
     Column(
         modifier = Modifier
@@ -167,6 +168,8 @@ private fun ProfileScreenContent(
                 statsState = statsState,
                 onRetryStats = onRetryStats,
             )
+        } else if (isRestoringSession) {
+            RestoringProfileHeader()
         } else {
             GuestProfileHeader(onRequestSignIn = onRequestSignIn)
         }
@@ -188,6 +191,8 @@ private fun ProfileScreenContent(
                 )
                 PreferencesCard()
                 LogoutButton(onClick = onSignOut)
+            } else if (isRestoringSession) {
+                RestoringSessionCard()
             } else {
                 GuestProfileCard(onRequestSignIn = onRequestSignIn)
             }
@@ -275,6 +280,61 @@ private fun ProfileHeader(
 }
 
 @Composable
+private fun RestoringProfileHeader() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.inverseSurface,
+                        MaterialTheme.colorScheme.secondary,
+                    ),
+                ),
+            )
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 28.dp, bottom = 36.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(72.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
+                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        strokeWidth = 3.dp,
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "A validar sessão",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Estamos a recuperar a sua conta neste dispositivo.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.66f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun GuestProfileHeader(onRequestSignIn: () -> Unit) {
     Column(
         modifier = Modifier
@@ -343,6 +403,41 @@ private fun GuestProfileHeader(onRequestSignIn: () -> Unit) {
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
             )
+        }
+    }
+}
+
+@Composable
+private fun RestoringSessionCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = MaterialTheme.colorScheme.tertiary,
+                strokeWidth = 2.dp,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "A carregar dados da conta",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Os veículos e histórico aparecem assim que a sessão for validada.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

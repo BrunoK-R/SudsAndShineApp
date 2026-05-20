@@ -7,6 +7,7 @@ import com.sudsmobile.data.booking.FirebaseFunctionsConfig
 import com.sudsmobile.data.booking.KtorBookingFunctionsApi
 import com.sudsmobile.data.auth.AuthApi
 import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSessionStore
 import com.sudsmobile.data.auth.FirebaseAuthConfig
 import com.sudsmobile.data.auth.FirebaseAuthRepository
 import com.sudsmobile.data.auth.KtorIdentityToolkitAuthApi
@@ -37,7 +38,7 @@ val dataModule = module {
         )
     }
     single<AuthApi> { KtorIdentityToolkitAuthApi(get(), get()) }
-    single<AuthRepository> { FirebaseAuthRepository(get()) }
+    single<AuthRepository> { FirebaseAuthRepository(get(), get<AuthSessionStore>()) }
     single<BookingFunctionsApi> { KtorBookingFunctionsApi(get(), get()) }
     single<BookingRepository> { FirebaseBookingRepository(get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }

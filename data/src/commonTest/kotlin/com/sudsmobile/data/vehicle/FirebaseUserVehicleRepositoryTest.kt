@@ -155,6 +155,10 @@ private class FakeAuthRepository(
         },
     )
 
+    override suspend fun currentSession(): AuthSession? {
+        return (sessionState.value as? AuthSessionState.Authenticated)?.session
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
         error("Not used")
     }

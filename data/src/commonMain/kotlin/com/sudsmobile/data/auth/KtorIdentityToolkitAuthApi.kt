@@ -8,7 +8,10 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.content.TextContent
+import io.ktor.http.formUrlEncode
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 class KtorIdentityToolkitAuthApi(
@@ -47,6 +50,41 @@ class KtorIdentityToolkitAuthApi(
                     displayName = displayName,
                     returnSecureToken = true,
                 ),
+            )
+        }
+    }
+
+    override suspend fun refreshSession(refreshToken: String): AuthResult {
+        return try {
+            val response = httpClient.post("${config.secureTokenBaseUrl}/token") {
+                header(HttpHeaders.ContentType, ContentType.Application.FormUrlEncoded.toString())
+                parameter("key", config.apiKey)
+                setBody(
+                    TextContent(
+                        text = listOf(
+                            "grant_type" to "refresh_token",
+                            "refresh_token" to refreshToken,
+                        ).formUrlEncode(),
+                        contentType = ContentType.Application.FormUrlEncoded,
+                    ),
+                )
+            }
+            val body = response.body<SecureTokenResponse>()
+            val error = body.error
+            when {
+                error != null -> AuthResult.Failure(error.toAuthError())
+                body.userId != null && body.idToken != null && body.refreshToken != null -> {
+                    AuthResult.Success(body.toSession())
+                }
+                else -> AuthResult.Failure(
+                    AuthError.Backend("A resposta do Firebase Auth veio sem sessão renovada."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AuthResult.Failure(
+                AuthError.Unavailable("Não foi possível renovar a sessão. Tente novamente."),
             )
         }
     }
@@ -154,6 +192,31 @@ private data class IdentityToolkitResponse(
 }
 
 @Serializable
+private data class SecureTokenResponse(
+    @SerialName("user_id")
+    val userId: String? = null,
+    @SerialName("id_token")
+    val idToken: String? = null,
+    @SerialName("refresh_token")
+    val refreshToken: String? = null,
+    @SerialName("expires_in")
+    val expiresIn: String? = null,
+    val error: IdentityToolkitError? = null,
+) {
+    fun toSession(): AuthSession = AuthSession(
+        user = AuthUser(
+            uid = userId.orEmpty(),
+            email = "",
+            displayName = "",
+            phoneNumber = "",
+        ),
+        idToken = idToken.orEmpty(),
+        refreshToken = refreshToken.orEmpty(),
+        expiresInSeconds = expiresIn?.toLongOrNull() ?: 0L,
+    )
+}
+
+@Serializable
 private data class IdentityToolkitError(
     val code: Int? = null,
     val message: String? = null,
@@ -165,6 +228,10 @@ private data class IdentityToolkitError(
             "EMAIL_NOT_FOUND",
             "INVALID_LOGIN_CREDENTIALS",
             "INVALID_PASSWORD" -> AuthError.InvalidCredentials("Email ou palavra-passe inválidos.")
+
+            "TOKEN_EXPIRED",
+            "USER_NOT_FOUND",
+            "INVALID_REFRESH_TOKEN" -> AuthError.InvalidCredentials("A sessão expirou. Inicie sessão novamente.")
 
             "USER_DISABLED" -> AuthError.Permission("Esta conta está desativada.")
             "EMAIL_EXISTS" -> AuthError.EmailInUse("Já existe uma conta com este email.")
