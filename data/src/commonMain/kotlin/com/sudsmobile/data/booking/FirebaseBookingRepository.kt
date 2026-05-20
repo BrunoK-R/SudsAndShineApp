@@ -51,6 +51,11 @@ class FirebaseBookingRepository(
             )
 
         return api.submitReservationReview(request.normalized(), session.idToken)
+            .also { result ->
+                if (result is BookingReviewResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
     }
 
     private fun validate(request: BookingAvailabilityRequest): BookingAvailabilityError? {

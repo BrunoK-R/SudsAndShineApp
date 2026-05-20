@@ -135,6 +135,22 @@ class FirebaseBookingRepositoryTest {
         assertEquals("Ficou impecável.", api.lastReviewRequest?.comment)
         assertEquals("id-token-1", api.lastReviewIdToken)
     }
+
+    @Test
+    fun successfulReviewNotifiesBookingHistoryObservers() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val changeNotifier = MutableBookingChangeNotifier()
+        val repository = FirebaseBookingRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+            bookingChangeNotifier = changeNotifier,
+        )
+
+        val result = repository.submitReview(validReviewRequest())
+
+        assertIs<BookingReviewResult.Success>(result)
+        assertEquals(1L, changeNotifier.revision.value)
+    }
 }
 
 private class RecordingBookingFunctionsApi : BookingFunctionsApi {

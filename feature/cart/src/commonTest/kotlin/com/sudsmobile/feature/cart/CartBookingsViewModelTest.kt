@@ -103,6 +103,37 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun loadBookingsCarriesReviewedStateForCompletedReservations() = runTest {
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "completed-1",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                slotEndIso = "2026-05-18T10:45:00.000Z",
+                                upcoming = false,
+                                priceCents = 3200,
+                                reviewed = true,
+                                reviewRating = 5,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadBookings()
+        runCurrent()
+
+        val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(true, loaded.completed.single().reviewed)
+        assertEquals(5, loaded.completed.single().reviewRating)
+    }
+
+    @Test
     fun refreshForSessionReloadsAfterSignInAndClearsAfterSignOut() = runTest {
         val authRepository = FakeCartAuthRepository(authenticated = false)
         val repository = FakeBookingRepository(
@@ -260,6 +291,8 @@ private fun historyReservation(
     upcoming: Boolean,
     priceCents: Int?,
     vehicleLabel: String? = null,
+    reviewed: Boolean = false,
+    reviewRating: Int? = null,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -272,4 +305,6 @@ private fun historyReservation(
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,
     upcoming = upcoming,
+    reviewed = reviewed,
+    reviewRating = reviewRating,
 )

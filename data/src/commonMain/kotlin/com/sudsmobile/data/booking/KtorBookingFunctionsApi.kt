@@ -329,6 +329,9 @@ private data class MyReservationItem(
     val vehicleLabel: String? = null,
     val priceCents: Int? = null,
     val upcoming: Boolean = true,
+    val reviewed: Boolean = false,
+    val reviewRating: Int? = null,
+    val reviewTags: List<String> = emptyList(),
 ) {
     fun toReservation(): BookingHistoryReservation = BookingHistoryReservation(
         id = id,
@@ -342,6 +345,9 @@ private data class MyReservationItem(
         vehicleLabel = vehicleLabel,
         priceCents = priceCents,
         upcoming = upcoming,
+        reviewed = reviewed,
+        reviewRating = reviewRating,
+        reviewTags = reviewTags,
     )
 }
 

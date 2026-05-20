@@ -281,7 +281,8 @@ private fun BookingsContent(
                         BookingSummaryCard(
                             booking = booking,
                             showRatingAction = selectedTab == BookingsTab.Completed &&
-                                booking.status == BookingStatusUi.Completed,
+                                booking.status == BookingStatusUi.Completed &&
+                                !booking.reviewed,
                             onRateService = { onRateService(booking.id) },
                         )
                     }
@@ -461,7 +462,14 @@ private fun BookingSummaryCard(
                 }
             }
 
-            if (showRatingAction) {
+            if (booking.reviewed) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ReviewedBookingRow(
+                    rating = booking.reviewRating,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+            } else if (showRatingAction) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text(
@@ -473,6 +481,39 @@ private fun BookingSummaryCard(
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.tertiary,
                     fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewedBookingRow(
+    rating: Int?,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Serviço avaliado",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            (1..5).forEach { star ->
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = if (rating != null && star <= rating) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
                 )
             }
         }

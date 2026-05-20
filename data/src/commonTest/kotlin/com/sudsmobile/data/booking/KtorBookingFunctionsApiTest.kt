@@ -174,7 +174,10 @@ class KtorBookingFunctionsApiTest {
                         "vehicleType": "suv",
                         "vehicleLabel": "BMW 320d",
                         "priceCents": 3400,
-                        "upcoming": true
+                        "upcoming": true,
+                        "reviewed": true,
+                        "reviewRating": 5,
+                        "reviewTags": ["Qualidade", "Rápido"]
                       }
                     ]
                   }
@@ -194,6 +197,9 @@ class KtorBookingFunctionsApiTest {
         assertEquals("BMW 320d", success.history.reservations.first().vehicleLabel)
         assertEquals(3400, success.history.reservations.first().priceCents)
         assertEquals(true, success.history.reservations.first().upcoming)
+        assertEquals(true, success.history.reservations.first().reviewed)
+        assertEquals(5, success.history.reservations.first().reviewRating)
+        assertEquals(listOf("Qualidade", "Rápido"), success.history.reservations.first().reviewTags)
     }
 
     @Test

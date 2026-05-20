@@ -36,6 +36,9 @@ data class BookingHistoryReservation(
     val vehicleLabel: String? = null,
     val priceCents: Int?,
     val upcoming: Boolean,
+    val reviewed: Boolean = false,
+    val reviewRating: Int? = null,
+    val reviewTags: List<String> = emptyList(),
 )
 
 data class BookingReviewRequest(

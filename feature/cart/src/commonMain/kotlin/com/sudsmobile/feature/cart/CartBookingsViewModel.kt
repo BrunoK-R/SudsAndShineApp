@@ -36,6 +36,8 @@ internal data class BookingSummaryUi(
     val status: BookingStatusUi,
     val icon: ImageVector,
     val showLocation: Boolean,
+    val reviewed: Boolean,
+    val reviewRating: Int?,
 )
 
 internal sealed interface CartBookingsUiState {
@@ -144,6 +146,8 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         status = status.toStatusUi(),
         icon = serviceIcon(),
         showLocation = upcoming,
+        reviewed = reviewed,
+        reviewRating = reviewRating?.takeIf { it in 1..5 },
     )
 }
 
