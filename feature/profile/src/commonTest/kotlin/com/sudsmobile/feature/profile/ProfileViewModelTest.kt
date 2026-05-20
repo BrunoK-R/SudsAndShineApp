@@ -15,6 +15,13 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.vehicle.UserVehicle
+import com.sudsmobile.data.vehicle.UserVehicleDeleteResult
+import com.sudsmobile.data.vehicle.UserVehicleError
+import com.sudsmobile.data.vehicle.UserVehicleListResult
+import com.sudsmobile.data.vehicle.UserVehicleMutationResult
+import com.sudsmobile.data.vehicle.UserVehicleRepository
+import com.sudsmobile.data.vehicle.UserVehicleSaveRequest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -50,9 +57,13 @@ class ProfileViewModelTest {
         val bookingRepository = ProfileStatsFakeBookingRepository(
             BookingHistoryResult.Success(BookingHistory(emptyList())),
         )
+        val vehicleRepository = ProfileStatsFakeVehicleRepository(
+            UserVehicleListResult.Success(emptyList()),
+        )
         val viewModel = ProfileViewModel(
             authRepository = ProfileStatsFakeAuthRepository(authenticated = false),
             bookingRepository = bookingRepository,
+            userVehicleRepository = vehicleRepository,
         )
 
         viewModel.loadStats()
@@ -60,10 +71,11 @@ class ProfileViewModelTest {
 
         assertIs<ProfileStatsUiState.Unauthenticated>(viewModel.statsState.value)
         assertEquals(0, bookingRepository.historyCalls)
+        assertEquals(0, vehicleRepository.listCalls)
     }
 
     @Test
-    fun loadStatsBuildsWashAndLoyaltyCountsFromCompletedReservations() = runTest {
+    fun loadStatsBuildsWashLoyaltyAndVehicleCountsFromUserData() = runTest {
         val viewModel = ProfileViewModel(
             authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
             bookingRepository = ProfileStatsFakeBookingRepository(
@@ -83,6 +95,15 @@ class ProfileViewModelTest {
                     ),
                 ),
             ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(
+                UserVehicleListResult.Success(
+                    listOf(
+                        profileStatsVehicle("vehicle-1"),
+                        profileStatsVehicle("vehicle-2"),
+                        profileStatsVehicle("invalid-vehicle", plate = ""),
+                    ),
+                ),
+            ),
         )
 
         viewModel.loadStats()
@@ -91,7 +112,37 @@ class ProfileViewModelTest {
         val loaded = assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
         assertEquals("7", loaded.stats.washCount)
         assertEquals("3", loaded.stats.loyaltyRemaining)
+        assertEquals("2", loaded.stats.vehicleCount)
+        assertEquals(null, loaded.warningMessage)
+    }
+
+    @Test
+    fun loadStatsKeepsReservationStatsWhenVehiclesFail() = runTest {
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(profileStatsHistoryReservation("completed-1", upcoming = false)),
+                    ),
+                ),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(
+                UserVehicleListResult.Failure(
+                    UserVehicleError.Unavailable("Veículos indisponíveis."),
+                ),
+            ),
+        )
+
+        viewModel.loadStats()
+        runCurrent()
+
+        val loaded = assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
+        assertEquals("1", loaded.stats.washCount)
+        assertEquals("4", loaded.stats.loyaltyRemaining)
         assertEquals("0", loaded.stats.vehicleCount)
+        assertEquals("Veículos indisponíveis.", loaded.warningMessage)
+        assertEquals(true, loaded.warningRetryable)
     }
 
     @Test
@@ -102,6 +153,9 @@ class ProfileViewModelTest {
                 BookingHistoryResult.Failure(
                     BookingHistoryError.Unavailable("Serviço indisponível."),
                 ),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(
+                UserVehicleListResult.Success(listOf(profileStatsVehicle("vehicle-1"))),
             ),
         )
 
@@ -120,6 +174,9 @@ class ProfileViewModelTest {
         val viewModel = ProfileViewModel(
             authRepository = authRepository,
             bookingRepository = bookingRepository,
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(
+                UserVehicleListResult.Success(listOf(profileStatsVehicle("vehicle-1"))),
+            ),
         )
 
         viewModel.loadStats()
@@ -173,6 +230,30 @@ private class DeferredProfileStatsBookingRepository : BookingRepository {
     }
 
     override suspend fun getMyBookings(): BookingHistoryResult = result.await()
+}
+
+private class ProfileStatsFakeVehicleRepository(
+    private val vehicleResult: UserVehicleListResult,
+) : UserVehicleRepository {
+    var listCalls: Int = 0
+        private set
+
+    override suspend fun getMyVehicles(): UserVehicleListResult {
+        listCalls += 1
+        return vehicleResult
+    }
+
+    override suspend fun createVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun updateVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult {
+        error("Not used")
+    }
 }
 
 private class ProfileStatsFakeAuthRepository(
@@ -237,4 +318,16 @@ private fun profileStatsHistoryReservation(
     vehicleType = "passageiros",
     priceCents = 3200,
     upcoming = upcoming,
+)
+
+private fun profileStatsVehicle(
+    id: String,
+    plate: String = "AA-00-BB",
+): UserVehicle = UserVehicle(
+    id = id,
+    brand = "BMW",
+    model = "320d",
+    plate = plate,
+    color = "Azul",
+    type = "passenger",
 )

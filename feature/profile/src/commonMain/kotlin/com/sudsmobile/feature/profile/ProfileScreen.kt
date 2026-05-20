@@ -457,7 +457,20 @@ private fun ProfileStatsStatus(
     statsState: ProfileStatsUiState,
     onRetryStats: () -> Unit,
 ) {
-    val error = statsState as? ProfileStatsUiState.Error ?: return
+    val message = when (statsState) {
+        is ProfileStatsUiState.Error -> statsState.message
+        is ProfileStatsUiState.Loaded -> statsState.warningMessage
+        ProfileStatsUiState.Idle,
+        ProfileStatsUiState.Loading,
+        ProfileStatsUiState.Unauthenticated -> null
+    } ?: return
+    val retryable = when (statsState) {
+        is ProfileStatsUiState.Error -> statsState.retryable
+        is ProfileStatsUiState.Loaded -> statsState.warningRetryable
+        ProfileStatsUiState.Idle,
+        ProfileStatsUiState.Loading,
+        ProfileStatsUiState.Unauthenticated -> false
+    }
 
     Spacer(Modifier.height(12.dp))
     Surface(
@@ -472,12 +485,12 @@ private fun ProfileStatsStatus(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = error.message,
+                text = message,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
             )
-            if (error.retryable) {
+            if (retryable) {
                 TextButton(
                     onClick = onRetryStats,
                     colors = ButtonDefaults.textButtonColors(
