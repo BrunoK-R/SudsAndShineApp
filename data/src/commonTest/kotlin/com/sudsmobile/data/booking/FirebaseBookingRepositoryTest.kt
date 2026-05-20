@@ -7,6 +7,23 @@ import kotlinx.coroutines.test.runTest
 
 class FirebaseBookingRepositoryTest {
     @Test
+    fun rejectsInvalidAvailabilityRequestBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api)
+
+        val result = repository.getAvailability(
+            BookingAvailabilityRequest(
+                anchorDate = "2026/05/20",
+                serviceDurationMinutes = 30,
+            ),
+        )
+
+        assertIs<BookingAvailabilityResult.Failure>(result)
+        assertIs<BookingAvailabilityError.Validation>(result.error)
+        assertEquals(0, api.availabilityCalls)
+    }
+
+    @Test
     fun rejectsInvalidEmailBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api)
@@ -40,10 +57,23 @@ class FirebaseBookingRepositoryTest {
 }
 
 private class RecordingBookingFunctionsApi : BookingFunctionsApi {
+    var availabilityCalls: Int = 0
+        private set
     var calls: Int = 0
         private set
     var lastRequest: BookingCreateRequest? = null
         private set
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        availabilityCalls += 1
+        return BookingAvailabilityResult.Success(
+            BookingAvailabilityMonth(
+                monthTitle = "maio 2026",
+                leadingEmptyCells = 4,
+                days = emptyList(),
+            ),
+        )
+    }
 
     override suspend fun createReservation(request: BookingCreateRequest): BookingCreateResult {
         calls += 1

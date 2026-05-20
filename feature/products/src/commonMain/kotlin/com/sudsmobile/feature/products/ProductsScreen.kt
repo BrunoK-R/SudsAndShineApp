@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.Button
@@ -77,6 +78,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.booking.BookingAvailabilityDay
+import com.sudsmobile.data.booking.BookingAvailabilityMonth
+import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import org.koin.compose.viewmodel.koinViewModel
 
 private data class BookingService(
@@ -94,19 +98,6 @@ private data class BookingVehicle(
     val name: String,
     val description: String,
     val icon: ImageVector,
-)
-
-private data class BookingDateOption(
-    val id: String,
-    val dayOfMonth: Int,
-    val dateLabel: String,
-    val summaryLabel: String,
-    val available: Boolean = true,
-)
-
-private data class BookingTimeSlot(
-    val time: String,
-    val available: Boolean = true,
 )
 
 private enum class BookingStep {
@@ -169,61 +160,6 @@ private val bookingVehicles = listOf(
     ),
 )
 
-private val bookingDateOptions = listOf(
-    BookingDateOption("2026-05-01", 1, "1 mai", "1 de maio, 2026", available = false),
-    BookingDateOption("2026-05-02", 2, "2 mai", "2 de maio, 2026", available = false),
-    BookingDateOption("2026-05-03", 3, "3 mai", "3 de maio, 2026", available = false),
-    BookingDateOption("2026-05-04", 4, "4 mai", "4 de maio, 2026", available = false),
-    BookingDateOption("2026-05-05", 5, "5 mai", "5 de maio, 2026"),
-    BookingDateOption("2026-05-06", 6, "6 mai", "6 de maio, 2026"),
-    BookingDateOption("2026-05-07", 7, "7 mai", "7 de maio, 2026"),
-    BookingDateOption("2026-05-08", 8, "8 mai", "8 de maio, 2026"),
-    BookingDateOption("2026-05-09", 9, "9 mai", "9 de maio, 2026"),
-    BookingDateOption("2026-05-10", 10, "10 mai", "10 de maio, 2026", available = false),
-    BookingDateOption("2026-05-11", 11, "11 mai", "11 de maio, 2026"),
-    BookingDateOption("2026-05-12", 12, "12 mai", "12 de maio, 2026"),
-    BookingDateOption("2026-05-13", 13, "13 mai", "13 de maio, 2026"),
-    BookingDateOption("2026-05-14", 14, "14 mai", "14 de maio, 2026"),
-    BookingDateOption("2026-05-15", 15, "15 mai", "15 de maio, 2026"),
-    BookingDateOption("2026-05-16", 16, "16 mai", "16 de maio, 2026"),
-    BookingDateOption("2026-05-17", 17, "17 mai", "17 de maio, 2026", available = false),
-    BookingDateOption("2026-05-18", 18, "18 mai", "18 de maio, 2026"),
-    BookingDateOption("2026-05-19", 19, "19 mai", "19 de maio, 2026"),
-    BookingDateOption("2026-05-20", 20, "20 mai", "20 de maio, 2026"),
-    BookingDateOption("2026-05-21", 21, "21 mai", "21 de maio, 2026"),
-    BookingDateOption("2026-05-22", 22, "22 mai", "22 de maio, 2026"),
-    BookingDateOption("2026-05-23", 23, "23 mai", "23 de maio, 2026"),
-    BookingDateOption("2026-05-24", 24, "24 mai", "24 de maio, 2026", available = false),
-    BookingDateOption("2026-05-25", 25, "25 mai", "25 de maio, 2026"),
-    BookingDateOption("2026-05-26", 26, "26 mai", "26 de maio, 2026"),
-    BookingDateOption("2026-05-27", 27, "27 mai", "27 de maio, 2026"),
-    BookingDateOption("2026-05-28", 28, "28 mai", "28 de maio, 2026"),
-    BookingDateOption("2026-05-29", 29, "29 mai", "29 de maio, 2026"),
-    BookingDateOption("2026-05-30", 30, "30 mai", "30 de maio, 2026"),
-    BookingDateOption("2026-05-31", 31, "31 mai", "31 de maio, 2026", available = false),
-)
-
-private val bookingTimeSlots = listOf(
-    BookingTimeSlot("09:00"),
-    BookingTimeSlot("09:30"),
-    BookingTimeSlot("10:00", available = false),
-    BookingTimeSlot("10:30"),
-    BookingTimeSlot("11:00"),
-    BookingTimeSlot("11:30"),
-    BookingTimeSlot("12:00"),
-    BookingTimeSlot("12:30", available = false),
-    BookingTimeSlot("14:00"),
-    BookingTimeSlot("14:30"),
-    BookingTimeSlot("15:00"),
-    BookingTimeSlot("15:30"),
-    BookingTimeSlot("16:00"),
-    BookingTimeSlot("16:30"),
-    BookingTimeSlot("17:00"),
-    BookingTimeSlot("17:30"),
-    BookingTimeSlot("18:00"),
-    BookingTimeSlot("18:30"),
-)
-
 @Composable
 fun ProductsScreen(
     contentPadding: PaddingValues,
@@ -232,11 +168,14 @@ fun ProductsScreen(
     onHome: () -> Unit = {},
 ) {
     val viewModel: ProductsBookingViewModel = koinViewModel()
+    val availabilityState by viewModel.availabilityState.collectAsStateWithLifecycle()
     val submitState by viewModel.submitState.collectAsStateWithLifecycle()
 
     ProductsScreenContent(
         contentPadding = contentPadding,
+        availabilityState = availabilityState,
         submitState = submitState,
+        onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onClearSubmitError = viewModel::clearSubmitError,
         onSubmitSuccessConsumed = viewModel::consumeSuccess,
@@ -249,7 +188,9 @@ fun ProductsScreen(
 @Composable
 private fun ProductsScreenContent(
     contentPadding: PaddingValues,
+    availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
+    onLoadAvailability: (Int) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
     onSubmitSuccessConsumed: () -> Unit,
@@ -260,7 +201,7 @@ private fun ProductsScreenContent(
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
-    var selectedDateId by rememberSaveable { mutableStateOf(bookingDateOptions.first { it.available }.id) }
+    var selectedDateId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
     var contactName by rememberSaveable { mutableStateOf("") }
     var contactPhone by rememberSaveable { mutableStateOf("") }
@@ -275,7 +216,8 @@ private fun ProductsScreenContent(
         acceptsPrivacy
     val selectedService = bookingServices.firstOrNull { it.id == selectedServiceId }
     val selectedVehicle = bookingVehicles.firstOrNull { it.id == selectedVehicleId }
-    val selectedDate = bookingDateOptions.firstOrNull { it.id == selectedDateId }
+    val availabilityMonth = (availabilityState as? BookingAvailabilityUiState.Loaded)?.month
+    val selectedDate = availabilityMonth?.days?.firstOrNull { it.id == selectedDateId }
     val bookingDraft = buildBookingDraft(
         service = selectedService,
         vehicle = selectedVehicle,
@@ -294,6 +236,25 @@ private fun ProductsScreenContent(
             reservationCode = state.receipt.reservationCode
             currentStepName = BookingStep.Success.name
             onSubmitSuccessConsumed()
+        }
+    }
+
+    LaunchedEffect(currentStep, selectedService?.id) {
+        if (currentStep == BookingStep.DateTime && selectedService != null) {
+            onLoadAvailability(selectedService.durationMinutes())
+        }
+    }
+
+    LaunchedEffect(availabilityMonth) {
+        val days = availabilityMonth?.days.orEmpty()
+        if (days.isEmpty()) return@LaunchedEffect
+
+        val selectedDateStillAvailable = days.any { day ->
+            day.id == selectedDateId && day.available
+        }
+        if (!selectedDateStillAvailable) {
+            selectedDateId = days.firstOrNull { it.available }?.id
+            selectedTime = null
         }
     }
 
@@ -324,6 +285,10 @@ private fun ProductsScreenContent(
                                 service = service,
                                 selected = selectedServiceId == service.id,
                                 onSelected = {
+                                    if (selectedServiceId != service.id) {
+                                        selectedDateId = null
+                                        selectedTime = null
+                                    }
                                     selectedServiceId = service.id
                                     onClearSubmitError()
                                 },
@@ -372,6 +337,7 @@ private fun ProductsScreenContent(
                     )
 
                     DateTimeStepContent(
+                        availabilityState = availabilityState,
                         selectedDateId = selectedDateId,
                         selectedTime = selectedTime,
                         onDateSelected = { dateId ->
@@ -382,6 +348,9 @@ private fun ProductsScreenContent(
                         onTimeSelected = {
                             selectedTime = it
                             onClearSubmitError()
+                        },
+                        onRetryAvailability = {
+                            selectedService?.let { onLoadAvailability(it.durationMinutes()) }
                         },
                     )
                 }
@@ -470,7 +439,7 @@ private fun ProductsScreenContent(
                 enabled = when (currentStep) {
                     BookingStep.Service -> selectedServiceId != null
                     BookingStep.Vehicle -> selectedVehicleId != null
-                    BookingStep.DateTime -> selectedDateId.isNotBlank() && selectedTime != null
+                    BookingStep.DateTime -> selectedDate != null && selectedTime != null
                     BookingStep.Contact -> contactFormValid
                     BookingStep.Confirmation -> selectedService != null &&
                         selectedVehicle != null &&
@@ -614,7 +583,7 @@ private fun BookingStepHeader(
 private fun BookingConfirmationContent(
     service: BookingService?,
     vehicle: BookingVehicle?,
-    date: BookingDateOption?,
+    date: BookingAvailabilityDay?,
     time: String?,
     name: String,
     phone: String,
@@ -971,7 +940,7 @@ private fun PriceSummaryCard(
 @Composable
 private fun BookingSuccessContent(
     service: BookingService?,
-    date: BookingDateOption?,
+    date: BookingAvailabilityDay?,
     time: String?,
     phone: String,
     reservationCode: String?,
@@ -1134,7 +1103,7 @@ private fun BookingSuccessContent(
 @Composable
 private fun SuccessSummaryCard(
     service: BookingService?,
-    date: BookingDateOption?,
+    date: BookingAvailabilityDay?,
     time: String?,
     phone: String,
 ) {
@@ -1352,11 +1321,16 @@ private fun BookingContactField(
 
 @Composable
 private fun DateTimeStepContent(
-    selectedDateId: String,
+    availabilityState: BookingAvailabilityUiState,
+    selectedDateId: String?,
     selectedTime: String?,
     onDateSelected: (String) -> Unit,
     onTimeSelected: (String) -> Unit,
+    onRetryAvailability: () -> Unit,
 ) {
+    val month = (availabilityState as? BookingAvailabilityUiState.Loaded)?.month
+    val selectedDay = month?.days?.firstOrNull { it.id == selectedDateId }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1365,23 +1339,141 @@ private fun DateTimeStepContent(
             .padding(top = 0.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        CalendarSelectionCard(
-            selectedDateId = selectedDateId,
-            onDateSelected = onDateSelected,
-        )
+        when (availabilityState) {
+            BookingAvailabilityUiState.Idle,
+            BookingAvailabilityUiState.Loading -> AvailabilityLoadingCard()
 
-        TimeSelectionCard(
-            selectedTime = selectedTime,
-            onTimeSelected = onTimeSelected,
-        )
+            is BookingAvailabilityUiState.Loaded -> {
+                CalendarSelectionCard(
+                    month = availabilityState.month,
+                    selectedDateId = selectedDateId,
+                    onDateSelected = onDateSelected,
+                )
+
+                TimeSelectionCard(
+                    slots = selectedDay?.slots.orEmpty(),
+                    selectedTime = selectedTime,
+                    onTimeSelected = onTimeSelected,
+                )
+            }
+
+            BookingAvailabilityUiState.Empty -> AvailabilityStatusCard(
+                title = "Sem horários disponíveis",
+                body = "Não há vagas abertas para este mês.",
+                onRetry = onRetryAvailability,
+            )
+
+            is BookingAvailabilityUiState.Error -> AvailabilityStatusCard(
+                title = "Não foi possível carregar horários",
+                body = availabilityState.message,
+                onRetry = onRetryAvailability,
+            )
+        }
 
         OpeningHoursCard()
     }
 }
 
 @Composable
+private fun AvailabilityLoadingCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = MaterialTheme.colorScheme.tertiary,
+                strokeWidth = 2.dp,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "A carregar horários",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Estamos a consultar a disponibilidade em tempo real.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AvailabilityStatusCard(
+    title: String,
+    body: String,
+    onRetry: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            OutlinedButton(
+                onClick = onRetry,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Tentar novamente", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
 private fun CalendarSelectionCard(
-    selectedDateId: String,
+    month: BookingAvailabilityMonth,
+    selectedDateId: String?,
     onDateSelected: (String) -> Unit,
 ) {
     Card(
@@ -1400,6 +1492,7 @@ private fun CalendarSelectionCard(
             )
 
             CalendarMonthPicker(
+                month = month,
                 selectedDateId = selectedDateId,
                 onDateSelected = onDateSelected,
             )
@@ -1409,11 +1502,11 @@ private fun CalendarSelectionCard(
 
 @Composable
 private fun CalendarMonthPicker(
-    selectedDateId: String,
+    month: BookingAvailabilityMonth,
+    selectedDateId: String?,
     onDateSelected: (String) -> Unit,
 ) {
-    val leadingEmptyCells = 4
-    val cells = List<BookingDateOption?>(leadingEmptyCells) { null } + bookingDateOptions
+    val cells: List<BookingAvailabilityDay?> = List(month.leadingEmptyCells) { null } + month.days
     val weeks = cells.chunked(7)
     val weekdayLabels = listOf("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
 
@@ -1424,7 +1517,7 @@ private fun CalendarMonthPicker(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
             Text(
-                text = "maio 2026",
+                text = month.monthTitle,
                 modifier = Modifier.padding(vertical = 12.dp),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -1479,7 +1572,7 @@ private fun CalendarMonthPicker(
 
 @Composable
 private fun CalendarDayCell(
-    dateOption: BookingDateOption,
+    dateOption: BookingAvailabilityDay,
     selected: Boolean,
     onSelected: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1516,6 +1609,7 @@ private fun CalendarDayCell(
 
 @Composable
 private fun TimeSelectionCard(
+    slots: List<BookingAvailabilitySlot>,
     selectedTime: String?,
     onTimeSelected: (String) -> Unit,
 ) {
@@ -1534,23 +1628,31 @@ private fun TimeSelectionCard(
                 title = "Horários Disponíveis",
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                bookingTimeSlots.chunked(3).forEach { slotRow ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        slotRow.forEach { slot ->
-                            TimeSlotButton(
-                                slot = slot,
-                                selected = selectedTime == slot.time,
-                                onSelected = { onTimeSelected(slot.time) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+            if (slots.isEmpty()) {
+                Text(
+                    text = "Sem horários disponíveis para esta data.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    slots.chunked(3).forEach { slotRow ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            slotRow.forEach { slot ->
+                                TimeSlotButton(
+                                    slot = slot,
+                                    selected = selectedTime == slot.time,
+                                    onSelected = { onTimeSelected(slot.time) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
 
-                        repeat(3 - slotRow.size) {
-                            Spacer(Modifier.weight(1f))
+                            repeat(3 - slotRow.size) {
+                                Spacer(Modifier.weight(1f))
+                            }
                         }
                     }
                 }
@@ -1561,7 +1663,7 @@ private fun TimeSelectionCard(
 
 @Composable
 private fun TimeSlotButton(
-    slot: BookingTimeSlot,
+    slot: BookingAvailabilitySlot,
     selected: Boolean,
     onSelected: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1940,7 +2042,7 @@ private fun VehicleHelpCard() {
 private fun buildBookingDraft(
     service: BookingService?,
     vehicle: BookingVehicle?,
-    date: BookingDateOption?,
+    date: BookingAvailabilityDay?,
     time: String?,
     name: String,
     phone: String,

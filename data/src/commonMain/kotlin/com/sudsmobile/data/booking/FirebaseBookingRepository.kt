@@ -3,6 +3,15 @@ package com.sudsmobile.data.booking
 class FirebaseBookingRepository(
     private val api: BookingFunctionsApi,
 ) : BookingRepository {
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        val validationError = validate(request)
+        if (validationError != null) {
+            return BookingAvailabilityResult.Failure(validationError)
+        }
+
+        return api.getAvailability(request)
+    }
+
     override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
         val validationError = validate(request)
         if (validationError != null) {
@@ -10,6 +19,18 @@ class FirebaseBookingRepository(
         }
 
         return api.createReservation(request.normalized())
+    }
+
+    private fun validate(request: BookingAvailabilityRequest): BookingAvailabilityError? {
+        return when {
+            request.anchorDate != null && !isValidDateId(request.anchorDate) ->
+                BookingAvailabilityError.Validation("A data de disponibilidade é inválida.")
+            request.serviceDurationMinutes !in 5..480 ->
+                BookingAvailabilityError.Validation("A duração do serviço é inválida.")
+            request.slotIntervalMinutes !in 5..240 ->
+                BookingAvailabilityError.Validation("O intervalo de horários é inválido.")
+            else -> null
+        }
     }
 
     private fun validate(request: BookingCreateRequest): BookingCreateError? {
@@ -35,4 +56,9 @@ class FirebaseBookingRepository(
         vehicleType = vehicleType.trim(),
         notes = notes.trim(),
     )
+}
+
+private fun isValidDateId(dateId: String): Boolean {
+    if (dateId.length != 10) return false
+    return dateId[4] == '-' && dateId[7] == '-'
 }

@@ -17,6 +17,70 @@ import kotlinx.serialization.json.Json
 
 class KtorBookingFunctionsApiTest {
     @Test
+    fun mapsCallableAvailabilityResponseToMonth() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "monthTitle": "maio 2026",
+                    "leadingEmptyCells": 4,
+                    "days": [
+                      {
+                        "id": "2026-05-20",
+                        "dayOfMonth": 20,
+                        "dateLabel": "20 mai",
+                        "summaryLabel": "20 de maio, 2026",
+                        "available": true,
+                        "slots": [
+                          {
+                            "time": "10:00",
+                            "available": true,
+                            "remainingCapacity": 1
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.getAvailability(BookingAvailabilityRequest(serviceDurationMinutes = 45))
+
+        val success = assertIs<BookingAvailabilityResult.Success>(result)
+        assertEquals("maio 2026", success.month.monthTitle)
+        assertEquals(4, success.month.leadingEmptyCells)
+        assertEquals("2026-05-20", success.month.days.first().id)
+        assertEquals("10:00", success.month.days.first().slots.first().time)
+    }
+
+    @Test
+    fun mapsCallableAvailabilityValidationError() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "INVALID_ARGUMENT",
+                    "message": "serviceDurationMinutes must be valid"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.getAvailability(BookingAvailabilityRequest(serviceDurationMinutes = 0))
+
+        val failure = assertIs<BookingAvailabilityResult.Failure>(result)
+        assertIs<BookingAvailabilityError.Validation>(failure.error)
+        assertEquals("serviceDurationMinutes must be valid", failure.error.message)
+    }
+
+    @Test
     fun mapsCallableSuccessResponseToReceipt() = runTest {
         val api = KtorBookingFunctionsApi(
             httpClient = mockClient(

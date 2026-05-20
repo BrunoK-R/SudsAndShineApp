@@ -14,6 +14,32 @@ class KtorBookingFunctionsApi(
     private val httpClient: HttpClient,
     private val config: FirebaseFunctionsConfig,
 ) : BookingFunctionsApi {
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        return try {
+            val response = httpClient.post(config.getAvailabilityUrl) {
+                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                setBody(CallableGetAvailabilityRequest(GetAvailabilityPayload.from(request)))
+            }
+            val body = response.body<CallableGetAvailabilityResponse>()
+            val error = body.error
+            when {
+                error != null -> BookingAvailabilityResult.Failure(error.toAvailabilityError())
+                body.result != null -> BookingAvailabilityResult.Success(body.result.toAvailabilityMonth())
+                else -> BookingAvailabilityResult.Failure(
+                    BookingAvailabilityError.Backend("A resposta de disponibilidade veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingAvailabilityResult.Failure(
+                BookingAvailabilityError.Unavailable(
+                    "Não foi possível carregar os horários disponíveis. Tente novamente.",
+                ),
+            )
+        }
+    }
+
     override suspend fun createReservation(request: BookingCreateRequest): BookingCreateResult {
         return try {
             val response = httpClient.post(config.createReservationUrl) {
@@ -47,9 +73,29 @@ class KtorBookingFunctionsApi(
 }
 
 @Serializable
+private data class CallableGetAvailabilityRequest(
+    val data: GetAvailabilityPayload,
+)
+
+@Serializable
 private data class CallableCreateReservationRequest(
     val data: CreateReservationPayload,
 )
+
+@Serializable
+private data class GetAvailabilityPayload(
+    val anchorDate: String? = null,
+    val serviceDurationMinutes: Int,
+    val slotIntervalMinutes: Int,
+) {
+    companion object {
+        fun from(request: BookingAvailabilityRequest): GetAvailabilityPayload = GetAvailabilityPayload(
+            anchorDate = request.anchorDate,
+            serviceDurationMinutes = request.serviceDurationMinutes,
+            slotIntervalMinutes = request.slotIntervalMinutes,
+        )
+    }
+}
 
 @Serializable
 private data class CreateReservationPayload(
@@ -81,10 +127,61 @@ private data class CreateReservationPayload(
 }
 
 @Serializable
+private data class CallableGetAvailabilityResponse(
+    val result: GetAvailabilityResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class CallableCreateReservationResponse(
     val result: CreateReservationResult? = null,
     val error: CallableError? = null,
 )
+
+@Serializable
+private data class GetAvailabilityResult(
+    val monthTitle: String,
+    val leadingEmptyCells: Int,
+    val days: List<GetAvailabilityDay>,
+) {
+    fun toAvailabilityMonth(): BookingAvailabilityMonth = BookingAvailabilityMonth(
+        monthTitle = monthTitle,
+        leadingEmptyCells = leadingEmptyCells.coerceIn(0, 6),
+        days = days.map { it.toAvailabilityDay() },
+    )
+}
+
+@Serializable
+private data class GetAvailabilityDay(
+    val id: String,
+    val dayOfMonth: Int,
+    val dateLabel: String,
+    val summaryLabel: String,
+    val available: Boolean,
+    val slots: List<GetAvailabilitySlot>,
+) {
+    fun toAvailabilityDay(): BookingAvailabilityDay = BookingAvailabilityDay(
+        id = id,
+        dayOfMonth = dayOfMonth,
+        dateLabel = dateLabel,
+        summaryLabel = summaryLabel,
+        available = available,
+        slots = slots.map { it.toAvailabilitySlot() },
+    )
+}
+
+@Serializable
+private data class GetAvailabilitySlot(
+    val time: String,
+    val available: Boolean,
+    val remainingCapacity: Int,
+) {
+    fun toAvailabilitySlot(): BookingAvailabilitySlot = BookingAvailabilitySlot(
+        time = time,
+        available = available,
+        remainingCapacity = remainingCapacity,
+    )
+}
 
 @Serializable
 private data class CreateReservationResult(
@@ -99,6 +196,18 @@ private data class CallableError(
     val code: String? = null,
     val message: String? = null,
 ) {
+    fun toAvailabilityError(): BookingAvailabilityError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível carregar os horários disponíveis."
+        return when (normalizedCode) {
+            "INVALID_ARGUMENT" -> BookingAvailabilityError.Validation(fallbackMessage)
+            "PERMISSION_DENIED" -> BookingAvailabilityError.Permission("Não tem permissões para consultar horários.")
+            "UNAUTHENTICATED" -> BookingAvailabilityError.Unauthenticated("Inicie sessão para consultar horários.")
+            "UNAVAILABLE" -> BookingAvailabilityError.Unavailable("O serviço de horários está indisponível.")
+            else -> BookingAvailabilityError.Backend(fallbackMessage)
+        }
+    }
+
     fun toCreateError(): BookingCreateError {
         val normalizedCode = status ?: code
         val fallbackMessage = message ?: "Não foi possível concluir a marcação."

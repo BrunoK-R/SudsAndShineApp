@@ -2,6 +2,10 @@ package com.sudsmobile.feature.products
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.booking.BookingAvailabilityError
+import com.sudsmobile.data.booking.BookingAvailabilityMonth
+import com.sudsmobile.data.booking.BookingAvailabilityRequest
+import com.sudsmobile.data.booking.BookingAvailabilityResult
 import com.sudsmobile.data.booking.BookingCreateError
 import com.sudsmobile.data.booking.BookingCreateRequest
 import com.sudsmobile.data.booking.BookingCreateResult
@@ -33,11 +37,44 @@ sealed interface BookingSubmitUiState {
     data class Error(val message: String, val retryable: Boolean) : BookingSubmitUiState
 }
 
+sealed interface BookingAvailabilityUiState {
+    data object Idle : BookingAvailabilityUiState
+    data object Loading : BookingAvailabilityUiState
+    data class Loaded(val month: BookingAvailabilityMonth) : BookingAvailabilityUiState
+    data object Empty : BookingAvailabilityUiState
+    data class Error(val message: String, val retryable: Boolean) : BookingAvailabilityUiState
+}
+
 class ProductsBookingViewModel(
     private val bookingRepository: BookingRepository,
 ) : ViewModel() {
+    private val _availabilityState = MutableStateFlow<BookingAvailabilityUiState>(BookingAvailabilityUiState.Idle)
+    val availabilityState: StateFlow<BookingAvailabilityUiState> = _availabilityState.asStateFlow()
+
     private val _submitState = MutableStateFlow<BookingSubmitUiState>(BookingSubmitUiState.Idle)
     val submitState: StateFlow<BookingSubmitUiState> = _submitState.asStateFlow()
+
+    fun loadAvailability(serviceDurationMinutes: Int) {
+        if (_availabilityState.value is BookingAvailabilityUiState.Loading) return
+
+        viewModelScope.launch {
+            _availabilityState.value = BookingAvailabilityUiState.Loading
+            _availabilityState.value = when (
+                val result = bookingRepository.getAvailability(
+                    BookingAvailabilityRequest(serviceDurationMinutes = serviceDurationMinutes),
+                )
+            ) {
+                is BookingAvailabilityResult.Success -> {
+                    if (result.month.days.any { it.available }) {
+                        BookingAvailabilityUiState.Loaded(result.month)
+                    } else {
+                        BookingAvailabilityUiState.Empty
+                    }
+                }
+                is BookingAvailabilityResult.Failure -> result.error.toUiState()
+            }
+        }
+    }
 
     fun submitBooking(draft: ProductsBookingDraft?) {
         if (_submitState.value is BookingSubmitUiState.Loading) return
@@ -77,6 +114,12 @@ class ProductsBookingViewModel(
             this is BookingCreateError.Unavailable ||
             this is BookingCreateError.Backend
         return BookingSubmitUiState.Error(message = message, retryable = retryable)
+    }
+
+    private fun BookingAvailabilityError.toUiState(): BookingAvailabilityUiState.Error {
+        val retryable = this is BookingAvailabilityError.Unavailable ||
+            this is BookingAvailabilityError.Backend
+        return BookingAvailabilityUiState.Error(message = message, retryable = retryable)
     }
 }
 
