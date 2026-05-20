@@ -5,31 +5,64 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.feature.onboarding.OnboardingGateUiState
+import com.sudsmobile.feature.onboarding.OnboardingGateViewModel
 import com.sudsmobile.feature.onboarding.SplashScreen
 import com.sudsmobile.navigation.DefaultOnboardingScreen
 import com.sudsmobile.navigation.SetupNavGraph
 import com.sudsmobile.shared.theme.SudsAndShineTheme
+import org.koin.compose.viewmodel.koinViewModel
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Composable
-@Preview
 fun App() {
-    SudsAndShineTheme {
-        var splashComplete by rememberSaveable { mutableStateOf(false) }
+    val onboardingGateViewModel: OnboardingGateViewModel = koinViewModel()
+    val onboardingGateState by onboardingGateViewModel.uiState.collectAsStateWithLifecycle()
 
-        if (!splashComplete) {
-            SplashScreen(onFinished = { splashComplete = true })
-        } else {
-            SetupNavGraph(
-                showOnboarding = true,
-                renderOnboarding = { actionsEnabled, onSkip, onComplete ->
-                    DefaultOnboardingScreen(
-                        actionsEnabled = actionsEnabled,
-                        onSkip = onSkip,
-                        onComplete = onComplete,
-                    )
-                },
-            )
-        }
+    SudsAndShineTheme {
+        AppContent(
+            onboardingGateState = onboardingGateState,
+            onCompleteOnboarding = onboardingGateViewModel::completeOnboarding,
+            onResetOnboardingPreference = onboardingGateViewModel::resetOnboardingPreference,
+        )
+    }
+}
+
+@Composable
+private fun AppContent(
+    onboardingGateState: OnboardingGateUiState,
+    onCompleteOnboarding: suspend () -> Unit,
+    onResetOnboardingPreference: suspend () -> Unit,
+) {
+    var splashComplete by rememberSaveable { mutableStateOf(false) }
+
+    if (!splashComplete || onboardingGateState == OnboardingGateUiState.Loading) {
+        SplashScreen(onFinished = { splashComplete = true })
+    } else {
+        SetupNavGraph(
+            showOnboarding = onboardingGateState == OnboardingGateUiState.ShowOnboarding,
+            onCompleteOnboarding = onCompleteOnboarding,
+            onResetOnboardingPreference = onResetOnboardingPreference,
+            renderOnboarding = { actionsEnabled, onSkip, onComplete ->
+                DefaultOnboardingScreen(
+                    actionsEnabled = actionsEnabled,
+                    onSkip = onSkip,
+                    onComplete = onComplete,
+                )
+            },
+        )
+    }
+}
+
+@Composable
+@Preview
+private fun AppPreview() {
+    SudsAndShineTheme {
+        AppContent(
+            onboardingGateState = OnboardingGateUiState.ShowOnboarding,
+            onCompleteOnboarding = {},
+            onResetOnboardingPreference = {},
+        )
     }
 }
