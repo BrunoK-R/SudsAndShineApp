@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -22,14 +23,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,63 +56,86 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-
-private enum class VehicleType(
-    val label: String,
-) {
-    Passenger("Passageiros"),
-    Suv("SUV"),
-}
-
-private data class Vehicle(
-    val id: Int,
-    val brand: String,
-    val model: String,
-    val plate: String,
-    val color: String,
-    val type: VehicleType,
-)
-
-private data class VehicleDraft(
-    val brand: String = "",
-    val model: String = "",
-    val plate: String = "",
-    val color: String = "",
-    val type: VehicleType = VehicleType.Passenger,
-) {
-    val canSubmit: Boolean
-        get() = brand.isNotBlank() && model.isNotBlank() && plate.isNotBlank()
-}
-
-private val initialVehicles = listOf(
-    Vehicle(
-        id = 1,
-        brand = "BMW",
-        model = "320d",
-        plate = "AA-00-BB",
-        color = "Preto",
-        type = VehicleType.Passenger,
-    ),
-    Vehicle(
-        id = 2,
-        brand = "Volkswagen",
-        model = "Golf",
-        plate = "CC-11-DD",
-        color = "Branco",
-        type = VehicleType.Passenger,
-    ),
-)
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun VehiclesScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
+    onRequestSignIn: () -> Unit = {},
 ) {
-    var vehicles by remember { mutableStateOf(initialVehicles) }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf(VehicleDraft()) }
+    val viewModel: VehiclesViewModel = koinViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val mutationState by viewModel.mutationState.collectAsStateWithLifecycle()
+    var showEditor by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf(VehicleDraftUi()) }
 
+    LaunchedEffect(Unit) {
+        viewModel.loadVehicles()
+    }
+
+    LaunchedEffect(mutationState) {
+        if (mutationState is VehicleMutationUiState.Success && showEditor) {
+            showEditor = false
+            draft = VehicleDraftUi()
+        }
+    }
+
+    VehiclesScreenContent(
+        contentPadding = contentPadding,
+        uiState = uiState,
+        mutationState = mutationState,
+        onBack = onBack,
+        onRetry = viewModel::loadVehicles,
+        onRequestSignIn = onRequestSignIn,
+        onAddVehicle = {
+            if (uiState is VehiclesUiState.Unauthenticated) {
+                onRequestSignIn()
+            } else {
+                draft = VehicleDraftUi()
+                viewModel.clearMutationState()
+                showEditor = true
+            }
+        },
+        onEditVehicle = { vehicle ->
+            draft = vehicle.toDraft()
+            viewModel.clearMutationState()
+            showEditor = true
+        },
+        onDeleteVehicle = viewModel::deleteVehicle,
+        onDismissMutation = viewModel::clearMutationState,
+    )
+
+    if (showEditor) {
+        AddVehicleDialog(
+            draft = draft,
+            mutationState = mutationState,
+            onDraftChange = { draft = it },
+            onDismiss = {
+                showEditor = false
+                viewModel.clearMutationState()
+            },
+            onSave = { viewModel.saveVehicle(draft) },
+        )
+    }
+}
+
+@Composable
+private fun VehiclesScreenContent(
+    contentPadding: PaddingValues,
+    uiState: VehiclesUiState,
+    mutationState: VehicleMutationUiState,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onAddVehicle: () -> Unit,
+    onEditVehicle: (VehicleUi) -> Unit,
+    onDeleteVehicle: (String) -> Unit,
+    onDismissMutation: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -116,52 +145,57 @@ fun VehiclesScreen(
     ) {
         VehiclesHeader(
             onBack = onBack,
-            onAddVehicle = { showAddDialog = true },
+            onAddVehicle = onAddVehicle,
         )
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 16.dp),
+                .offset(y = (-16).dp)
+                .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (vehicles.isEmpty()) {
-                EmptyVehiclesCard(onAddVehicle = { showAddDialog = true })
-            } else {
-                vehicles.forEach { vehicle ->
+            VehiclesMutationBanner(
+                mutationState = mutationState,
+                onDismiss = onDismissMutation,
+            )
+
+            when (uiState) {
+                VehiclesUiState.Idle,
+                VehiclesUiState.Loading -> VehiclesStatusCard(
+                    title = "A carregar veículos",
+                    body = "Estamos a consultar os veículos associados à sua conta.",
+                    icon = VehiclesStatusIcon.Loading,
+                )
+
+                VehiclesUiState.Unauthenticated -> VehiclesStatusCard(
+                    title = "Sessão necessária",
+                    body = "Entre na sua conta para guardar e gerir veículos.",
+                    icon = VehiclesStatusIcon.Locked,
+                    actionLabel = "Entrar ou criar conta",
+                    onAction = onRequestSignIn,
+                )
+
+                VehiclesUiState.Empty -> EmptyVehiclesCard(onAddVehicle = onAddVehicle)
+
+                is VehiclesUiState.Error -> VehiclesStatusCard(
+                    title = "Não foi possível carregar",
+                    body = uiState.message,
+                    icon = VehiclesStatusIcon.Error,
+                    actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+                    onAction = if (uiState.retryable) onRetry else null,
+                )
+
+                is VehiclesUiState.Loaded -> uiState.vehicles.forEach { vehicle ->
                     VehicleCard(
                         vehicle = vehicle,
-                        onDelete = {
-                            vehicles = vehicles.filterNot { it.id == vehicle.id }
-                        },
+                        actionsEnabled = mutationState !is VehicleMutationUiState.Loading,
+                        onEdit = { onEditVehicle(vehicle) },
+                        onDelete = { onDeleteVehicle(vehicle.id) },
                     )
                 }
             }
         }
-    }
-
-    if (showAddDialog) {
-        AddVehicleDialog(
-            draft = draft,
-            onDraftChange = { draft = it },
-            onDismiss = {
-                showAddDialog = false
-            },
-            onAdd = {
-                val nextId = (vehicles.maxOfOrNull { it.id } ?: 0) + 1
-                vehicles = vehicles + Vehicle(
-                    id = nextId,
-                    brand = draft.brand.trim(),
-                    model = draft.model.trim(),
-                    plate = draft.plate.trim().uppercase(),
-                    color = draft.color.trim(),
-                    type = draft.type,
-                )
-                draft = VehicleDraft()
-                showAddDialog = false
-            },
-        )
     }
 }
 
@@ -250,8 +284,79 @@ private fun VehiclesHeader(
 }
 
 @Composable
+private fun VehiclesMutationBanner(
+    mutationState: VehicleMutationUiState,
+    onDismiss: () -> Unit,
+) {
+    if (mutationState is VehicleMutationUiState.Idle) return
+
+    val isLoading = mutationState is VehicleMutationUiState.Loading
+    val isSuccess = mutationState is VehicleMutationUiState.Success
+    val message = when (mutationState) {
+        VehicleMutationUiState.Idle -> ""
+        VehicleMutationUiState.Loading -> "A atualizar veículo..."
+        is VehicleMutationUiState.Success -> mutationState.message
+        is VehicleMutationUiState.ValidationError -> mutationState.message
+        is VehicleMutationUiState.Error -> mutationState.message
+    }
+    val containerColor = when {
+        isSuccess -> MaterialTheme.colorScheme.tertiaryContainer
+        mutationState is VehicleMutationUiState.ValidationError ||
+            mutationState is VehicleMutationUiState.Error -> MaterialTheme.colorScheme.errorContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerLowest
+    }
+    val contentColor = when {
+        isSuccess -> MaterialTheme.colorScheme.onTertiaryContainer
+        mutationState is VehicleMutationUiState.ValidationError ||
+            mutationState is VehicleMutationUiState.Error -> MaterialTheme.colorScheme.onErrorContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = contentColor,
+                )
+            } else {
+                Icon(
+                    imageVector = if (isSuccess) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (!isLoading) {
+                TextButton(onClick = onDismiss) {
+                    Text("OK", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun VehicleCard(
-    vehicle: Vehicle,
+    vehicle: VehicleUi,
+    actionsEnabled: Boolean,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Card(
@@ -306,13 +411,15 @@ private fun VehicleCard(
                     OutlinedVehicleAction(
                         icon = Icons.Filled.Edit,
                         label = "Editar",
+                        enabled = actionsEnabled,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         borderColor = MaterialTheme.colorScheme.outline,
-                        onClick = {},
+                        onClick = onEdit,
                     )
                     OutlinedVehicleAction(
                         icon = Icons.Filled.Delete,
                         label = "Remover",
+                        enabled = actionsEnabled,
                         contentColor = MaterialTheme.colorScheme.error,
                         borderColor = MaterialTheme.colorScheme.error,
                         onClick = onDelete,
@@ -342,14 +449,14 @@ private fun ProfileVehicleIcon() {
 }
 
 @Composable
-private fun VehicleTypeBadge(type: VehicleType) {
+private fun VehicleTypeBadge(type: VehicleTypeUi) {
     val containerColor = when (type) {
-        VehicleType.Passenger -> MaterialTheme.colorScheme.primaryContainer
-        VehicleType.Suv -> MaterialTheme.colorScheme.secondaryContainer
+        VehicleTypeUi.Passenger -> MaterialTheme.colorScheme.primaryContainer
+        VehicleTypeUi.Suv -> MaterialTheme.colorScheme.secondaryContainer
     }
     val contentColor = when (type) {
-        VehicleType.Passenger -> MaterialTheme.colorScheme.onPrimaryContainer
-        VehicleType.Suv -> MaterialTheme.colorScheme.onSecondaryContainer
+        VehicleTypeUi.Passenger -> MaterialTheme.colorScheme.onPrimaryContainer
+        VehicleTypeUi.Suv -> MaterialTheme.colorScheme.onSecondaryContainer
     }
 
     Surface(
@@ -370,12 +477,14 @@ private fun VehicleTypeBadge(type: VehicleType) {
 private fun OutlinedVehicleAction(
     icon: ImageVector,
     label: String,
+    enabled: Boolean,
     contentColor: androidx.compose.ui.graphics.Color,
     borderColor: androidx.compose.ui.graphics.Color,
     onClick: () -> Unit,
 ) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         shape = RoundedCornerShape(10.dp),
         border = BorderStroke(1.dp, borderColor),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = contentColor),
@@ -424,6 +533,7 @@ private fun EmptyVehiclesCard(onAddVehicle: () -> Unit) {
                 text = "Adicione os seus veículos para facilitar futuras marcações",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
             Button(
                 onClick = onAddVehicle,
@@ -449,18 +559,109 @@ private fun EmptyVehiclesCard(onAddVehicle: () -> Unit) {
     }
 }
 
+private enum class VehiclesStatusIcon {
+    Loading,
+    Locked,
+    Empty,
+    Error,
+}
+
+@Composable
+private fun VehiclesStatusCard(
+    title: String,
+    body: String,
+    icon: VehiclesStatusIcon,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 36.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(58.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.tertiary,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    when (icon) {
+                        VehiclesStatusIcon.Loading -> CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            strokeWidth = 3.dp,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                        VehiclesStatusIcon.Locked -> Icon(Icons.Filled.Lock, null, modifier = Modifier.size(30.dp))
+                        VehiclesStatusIcon.Empty -> Icon(
+                            Icons.Filled.DirectionsCar,
+                            null,
+                            modifier = Modifier.size(30.dp),
+                        )
+                        VehiclesStatusIcon.Error -> Icon(
+                            Icons.Filled.ErrorOutline,
+                            null,
+                            modifier = Modifier.size(30.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            if (actionLabel != null && onAction != null) {
+                Button(
+                    onClick = onAction,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                    ),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AddVehicleDialog(
-    draft: VehicleDraft,
-    onDraftChange: (VehicleDraft) -> Unit,
+    draft: VehicleDraftUi,
+    mutationState: VehicleMutationUiState,
+    onDraftChange: (VehicleDraftUi) -> Unit,
     onDismiss: () -> Unit,
-    onAdd: () -> Unit,
+    onSave: () -> Unit,
 ) {
+    val isEditing = draft.id != null
+    val isSaving = mutationState is VehicleMutationUiState.Loading
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Adicionar Veículo",
+                text = if (isEditing) "Editar Veículo" else "Adicionar Veículo",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
@@ -468,6 +669,7 @@ private fun AddVehicleDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DialogMutationMessage(mutationState = mutationState)
                 VehicleTextField(
                     value = draft.brand,
                     onValueChange = { onDraftChange(draft.copy(brand = it)) },
@@ -500,23 +702,34 @@ private fun AddVehicleDialog(
         },
         confirmButton = {
             Button(
-                onClick = onAdd,
-                enabled = draft.canSubmit,
+                onClick = onSave,
+                enabled = draft.canSubmit && !isSaving,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiary,
                     contentColor = MaterialTheme.colorScheme.onTertiary,
                 ),
             ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onTertiary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
                 Text(
-                    text = "Adicionar",
+                    text = if (isSaving) "A guardar" else if (isEditing) "Guardar" else "Adicionar",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving,
+            ) {
                 Text(
                     text = "Cancelar",
                     style = MaterialTheme.typography.labelLarge,
@@ -525,6 +738,39 @@ private fun AddVehicleDialog(
         },
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
     )
+}
+
+@Composable
+private fun DialogMutationMessage(mutationState: VehicleMutationUiState) {
+    val message = when (mutationState) {
+        is VehicleMutationUiState.ValidationError -> mutationState.message
+        is VehicleMutationUiState.Error -> mutationState.message
+        else -> null
+    } ?: return
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ErrorOutline,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
 }
 
 @Composable
@@ -560,8 +806,8 @@ private fun VehicleTextField(
 
 @Composable
 private fun VehicleTypeSelector(
-    selected: VehicleType,
-    onSelect: (VehicleType) -> Unit,
+    selected: VehicleTypeUi,
+    onSelect: (VehicleTypeUi) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -574,7 +820,7 @@ private fun VehicleTypeSelector(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            VehicleType.values().forEach { type ->
+            VehicleTypeUi.values().forEach { type ->
                 val isSelected = selected == type
                 Surface(
                     modifier = Modifier
@@ -605,6 +851,7 @@ private fun VehicleTypeSelector(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
                     )
                 }
             }

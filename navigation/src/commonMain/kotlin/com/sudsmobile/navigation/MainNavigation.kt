@@ -148,6 +148,7 @@ fun MainNavigation(
                 VehiclesScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
                 )
             }
             composable(Routes.History) {

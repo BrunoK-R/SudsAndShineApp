@@ -34,6 +34,26 @@ data class FirebaseFunctionsConfig(
             "https://$region-$projectId.cloudfunctions.net/getMyReservations"
         }
 
+    val getMyVehiclesUrl: String
+        get() = functionUrl("getMyVehicles")
+
+    val createVehicleUrl: String
+        get() = functionUrl("createVehicle")
+
+    val updateVehicleUrl: String
+        get() = functionUrl("updateVehicle")
+
+    val deleteVehicleUrl: String
+        get() = functionUrl("deleteVehicle")
+
+    private fun functionUrl(functionName: String): String {
+        return if (useEmulator) {
+            "http://$emulatorHost:5001/$projectId/$region/$functionName"
+        } else {
+            "https://$region-$projectId.cloudfunctions.net/$functionName"
+        }
+    }
+
     companion object {
         fun default(isDebugBuild: Boolean, platformName: String): FirebaseFunctionsConfig {
             val normalizedPlatform = platformName.lowercase()
