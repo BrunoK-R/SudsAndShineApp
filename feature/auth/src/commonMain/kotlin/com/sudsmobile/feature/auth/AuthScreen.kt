@@ -33,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -58,6 +60,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 private enum class AuthMode {
     Login,
@@ -71,6 +75,8 @@ fun AuthScreen(
     onLoginSuccess: () -> Unit,
     onLoginCancelled: () -> Unit,
 ) {
+    val viewModel: AuthViewModel = koinViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var mode by rememberSaveable { mutableStateOf(AuthMode.Login.name) }
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var email by rememberSaveable { mutableStateOf("") }
@@ -78,6 +84,21 @@ fun AuthScreen(
     var name by rememberSaveable { mutableStateOf("") }
     var phone by rememberSaveable { mutableStateOf("") }
     var acceptsTerms by rememberSaveable { mutableStateOf(false) }
+    val isLoading = uiState is AuthUiState.Loading
+    val errorMessage = (uiState as? AuthUiState.Error)?.message
+
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is AuthUiState.Authenticated -> {
+                viewModel.clearTransientState()
+                onLoginSuccess()
+            }
+            AuthUiState.PasswordResetSent -> {
+                mode = AuthMode.ResetSent.name
+            }
+            else -> Unit
+        }
+    }
 
     AuthShell {
         when (AuthMode.valueOf(mode)) {
@@ -85,13 +106,21 @@ fun AuthScreen(
                 email = email,
                 password = password,
                 showPassword = showPassword,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
                 onEmailChange = { email = it },
                 onPasswordChange = { password = it },
                 onTogglePassword = { showPassword = !showPassword },
-                onForgotPassword = { mode = AuthMode.ForgotPassword.name },
-                onLogin = onLoginSuccess,
+                onForgotPassword = {
+                    viewModel.clearTransientState()
+                    mode = AuthMode.ForgotPassword.name
+                },
+                onLogin = { viewModel.signIn(email, password) },
                 onGuest = onLoginCancelled,
-                onCreateAccount = { mode = AuthMode.Register.name },
+                onCreateAccount = {
+                    viewModel.clearTransientState()
+                    mode = AuthMode.Register.name
+                },
             )
 
             AuthMode.Register -> RegisterContent(
@@ -101,26 +130,47 @@ fun AuthScreen(
                 password = password,
                 showPassword = showPassword,
                 acceptsTerms = acceptsTerms,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
                 onNameChange = { name = it },
                 onEmailChange = { email = it },
                 onPhoneChange = { phone = it },
                 onPasswordChange = { password = it },
                 onTogglePassword = { showPassword = !showPassword },
                 onAcceptsTermsChange = { acceptsTerms = it },
-                onRegister = onLoginSuccess,
-                onLogin = { mode = AuthMode.Login.name },
+                onRegister = {
+                    viewModel.register(
+                        displayName = name,
+                        email = email,
+                        phoneNumber = phone,
+                        password = password,
+                        acceptsTerms = acceptsTerms,
+                    )
+                },
+                onLogin = {
+                    viewModel.clearTransientState()
+                    mode = AuthMode.Login.name
+                },
             )
 
             AuthMode.ForgotPassword -> ForgotPasswordContent(
                 email = email,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
                 onEmailChange = { email = it },
-                onBack = { mode = AuthMode.Login.name },
-                onSubmit = { mode = AuthMode.ResetSent.name },
+                onBack = {
+                    viewModel.clearTransientState()
+                    mode = AuthMode.Login.name
+                },
+                onSubmit = { viewModel.sendPasswordReset(email) },
             )
 
             AuthMode.ResetSent -> ResetSentContent(
                 email = email,
-                onBackToLogin = { mode = AuthMode.Login.name },
+                onBackToLogin = {
+                    viewModel.clearTransientState()
+                    mode = AuthMode.Login.name
+                },
             )
         }
     }
@@ -154,6 +204,8 @@ private fun ColumnScope.LoginContent(
     email: String,
     password: String,
     showPassword: Boolean,
+    isLoading: Boolean,
+    errorMessage: String?,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onTogglePassword: () -> Unit,
@@ -169,6 +221,7 @@ private fun ColumnScope.LoginContent(
         subtitle = "Entre na sua conta para continuar",
     )
     Spacer(Modifier.height(28.dp))
+    AuthErrorMessage(errorMessage)
 
     AuthTextField(
         label = "Email",
@@ -228,9 +281,11 @@ private fun ColumnScope.LoginContent(
     PrimaryAuthButton(
         text = "Entrar",
         onClick = onLogin,
+        enabled = !isLoading,
+        loading = isLoading,
     )
     AuthDivider()
-    GuestButton(onClick = onGuest)
+    GuestButton(onClick = onGuest, enabled = !isLoading)
     Spacer(Modifier.height(22.dp))
     InlineAuthAction(
         prefix = "Não tem conta? ",
@@ -247,6 +302,8 @@ private fun ColumnScope.RegisterContent(
     password: String,
     showPassword: Boolean,
     acceptsTerms: Boolean,
+    isLoading: Boolean,
+    errorMessage: String?,
     onNameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onPhoneChange: (String) -> Unit,
@@ -263,6 +320,7 @@ private fun ColumnScope.RegisterContent(
         subtitle = "Registe-se para começar",
     )
     Spacer(Modifier.height(24.dp))
+    AuthErrorMessage(errorMessage)
 
     AuthTextField(
         label = "Nome Completo",
@@ -338,7 +396,8 @@ private fun ColumnScope.RegisterContent(
     PrimaryAuthButton(
         text = "Criar Conta",
         onClick = onRegister,
-        enabled = acceptsTerms,
+        enabled = acceptsTerms && !isLoading,
+        loading = isLoading,
     )
     Spacer(Modifier.height(22.dp))
     InlineAuthAction(
@@ -351,6 +410,8 @@ private fun ColumnScope.RegisterContent(
 @Composable
 private fun ColumnScope.ForgotPasswordContent(
     email: String,
+    isLoading: Boolean,
+    errorMessage: String?,
     onEmailChange: (String) -> Unit,
     onBack: () -> Unit,
     onSubmit: () -> Unit,
@@ -362,6 +423,7 @@ private fun ColumnScope.ForgotPasswordContent(
         subtitle = "Introduza o seu email para receber instruções",
     )
     Spacer(Modifier.height(30.dp))
+    AuthErrorMessage(errorMessage)
     AuthTextField(
         label = "Email",
         value = email,
@@ -377,7 +439,8 @@ private fun ColumnScope.ForgotPasswordContent(
     PrimaryAuthButton(
         text = "Enviar Instruções",
         onClick = onSubmit,
-        enabled = email.isNotBlank(),
+        enabled = email.isNotBlank() && !isLoading,
+        loading = isLoading,
     )
 }
 
@@ -474,6 +537,27 @@ private fun AuthHeader(
 }
 
 @Composable
+private fun AuthErrorMessage(message: String?) {
+    if (message == null) return
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 18.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 private fun AuthTextField(
     label: String,
     value: String,
@@ -540,6 +624,7 @@ private fun PrimaryAuthButton(
     text: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    loading: Boolean = false,
 ) {
     Button(
         onClick = onClick,
@@ -555,18 +640,30 @@ private fun PrimaryAuthButton(
             disabledContentColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.56f),
         ),
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 
 @Composable
-private fun GuestButton(onClick: () -> Unit) {
+private fun GuestButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),

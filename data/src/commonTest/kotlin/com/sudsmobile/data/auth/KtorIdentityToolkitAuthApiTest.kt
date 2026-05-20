@@ -1,0 +1,118 @@
+package com.sudsmobile.data.auth
+
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+
+class KtorIdentityToolkitAuthApiTest {
+    @Test
+    fun mapsSignInResponseToAuthSession() = runTest {
+        val api = KtorIdentityToolkitAuthApi(
+            httpClient = mockClient(
+                """
+                {
+                  "localId": "user-1",
+                  "email": "bruno@example.com",
+                  "displayName": "Bruno Ribeiro",
+                  "idToken": "id-token",
+                  "refreshToken": "refresh-token",
+                  "expiresIn": "3600"
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.signIn(email = "bruno@example.com", password = "password123")
+
+        val success = assertIs<AuthResult.Success>(result)
+        assertEquals("user-1", success.session.user.uid)
+        assertEquals("bruno@example.com", success.session.user.email)
+        assertEquals("Bruno Ribeiro", success.session.user.displayName)
+        assertEquals("id-token", success.session.idToken)
+        assertEquals(3600L, success.session.expiresInSeconds)
+    }
+
+    @Test
+    fun mapsInvalidCredentialsError() = runTest {
+        val api = KtorIdentityToolkitAuthApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "code": 400,
+                    "message": "INVALID_PASSWORD"
+                  }
+                }
+                """.trimIndent(),
+                status = HttpStatusCode.BadRequest,
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.signIn(email = "bruno@example.com", password = "wrong-password")
+
+        val failure = assertIs<AuthResult.Failure>(result)
+        assertIs<AuthError.InvalidCredentials>(failure.error)
+        assertEquals("Email ou palavra-passe inválidos.", failure.error.message)
+    }
+
+    @Test
+    fun mapsPasswordResetSuccess() = runTest {
+        val api = KtorIdentityToolkitAuthApi(
+            httpClient = mockClient(
+                """
+                {
+                  "email": "bruno@example.com"
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.sendPasswordReset(email = "bruno@example.com")
+
+        assertEquals(AuthActionResult.Success, result)
+    }
+}
+
+private fun mockClient(
+    responseJson: String,
+    status: HttpStatusCode = HttpStatusCode.OK,
+): HttpClient {
+    val engine = MockEngine {
+        respond(
+            content = responseJson,
+            status = status,
+            headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+        )
+    }
+    return HttpClient(engine) {
+        expectSuccess = false
+        install(ContentNegotiation) {
+            json(
+                Json {
+                    ignoreUnknownKeys = true
+                    explicitNulls = false
+                },
+            )
+        }
+    }
+}
+
+private fun testConfig(): FirebaseAuthConfig = FirebaseAuthConfig(
+    apiKey = "test-api-key",
+    useEmulator = true,
+    emulatorHost = "127.0.0.1",
+)

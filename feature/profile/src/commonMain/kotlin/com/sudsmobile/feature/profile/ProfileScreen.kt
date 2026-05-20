@@ -44,6 +44,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +53,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.auth.AuthUser
+import org.koin.compose.viewmodel.koinViewModel
 
 private data class ProfileStat(
     val value: String,
@@ -74,9 +79,9 @@ private enum class ProfileMenuAction {
 }
 
 private val profileStats = listOf(
-    ProfileStat(value = "7", label = "Lavagens"),
-    ProfileStat(value = "3", label = "Faltam", highlighted = true),
-    ProfileStat(value = "2", label = "Veículos"),
+    ProfileStat(value = "0", label = "Lavagens"),
+    ProfileStat(value = "0", label = "Faltam", highlighted = true),
+    ProfileStat(value = "0", label = "Veículos"),
 )
 
 private val menuItems = listOf(
@@ -114,6 +119,34 @@ fun ProfileScreen(
     onOpenContact: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
 ) {
+    val viewModel: ProfileViewModel = koinViewModel()
+    val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+
+    ProfileScreenContent(
+        contentPadding = contentPadding,
+        sessionState = sessionState,
+        onRequestSignIn = onRequestSignIn,
+        onSignOut = viewModel::signOut,
+        onManageVehicles = onManageVehicles,
+        onOpenHistory = onOpenHistory,
+        onOpenContact = onOpenContact,
+        onOpenRewards = onOpenRewards,
+    )
+}
+
+@Composable
+private fun ProfileScreenContent(
+    contentPadding: PaddingValues,
+    sessionState: AuthSessionState,
+    onRequestSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+    onManageVehicles: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
+    onOpenContact: () -> Unit = {},
+    onOpenRewards: () -> Unit = {},
+) {
+    val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -121,7 +154,11 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
     ) {
-        ProfileHeader()
+        if (authenticatedUser != null) {
+            ProfileHeader(user = authenticatedUser)
+        } else {
+            GuestProfileHeader(onRequestSignIn = onRequestSignIn)
+        }
 
         Column(
             modifier = Modifier
@@ -131,21 +168,25 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             NearestLocationCard()
-            ProfileMenuCard(
-                onManageVehicles = onManageVehicles,
-                onOpenHistory = onOpenHistory,
-                onOpenContact = onOpenContact,
-                onOpenRewards = onOpenRewards,
-            )
-            PreferencesCard()
-            LogoutButton(onClick = onRequestSignIn)
+            if (authenticatedUser != null) {
+                ProfileMenuCard(
+                    onManageVehicles = onManageVehicles,
+                    onOpenHistory = onOpenHistory,
+                    onOpenContact = onOpenContact,
+                    onOpenRewards = onOpenRewards,
+                )
+                PreferencesCard()
+                LogoutButton(onClick = onSignOut)
+            } else {
+                GuestProfileCard(onRequestSignIn = onRequestSignIn)
+            }
             AppVersionText()
         }
     }
 }
 
 @Composable
-private fun ProfileHeader() {
+private fun ProfileHeader(user: AuthUser) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -175,7 +216,7 @@ private fun ProfileHeader() {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = "JS",
+                        text = user.initials(),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                     )
@@ -184,13 +225,13 @@ private fun ProfileHeader() {
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "João Silva",
+                    text = user.resolvedDisplayName,
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "joao.silva@exemplo.com",
+                    text = user.email,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.62f),
                 )
@@ -207,6 +248,134 @@ private fun ProfileHeader() {
                 ProfileStatCard(
                     stat = stat,
                     modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuestProfileHeader(onRequestSignIn: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.inverseSurface,
+                        MaterialTheme.colorScheme.secondary,
+                    ),
+                ),
+            )
+            .safeDrawingPadding()
+            .padding(horizontal = 24.dp)
+            .padding(top = 28.dp, bottom = 36.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(72.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
+                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Área pessoal",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Entre para ver os seus dados e marcações.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.66f),
+                )
+            }
+        }
+
+        Button(
+            onClick = onRequestSignIn,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            ),
+        ) {
+            Text(
+                text = "Entrar ou criar conta",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GuestProfileCard(onRequestSignIn: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                ProfileIconContainer(icon = Icons.Filled.Security)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "Sessão necessária",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Os veículos, histórico e preferências ficam associados à sua conta.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = onRequestSignIn,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ),
+            ) {
+                Text(
+                    text = "Iniciar sessão",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
@@ -249,6 +418,16 @@ private fun ProfileStatCard(
             )
         }
     }
+}
+
+private fun AuthUser.initials(): String {
+    val source = displayName.ifBlank { email.substringBefore("@") }
+    return source
+        .split(" ", ".", "_", "-", limit = 4)
+        .filter { it.isNotBlank() }
+        .take(2)
+        .joinToString(separator = "") { it.first().uppercaseChar().toString() }
+        .ifBlank { "SS" }
 }
 
 @Composable
