@@ -50,7 +50,7 @@ class FirebaseAuthRepository(
         phoneNumber: String,
         password: String,
     ): AuthResult {
-        val validationError = validateRegistration(displayName, email, password)
+        val validationError = validateRegistration(displayName, email, phoneNumber, password)
         if (validationError != null) return AuthResult.Failure(validationError)
 
         val sanitizedDisplayName = displayName.trim()
@@ -175,10 +175,15 @@ class FirebaseAuthRepository(
     private fun validateRegistration(
         displayName: String,
         email: String,
+        phoneNumber: String,
         password: String,
     ): AuthError.Validation? {
+        val phone = phoneNumber.trim()
         return when {
             displayName.isBlank() -> AuthError.Validation("Indique o nome para criar a conta.")
+            phone.length < 6 -> AuthError.Validation("Indique um telemóvel válido.")
+            phone.length > MaxPhoneLength || !phone.all { it.isDigit() || it in phoneSeparators } ->
+                AuthError.Validation("Indique um telemóvel válido.")
             else -> validateCredentials(email, password)
         }
     }
@@ -235,3 +240,6 @@ private fun String.isValidEmail(): Boolean {
     val trimmed = trim()
     return trimmed.contains("@") && !trimmed.startsWith("@") && !trimmed.endsWith("@")
 }
+
+private const val MaxPhoneLength = 32
+private val phoneSeparators = setOf('+', '-', '(', ')', '.', ' ')

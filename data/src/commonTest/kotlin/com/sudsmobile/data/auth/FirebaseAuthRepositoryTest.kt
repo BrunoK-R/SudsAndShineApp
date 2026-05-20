@@ -45,6 +45,23 @@ class FirebaseAuthRepositoryTest {
     }
 
     @Test
+    fun registerRejectsInvalidPhoneBeforeCallingApi() = runTest {
+        val api = RecordingAuthApi()
+        val repository = FirebaseAuthRepository(api)
+
+        val result = repository.register(
+            displayName = "Bruno Ribeiro",
+            email = "bruno@example.com",
+            phoneNumber = "abc",
+            password = "secret123",
+        )
+
+        assertIs<AuthResult.Failure>(result)
+        assertIs<AuthError.Validation>(result.error)
+        assertEquals(0, api.signUpCalls)
+    }
+
+    @Test
     fun signOutClearsAuthenticatedSession() = runTest {
         val store = RecordingAuthSessionStore()
         val repository = FirebaseAuthRepository(
@@ -129,6 +146,8 @@ class FirebaseAuthRepositoryTest {
 private class RecordingAuthApi : AuthApi {
     var signInCalls: Int = 0
         private set
+    var signUpCalls: Int = 0
+        private set
     var lastSignUpEmail: String? = null
         private set
     var lastDisplayName: String? = null
@@ -142,6 +161,7 @@ private class RecordingAuthApi : AuthApi {
     }
 
     override suspend fun signUp(email: String, password: String): AuthResult {
+        signUpCalls += 1
         lastSignUpEmail = email
         return AuthResult.Success(testSession(email = email, displayName = ""))
     }

@@ -85,7 +85,12 @@ fun AuthScreen(
     var phone by rememberSaveable { mutableStateOf("") }
     var acceptsTerms by rememberSaveable { mutableStateOf(false) }
     val isLoading = uiState is AuthUiState.Loading
-    val errorMessage = (uiState as? AuthUiState.Error)?.message
+    val errorMessage = when (val state = uiState) {
+        is AuthUiState.Error -> state.message
+        is AuthUiState.RegistrationProfileError -> state.message
+        else -> null
+    }
+    val profileSyncFailed = uiState is AuthUiState.RegistrationProfileError
 
     LaunchedEffect(uiState) {
         when (uiState) {
@@ -132,6 +137,7 @@ fun AuthScreen(
                 acceptsTerms = acceptsTerms,
                 isLoading = isLoading,
                 errorMessage = errorMessage,
+                profileSyncFailed = profileSyncFailed,
                 onNameChange = { name = it },
                 onEmailChange = { email = it },
                 onPhoneChange = { phone = it },
@@ -147,6 +153,8 @@ fun AuthScreen(
                         acceptsTerms = acceptsTerms,
                     )
                 },
+                onRetryProfileSave = viewModel::retryRegistrationProfileSave,
+                onContinueAfterProfileError = viewModel::continueAfterRegistrationProfileError,
                 onLogin = {
                     viewModel.clearTransientState()
                     mode = AuthMode.Login.name
@@ -304,6 +312,7 @@ private fun ColumnScope.RegisterContent(
     acceptsTerms: Boolean,
     isLoading: Boolean,
     errorMessage: String?,
+    profileSyncFailed: Boolean,
     onNameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onPhoneChange: (String) -> Unit,
@@ -311,6 +320,8 @@ private fun ColumnScope.RegisterContent(
     onTogglePassword: () -> Unit,
     onAcceptsTermsChange: (Boolean) -> Unit,
     onRegister: () -> Unit,
+    onRetryProfileSave: () -> Unit,
+    onContinueAfterProfileError: () -> Unit,
     onLogin: () -> Unit,
 ) {
     BrandMark(modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -394,17 +405,33 @@ private fun ColumnScope.RegisterContent(
     )
     Spacer(Modifier.height(12.dp))
     PrimaryAuthButton(
-        text = "Criar Conta",
-        onClick = onRegister,
-        enabled = acceptsTerms && !isLoading,
+        text = if (profileSyncFailed) "Tentar guardar dados" else "Criar Conta",
+        onClick = if (profileSyncFailed) onRetryProfileSave else onRegister,
+        enabled = (profileSyncFailed || acceptsTerms) && !isLoading,
         loading = isLoading,
     )
     Spacer(Modifier.height(22.dp))
-    InlineAuthAction(
-        prefix = "Já tem conta? ",
-        action = "Entrar",
-        onClick = onLogin,
-    )
+    if (profileSyncFailed) {
+        TextButton(
+            onClick = onContinueAfterProfileError,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+            ),
+        ) {
+            Text(
+                text = "Continuar e completar depois",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    } else {
+        InlineAuthAction(
+            prefix = "Já tem conta? ",
+            action = "Entrar",
+            onClick = onLogin,
+        )
+    }
 }
 
 @Composable
