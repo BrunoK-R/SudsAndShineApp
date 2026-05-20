@@ -51,6 +51,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +61,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -74,6 +76,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 private data class BookingService(
     val id: String,
@@ -227,6 +231,32 @@ fun ProductsScreen(
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
 ) {
+    val viewModel: ProductsBookingViewModel = koinViewModel()
+    val submitState by viewModel.submitState.collectAsStateWithLifecycle()
+
+    ProductsScreenContent(
+        contentPadding = contentPadding,
+        submitState = submitState,
+        onSubmitBooking = viewModel::submitBooking,
+        onClearSubmitError = viewModel::clearSubmitError,
+        onSubmitSuccessConsumed = viewModel::consumeSuccess,
+        onBack = onBack,
+        onViewBooking = onViewBooking,
+        onHome = onHome,
+    )
+}
+
+@Composable
+private fun ProductsScreenContent(
+    contentPadding: PaddingValues,
+    submitState: BookingSubmitUiState,
+    onSubmitBooking: (ProductsBookingDraft?) -> Unit,
+    onClearSubmitError: () -> Unit,
+    onSubmitSuccessConsumed: () -> Unit,
+    onBack: () -> Unit = {},
+    onViewBooking: () -> Unit = {},
+    onHome: () -> Unit = {},
+) {
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -237,6 +267,7 @@ fun ProductsScreen(
     var contactEmail by rememberSaveable { mutableStateOf("") }
     var contactNotes by rememberSaveable { mutableStateOf("") }
     var acceptsPrivacy by rememberSaveable { mutableStateOf(false) }
+    var reservationCode by rememberSaveable { mutableStateOf<String?>(null) }
     val currentStep = BookingStep.valueOf(currentStepName)
     val contactFormValid = contactName.isNotBlank() &&
         contactPhone.isNotBlank() &&
@@ -245,6 +276,26 @@ fun ProductsScreen(
     val selectedService = bookingServices.firstOrNull { it.id == selectedServiceId }
     val selectedVehicle = bookingVehicles.firstOrNull { it.id == selectedVehicleId }
     val selectedDate = bookingDateOptions.firstOrNull { it.id == selectedDateId }
+    val bookingDraft = buildBookingDraft(
+        service = selectedService,
+        vehicle = selectedVehicle,
+        date = selectedDate,
+        time = selectedTime,
+        name = contactName,
+        phone = contactPhone,
+        email = contactEmail,
+        notes = contactNotes,
+        acceptsPrivacy = acceptsPrivacy,
+    )
+
+    LaunchedEffect(submitState) {
+        val state = submitState
+        if (state is BookingSubmitUiState.Success) {
+            reservationCode = state.receipt.reservationCode
+            currentStepName = BookingStep.Success.name
+            onSubmitSuccessConsumed()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -272,7 +323,10 @@ fun ProductsScreen(
                             BookingServiceCard(
                                 service = service,
                                 selected = selectedServiceId == service.id,
-                                onSelected = { selectedServiceId = service.id },
+                                onSelected = {
+                                    selectedServiceId = service.id
+                                    onClearSubmitError()
+                                },
                             )
                         }
                     }
@@ -301,7 +355,10 @@ fun ProductsScreen(
                             BookingVehicleCard(
                                 vehicle = vehicle,
                                 selected = selectedVehicleId == vehicle.id,
-                                onSelected = { selectedVehicleId = vehicle.id },
+                                onSelected = {
+                                    selectedVehicleId = vehicle.id
+                                    onClearSubmitError()
+                                },
                             )
                         }
 
@@ -320,8 +377,12 @@ fun ProductsScreen(
                         onDateSelected = { dateId ->
                             selectedDateId = dateId
                             selectedTime = null
+                            onClearSubmitError()
                         },
-                        onTimeSelected = { selectedTime = it },
+                        onTimeSelected = {
+                            selectedTime = it
+                            onClearSubmitError()
+                        },
                     )
                 }
 
@@ -336,11 +397,26 @@ fun ProductsScreen(
                         email = contactEmail,
                         notes = contactNotes,
                         acceptsPrivacy = acceptsPrivacy,
-                        onNameChange = { contactName = it },
-                        onPhoneChange = { contactPhone = it },
-                        onEmailChange = { contactEmail = it },
-                        onNotesChange = { contactNotes = it },
-                        onAcceptsPrivacyChange = { acceptsPrivacy = it },
+                        onNameChange = {
+                            contactName = it
+                            onClearSubmitError()
+                        },
+                        onPhoneChange = {
+                            contactPhone = it
+                            onClearSubmitError()
+                        },
+                        onEmailChange = {
+                            contactEmail = it
+                            onClearSubmitError()
+                        },
+                        onNotesChange = {
+                            contactNotes = it
+                            onClearSubmitError()
+                        },
+                        onAcceptsPrivacyChange = {
+                            acceptsPrivacy = it
+                            onClearSubmitError()
+                        },
                     )
                 }
 
@@ -358,9 +434,19 @@ fun ProductsScreen(
                         phone = contactPhone,
                         email = contactEmail,
                         notes = contactNotes,
-                        onEditService = { currentStepName = BookingStep.Service.name },
-                        onEditDateTime = { currentStepName = BookingStep.DateTime.name },
-                        onEditContact = { currentStepName = BookingStep.Contact.name },
+                        onEditService = {
+                            currentStepName = BookingStep.Service.name
+                            onClearSubmitError()
+                        },
+                        onEditDateTime = {
+                            currentStepName = BookingStep.DateTime.name
+                            onClearSubmitError()
+                        },
+                        onEditContact = {
+                            currentStepName = BookingStep.Contact.name
+                            onClearSubmitError()
+                        },
+                        submitState = submitState,
                     )
                 }
 
@@ -370,6 +456,7 @@ fun ProductsScreen(
                         date = selectedDate,
                         time = selectedTime,
                         phone = contactPhone,
+                        reservationCode = reservationCode,
                         onAddToCalendar = {},
                         onViewBooking = onViewBooking,
                         onHome = onHome,
@@ -389,7 +476,8 @@ fun ProductsScreen(
                         selectedVehicle != null &&
                         selectedDate != null &&
                         selectedTime != null &&
-                        contactFormValid
+                        contactFormValid &&
+                        submitState !is BookingSubmitUiState.Loading
                     BookingStep.Success -> false
                 },
                 onClick = {
@@ -398,13 +486,19 @@ fun ProductsScreen(
                         BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
                         BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
                         BookingStep.Contact -> currentStepName = BookingStep.Confirmation.name
-                        BookingStep.Confirmation -> currentStepName = BookingStep.Success.name
+                        BookingStep.Confirmation -> onSubmitBooking(bookingDraft)
                         BookingStep.Success -> Unit
                     }
                 },
                 label = when (currentStep) {
                     BookingStep.Contact -> "Rever Marcação"
-                    BookingStep.Confirmation -> "Confirmar Marcação"
+                    BookingStep.Confirmation -> if (submitState is BookingSubmitUiState.Loading) {
+                        "A confirmar..."
+                    } else if (submitState is BookingSubmitUiState.Error && submitState.retryable) {
+                        "Tentar novamente"
+                    } else {
+                        "Confirmar Marcação"
+                    }
                     else -> "Continuar"
                 },
                 contentPadding = contentPadding,
@@ -529,6 +623,7 @@ private fun BookingConfirmationContent(
     onEditService: () -> Unit,
     onEditDateTime: () -> Unit,
     onEditContact: () -> Unit,
+    submitState: BookingSubmitUiState,
 ) {
     Column(
         modifier = Modifier
@@ -594,6 +689,87 @@ private fun BookingConfirmationContent(
             serviceName = service?.name ?: "Serviço",
             price = service?.passengerPrice ?: "0,00€",
         )
+
+        BookingSubmitStatusCard(submitState)
+    }
+}
+
+@Composable
+private fun BookingSubmitStatusCard(
+    submitState: BookingSubmitUiState,
+) {
+    when (submitState) {
+        BookingSubmitUiState.Idle, is BookingSubmitUiState.Success -> Unit
+
+        BookingSubmitUiState.Loading -> {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = MaterialTheme.colorScheme.secondary,
+                        strokeWidth = 2.dp,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "A confirmar marcação",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Estamos a validar o horário com o sistema de reservas.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+
+        is BookingSubmitUiState.Error -> {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Não foi possível confirmar",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = submitState.message,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -798,6 +974,7 @@ private fun BookingSuccessContent(
     date: BookingDateOption?,
     time: String?,
     phone: String,
+    reservationCode: String?,
     onAddToCalendar: () -> Unit,
     onViewBooking: () -> Unit,
     onHome: () -> Unit,
@@ -867,7 +1044,7 @@ private fun BookingSuccessContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "SS-4MAI-1430",
+                    text = reservationCode ?: "A confirmar",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -1758,6 +1935,38 @@ private fun VehicleHelpCard() {
             }
         }
     }
+}
+
+private fun buildBookingDraft(
+    service: BookingService?,
+    vehicle: BookingVehicle?,
+    date: BookingDateOption?,
+    time: String?,
+    name: String,
+    phone: String,
+    email: String,
+    notes: String,
+    acceptsPrivacy: Boolean,
+): ProductsBookingDraft? {
+    if (service == null || vehicle == null || date == null || time == null) return null
+    return ProductsBookingDraft(
+        customerName = name,
+        customerEmail = email,
+        customerPhone = phone,
+        serviceId = service.id,
+        serviceName = service.name,
+        dateId = date.id,
+        time = time,
+        serviceDurationMinutes = service.durationMinutes(),
+        vehicleType = vehicle.id,
+        gdprConsent = acceptsPrivacy,
+        notes = notes,
+    )
+}
+
+private fun BookingService.durationMinutes(): Int {
+    val digits = duration.filter { it.isDigit() }
+    return digits.toIntOrNull() ?: 30
 }
 
 @Composable
