@@ -195,6 +195,60 @@ class KtorBookingFunctionsApiTest {
         assertEquals(3400, success.history.reservations.first().priceCents)
         assertEquals(true, success.history.reservations.first().upcoming)
     }
+
+    @Test
+    fun submitsReviewWithAuthorizationHeader() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "reviewId": "review-1",
+                    "reservationId": "reservation-1"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.submitReservationReview(validReviewRequest(), idToken = "id-token-1")
+
+        val success = assertIs<BookingReviewResult.Success>(result)
+        assertEquals("/test-project/europe-west1/submitReservationReview", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("review-1", success.receipt.reviewId)
+        assertEquals("reservation-1", success.receipt.reservationId)
+    }
+
+    @Test
+    fun mapsReviewPreconditionErrorToNotReviewableState() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "FAILED_PRECONDITION",
+                    "message": "Reservation is not ready for review"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.submitReservationReview(validReviewRequest(), idToken = "id-token-1")
+
+        val failure = assertIs<BookingReviewResult.Failure>(result)
+        assertIs<BookingReviewError.NotReviewable>(failure.error)
+        assertEquals("Reservation is not ready for review", failure.error.message)
+    }
 }
 
 private fun mockClient(
@@ -240,4 +294,11 @@ private fun validRequest(): BookingCreateRequest = BookingCreateRequest(
     vehicleType = "passageiros",
     gdprConsent = true,
     notes = "",
+)
+
+private fun validReviewRequest(): BookingReviewRequest = BookingReviewRequest(
+    reservationId = "reservation-1",
+    rating = 5,
+    tags = listOf("Qualidade", "Rápido"),
+    comment = "Ficou impecável.",
 )

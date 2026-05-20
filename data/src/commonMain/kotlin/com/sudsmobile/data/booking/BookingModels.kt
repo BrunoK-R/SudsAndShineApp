@@ -38,6 +38,18 @@ data class BookingHistoryReservation(
     val upcoming: Boolean,
 )
 
+data class BookingReviewRequest(
+    val reservationId: String,
+    val rating: Int,
+    val tags: List<String>,
+    val comment: String,
+)
+
+data class BookingReviewReceipt(
+    val reviewId: String,
+    val reservationId: String,
+)
+
 data class BookingAvailabilityRequest(
     val anchorDate: String? = null,
     val serviceDurationMinutes: Int = 30,
@@ -80,6 +92,11 @@ sealed interface BookingHistoryResult {
     data class Failure(val error: BookingHistoryError) : BookingHistoryResult
 }
 
+sealed interface BookingReviewResult {
+    data class Success(val receipt: BookingReviewReceipt) : BookingReviewResult
+    data class Failure(val error: BookingReviewError) : BookingReviewResult
+}
+
 sealed interface BookingCreateError {
     val message: String
 
@@ -110,8 +127,25 @@ sealed interface BookingHistoryError {
     data class Backend(override val message: String) : BookingHistoryError
 }
 
+sealed interface BookingReviewError {
+    val message: String
+
+    data class Validation(override val message: String) : BookingReviewError
+    data class Permission(override val message: String) : BookingReviewError
+    data class Unauthenticated(override val message: String) : BookingReviewError
+    data class NotFound(override val message: String) : BookingReviewError
+    data class NotReviewable(override val message: String) : BookingReviewError
+    data class Unavailable(override val message: String) : BookingReviewError
+    data class Backend(override val message: String) : BookingReviewError
+}
+
 interface BookingRepository {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult
     suspend fun getMyBookings(): BookingHistoryResult
+    suspend fun submitReview(request: BookingReviewRequest): BookingReviewResult {
+        return BookingReviewResult.Failure(
+            BookingReviewError.Unavailable("O envio de avaliações ainda não está disponível."),
+        )
+    }
 }

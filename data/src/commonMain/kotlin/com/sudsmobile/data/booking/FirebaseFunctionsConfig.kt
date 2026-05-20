@@ -34,6 +34,9 @@ data class FirebaseFunctionsConfig(
             "https://$region-$projectId.cloudfunctions.net/getMyReservations"
         }
 
+    val submitReservationReviewUrl: String
+        get() = functionUrl("submitReservationReview")
+
     val getMyVehiclesUrl: String
         get() = functionUrl("getMyVehicles")
 

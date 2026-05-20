@@ -28,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.savedstate.read
 import com.sudsmobile.feature.blog.BlogScreen
 import com.sudsmobile.feature.cart.CartScreen
 import com.sudsmobile.feature.cart.RatingScreen
@@ -119,14 +120,18 @@ fun MainNavigation(
             composable(Routes.Cart) {
                 CartScreen(
                     contentPadding = paddingValues,
-                    onRateService = { navController.navigate(Routes.Rating) },
+                    onRateService = { reservationId -> navController.navigate(Routes.rating(reservationId)) },
                     onRequestSignIn = onRequestSignIn,
                 )
             }
-            composable(Routes.Rating) {
+            composable(Routes.Rating) { backStackEntry ->
                 RatingScreen(
+                    reservationId = backStackEntry.arguments
+                        ?.read { getStringOrNull(Routes.RatingReservationIdArg) }
+                        .orEmpty(),
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
                     onHome = {
                         navController.navigate(Routes.Home) {
                             popUpTo(navController.graph.findStartDestination().id) {

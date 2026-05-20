@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Recommend
 import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.filled.Shield
@@ -85,7 +86,7 @@ private val ratingTags = listOf(
 @Composable
 fun CartScreen(
     contentPadding: PaddingValues,
-    onRateService: () -> Unit = {},
+    onRateService: (String) -> Unit = {},
     onRequestSignIn: () -> Unit = {},
 ) {
     val viewModel: CartBookingsViewModel = koinViewModel()
@@ -217,7 +218,7 @@ private fun BookingsContent(
     onTabSelected: (BookingsTab) -> Unit,
     onRetry: () -> Unit,
     onRequestSignIn: () -> Unit,
-    onRateService: () -> Unit,
+    onRateService: (String) -> Unit,
 ) {
     when (uiState) {
         CartBookingsUiState.Idle,
@@ -281,7 +282,7 @@ private fun BookingsContent(
                             booking = booking,
                             showRatingAction = selectedTab == BookingsTab.Completed &&
                                 booking.status == BookingStatusUi.Completed,
-                            onRateService = onRateService,
+                            onRateService = { onRateService(booking.id) },
                         )
                     }
                 }
@@ -480,16 +481,25 @@ private fun BookingSummaryCard(
 
 @Composable
 fun RatingScreen(
+    reservationId: String,
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     onHome: () -> Unit,
+    onRequestSignIn: () -> Unit = {},
 ) {
+    val viewModel: RatingViewModel = koinViewModel()
+    val targetState by viewModel.targetState.collectAsStateWithLifecycle()
+    val submitState by viewModel.submitState.collectAsStateWithLifecycle()
+    val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     var rating by rememberSaveable { mutableStateOf(0) }
     var selectedTagIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var comment by rememberSaveable { mutableStateOf("") }
-    var submitted by rememberSaveable { mutableStateOf(false) }
 
-    if (submitted) {
+    LaunchedEffect(reservationId, sessionState) {
+        viewModel.refreshTarget(reservationId)
+    }
+
+    if (submitState is RatingSubmitUiState.Success) {
         RatingSubmittedScreen(
             contentPadding = contentPadding,
             onHome = onHome,
@@ -517,32 +527,85 @@ fun RatingScreen(
                     .padding(top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                CompletedServiceCard()
-                RatingStarsCard(
-                    rating = rating,
-                    onRatingSelected = { rating = it },
-                )
-
-                if (rating > 0) {
-                    RatingTagsCard(
-                        selectedTagIds = selectedTagIds,
-                        onTagToggled = { tagId ->
-                            selectedTagIds = if (tagId in selectedTagIds) {
-                                selectedTagIds - tagId
-                            } else {
-                                selectedTagIds + tagId
-                            }
+                when (val target = targetState) {
+                    RatingTargetUiState.Idle,
+                    RatingTargetUiState.Loading -> BookingsStatusCard(
+                        title = "A carregar marcação",
+                        body = "Estamos a validar a lavagem concluída para avaliação.",
+                        loading = true,
+                    )
+                    RatingTargetUiState.Unauthenticated -> BookingsStatusCard(
+                        title = "Sessão necessária",
+                        body = "Entre na sua conta para avaliar esta lavagem.",
+                        actionLabel = "Entrar",
+                        onAction = onRequestSignIn,
+                    )
+                    RatingTargetUiState.NotFound -> BookingsStatusCard(
+                        title = "Marcação indisponível",
+                        body = "Esta lavagem já não está disponível para avaliação.",
+                        actionLabel = "Voltar",
+                        onAction = onBack,
+                    )
+                    is RatingTargetUiState.Error -> BookingsStatusCard(
+                        title = "Não foi possível carregar",
+                        body = target.message,
+                        actionLabel = if (target.retryable) "Tentar novamente" else null,
+                        onAction = if (target.retryable) {
+                            { viewModel.loadTarget(reservationId) }
+                        } else {
+                            null
                         },
                     )
-                    RatingCommentCard(
-                        comment = comment,
-                        onCommentChange = { comment = it },
-                    )
+                    is RatingTargetUiState.Loaded -> {
+                        CompletedServiceCard(target.target)
+                        RatingStarsCard(
+                            rating = rating,
+                            onRatingSelected = {
+                                rating = it
+                                viewModel.clearSubmitError()
+                            },
+                        )
+
+                        if (rating > 0) {
+                            RatingTagsCard(
+                                selectedTagIds = selectedTagIds,
+                                onTagToggled = { tagId ->
+                                    selectedTagIds = if (tagId in selectedTagIds) {
+                                        selectedTagIds - tagId
+                                    } else {
+                                        selectedTagIds + tagId
+                                    }
+                                    viewModel.clearSubmitError()
+                                },
+                            )
+                            RatingCommentCard(
+                                comment = comment,
+                                onCommentChange = {
+                                    comment = it.take(1000)
+                                    viewModel.clearSubmitError()
+                                },
+                            )
+                        }
+
+                        RatingSubmitMessageCard(
+                            submitState = submitState,
+                            onRetry = {
+                                viewModel.submitReview(
+                                    reservationId = target.target.reservationId,
+                                    rating = rating,
+                                    tags = selectedTagIds.toRatingLabels(),
+                                    comment = comment,
+                                )
+                            },
+                            onRequestSignIn = onRequestSignIn,
+                        )
+                    }
                 }
             }
         }
 
-        if (rating > 0) {
+        val loadedTarget = (targetState as? RatingTargetUiState.Loaded)?.target
+        if (rating > 0 && loadedTarget != null) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -553,7 +616,15 @@ fun RatingScreen(
                 Column {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Button(
-                        onClick = { submitted = true },
+                        onClick = {
+                            viewModel.submitReview(
+                                reservationId = loadedTarget.reservationId,
+                                rating = rating,
+                                tags = selectedTagIds.toRatingLabels(),
+                                comment = comment,
+                            )
+                        },
+                        enabled = submitState !is RatingSubmitUiState.Loading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 24.dp)
@@ -565,8 +636,20 @@ fun RatingScreen(
                             contentColor = MaterialTheme.colorScheme.onTertiary,
                         ),
                     ) {
+                        if (submitState is RatingSubmitUiState.Loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onTertiary,
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.size(10.dp))
+                        }
                         Text(
-                            text = "Enviar Avaliação",
+                            text = if (submitState is RatingSubmitUiState.Loading) {
+                                "A enviar..."
+                            } else {
+                                "Enviar Avaliação"
+                            },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                         )
@@ -575,6 +658,12 @@ fun RatingScreen(
             }
         }
     }
+}
+
+private fun List<String>.toRatingLabels(): List<String> {
+    return ratingTags
+        .filter { it.id in this }
+        .map { it.label }
 }
 
 @Composable
@@ -634,7 +723,7 @@ private fun RatingHeader(onBack: () -> Unit) {
 }
 
 @Composable
-private fun CompletedServiceCard() {
+private fun CompletedServiceCard(target: RatingTargetUi) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -651,16 +740,146 @@ private fun CompletedServiceCard() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Lavagem Premium",
+                text = target.service,
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "15 de Março, 2026",
+                text = target.date,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text(
+                text = target.vehicle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RatingSubmitMessageCard(
+    submitState: RatingSubmitUiState,
+    onRetry: () -> Unit,
+    onRequestSignIn: () -> Unit,
+) {
+    when (submitState) {
+        RatingSubmitUiState.Idle,
+        RatingSubmitUiState.Success -> Unit
+
+        RatingSubmitUiState.Loading -> Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            shape = RoundedCornerShape(18.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = MaterialTheme.colorScheme.secondary,
+                    strokeWidth = 2.dp,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "A enviar avaliação",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Estamos a guardar o feedback associado à sua marcação.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
+        is RatingSubmitUiState.ValidationError -> RatingSubmitErrorCard(
+            message = submitState.message,
+            actionLabel = null,
+            onAction = null,
+        )
+
+        is RatingSubmitUiState.Error -> RatingSubmitErrorCard(
+            message = submitState.message,
+            actionLabel = when {
+                submitState.requiresSignIn -> "Entrar"
+                submitState.retryable -> "Tentar novamente"
+                else -> null
+            },
+            onAction = when {
+                submitState.requiresSignIn -> onRequestSignIn
+                submitState.retryable -> onRetry
+                else -> null
+            },
+        )
+    }
+}
+
+@Composable
+private fun RatingSubmitErrorCard(
+    message: String,
+    actionLabel: String?,
+    onAction: (() -> Unit)?,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Não foi possível enviar",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            if (actionLabel != null && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.36f),
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                ) {
+                    Text(actionLabel, style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
     }
 }

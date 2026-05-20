@@ -97,6 +97,40 @@ class KtorBookingFunctionsApi(
         }
     }
 
+    override suspend fun submitReservationReview(
+        request: BookingReviewRequest,
+        idToken: String,
+    ): BookingReviewResult {
+        return try {
+            val response = httpClient.post(config.submitReservationReviewUrl) {
+                callableHeaders(idToken)
+                setBody(CallableReviewRequest(ReviewPayload.from(request)))
+            }
+            val body = response.body<CallableReviewResponse>()
+            val error = body.error
+            when {
+                error != null -> BookingReviewResult.Failure(error.toReviewError())
+                body.result != null -> BookingReviewResult.Success(
+                    BookingReviewReceipt(
+                        reviewId = body.result.reviewId,
+                        reservationId = body.result.reservationId,
+                    ),
+                )
+                else -> BookingReviewResult.Failure(
+                    BookingReviewError.Backend("A resposta da avaliação veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingReviewResult.Failure(
+                BookingReviewError.Unavailable(
+                    "Não foi possível enviar a avaliação. Tente novamente.",
+                ),
+            )
+        }
+    }
+
     private fun io.ktor.client.request.HttpRequestBuilder.callableHeaders(idToken: String? = null) {
         header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
         if (!idToken.isNullOrBlank()) {
@@ -118,6 +152,11 @@ private data class CallableCreateReservationRequest(
 @Serializable
 private data class CallableMyReservationsRequest(
     val data: Map<String, String>,
+)
+
+@Serializable
+private data class CallableReviewRequest(
+    val data: ReviewPayload,
 )
 
 @Serializable
@@ -169,6 +208,23 @@ private data class CreateReservationPayload(
 }
 
 @Serializable
+private data class ReviewPayload(
+    val reservationId: String,
+    val rating: Int,
+    val tags: List<String>,
+    val comment: String,
+) {
+    companion object {
+        fun from(request: BookingReviewRequest): ReviewPayload = ReviewPayload(
+            reservationId = request.reservationId,
+            rating = request.rating,
+            tags = request.tags,
+            comment = request.comment,
+        )
+    }
+}
+
+@Serializable
 private data class CallableGetAvailabilityResponse(
     val result: GetAvailabilityResult? = null,
     val error: CallableError? = null,
@@ -183,6 +239,12 @@ private data class CallableCreateReservationResponse(
 @Serializable
 private data class CallableMyReservationsResponse(
     val result: MyReservationsResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableReviewResponse(
+    val result: ReviewResult? = null,
     val error: CallableError? = null,
 )
 
@@ -236,6 +298,13 @@ private data class CreateReservationResult(
     val ok: Boolean = false,
     val reservationId: String,
     val reservationCode: String,
+)
+
+@Serializable
+private data class ReviewResult(
+    val ok: Boolean = false,
+    val reviewId: String,
+    val reservationId: String,
 )
 
 @Serializable
@@ -315,6 +384,20 @@ private data class CallableError(
             "UNAUTHENTICATED" -> BookingHistoryError.Unauthenticated("Inicie sessão para ver as suas marcações.")
             "UNAVAILABLE" -> BookingHistoryError.Unavailable("O serviço de marcações está indisponível.")
             else -> BookingHistoryError.Backend(fallbackMessage)
+        }
+    }
+
+    fun toReviewError(): BookingReviewError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível enviar a avaliação."
+        return when (normalizedCode) {
+            "INVALID_ARGUMENT" -> BookingReviewError.Validation(fallbackMessage)
+            "PERMISSION_DENIED" -> BookingReviewError.Permission("Esta marcação não pertence à sessão atual.")
+            "UNAUTHENTICATED" -> BookingReviewError.Unauthenticated("Inicie sessão para avaliar esta marcação.")
+            "NOT_FOUND" -> BookingReviewError.NotFound("A marcação selecionada já não existe.")
+            "FAILED_PRECONDITION" -> BookingReviewError.NotReviewable(fallbackMessage)
+            "UNAVAILABLE" -> BookingReviewError.Unavailable("O serviço de avaliações está indisponível.")
+            else -> BookingReviewError.Backend(fallbackMessage)
         }
     }
 }

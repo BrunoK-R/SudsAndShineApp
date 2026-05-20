@@ -39,6 +39,20 @@ class FirebaseBookingRepository(
         return api.getMyReservations(session.idToken)
     }
 
+    override suspend fun submitReview(request: BookingReviewRequest): BookingReviewResult {
+        val validationError = validate(request)
+        if (validationError != null) {
+            return BookingReviewResult.Failure(validationError)
+        }
+
+        val session = authRepository.currentSession()
+            ?: return BookingReviewResult.Failure(
+                BookingReviewError.Unauthenticated("Inicie sessão para avaliar esta marcação."),
+            )
+
+        return api.submitReservationReview(request.normalized(), session.idToken)
+    }
+
     private fun validate(request: BookingAvailabilityRequest): BookingAvailabilityError? {
         return when {
             request.anchorDate != null && !isValidDateId(request.anchorDate) ->
@@ -67,6 +81,20 @@ class FirebaseBookingRepository(
         }
     }
 
+    private fun validate(request: BookingReviewRequest): BookingReviewError? {
+        return when {
+            request.reservationId.isBlank() || request.reservationId.contains("/") ->
+                BookingReviewError.Validation("A marcação selecionada é inválida.")
+            request.rating !in 1..5 ->
+                BookingReviewError.Validation("Escolha uma avaliação entre 1 e 5 estrelas.")
+            request.tags.any { it.isBlank() || it.length > 40 } ->
+                BookingReviewError.Validation("Os destaques da avaliação são inválidos.")
+            request.comment.length > 1000 ->
+                BookingReviewError.Validation("O comentário deve ter no máximo 1000 caracteres.")
+            else -> null
+        }
+    }
+
     private fun BookingCreateRequest.normalized(): BookingCreateRequest = copy(
         customerName = customerName.trim(),
         customerEmail = customerEmail.trim().lowercase(),
@@ -77,6 +105,16 @@ class FirebaseBookingRepository(
         notes = notes.trim(),
         userVehicleId = userVehicleId?.trim()?.takeIf { it.isNotBlank() },
         vehicleLabel = vehicleLabel?.trim()?.takeIf { it.isNotBlank() },
+    )
+
+    private fun BookingReviewRequest.normalized(): BookingReviewRequest = copy(
+        reservationId = reservationId.trim(),
+        tags = tags
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .take(8),
+        comment = comment.trim(),
     )
 
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken

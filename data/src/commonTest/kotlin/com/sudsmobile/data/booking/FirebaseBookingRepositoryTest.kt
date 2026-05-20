@@ -103,6 +103,38 @@ class FirebaseBookingRepositoryTest {
         assertEquals(1, api.historyCalls)
         assertEquals("id-token-1", api.lastHistoryIdToken)
     }
+
+    @Test
+    fun rejectsReviewWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.submitReview(validReviewRequest())
+
+        assertIs<BookingReviewResult.Failure>(result)
+        assertIs<BookingReviewError.Unauthenticated>(result.error)
+        assertEquals(0, api.reviewCalls)
+    }
+
+    @Test
+    fun normalizesReviewBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.submitReview(
+            validReviewRequest().copy(
+                tags = listOf(" Qualidade ", "qualidade", "Rápido"),
+                comment = "  Ficou impecável.  ",
+            ),
+        )
+
+        assertIs<BookingReviewResult.Success>(result)
+        assertEquals(1, api.reviewCalls)
+        assertEquals("reservation-1", api.lastReviewRequest?.reservationId)
+        assertEquals(listOf("Qualidade", "Rápido"), api.lastReviewRequest?.tags)
+        assertEquals("Ficou impecável.", api.lastReviewRequest?.comment)
+        assertEquals("id-token-1", api.lastReviewIdToken)
+    }
 }
 
 private class RecordingBookingFunctionsApi : BookingFunctionsApi {
@@ -130,6 +162,12 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         private set
     var lastHistoryIdToken: String? = null
         private set
+    var reviewCalls: Int = 0
+        private set
+    var lastReviewRequest: BookingReviewRequest? = null
+        private set
+    var lastReviewIdToken: String? = null
+        private set
 
     override suspend fun createReservation(request: BookingCreateRequest, idToken: String?): BookingCreateResult {
         calls += 1
@@ -147,6 +185,18 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         historyCalls += 1
         lastHistoryIdToken = idToken
         return BookingHistoryResult.Success(BookingHistory(reservations = emptyList()))
+    }
+
+    override suspend fun submitReservationReview(request: BookingReviewRequest, idToken: String): BookingReviewResult {
+        reviewCalls += 1
+        lastReviewRequest = request
+        lastReviewIdToken = idToken
+        return BookingReviewResult.Success(
+            BookingReviewReceipt(
+                reviewId = "review-1",
+                reservationId = request.reservationId,
+            ),
+        )
     }
 }
 
@@ -208,4 +258,11 @@ private fun validRequest(): BookingCreateRequest = BookingCreateRequest(
     vehicleType = "passageiros",
     gdprConsent = true,
     notes = "",
+)
+
+private fun validReviewRequest(): BookingReviewRequest = BookingReviewRequest(
+    reservationId = "reservation-1",
+    rating = 5,
+    tags = listOf("Qualidade"),
+    comment = "Muito bom.",
 )

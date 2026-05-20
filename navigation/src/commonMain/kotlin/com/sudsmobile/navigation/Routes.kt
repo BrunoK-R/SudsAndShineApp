@@ -8,7 +8,8 @@ object Routes {
     const val Services = "services"
     const val Products = "products"
     const val Cart = "cart"
-    const val Rating = "rating"
+    const val RatingReservationIdArg = "reservationId"
+    const val Rating = "rating/{$RatingReservationIdArg}"
     const val Profile = "profile"
     const val PersonalData = "personal_data"
     const val Vehicles = "vehicles"
@@ -17,4 +18,6 @@ object Routes {
     const val Loyalty = "loyalty"
     const val Blog = "blog"
     const val Payment = "payment"
+
+    fun rating(reservationId: String): String = "rating/$reservationId"
 }
