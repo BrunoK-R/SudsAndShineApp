@@ -125,6 +125,39 @@ class ProductsBookingViewModelTest {
         assertEquals("suv", loaded.vehicles.single().type)
         assertEquals("vehicle-1", loaded.vehicles.single().userVehicleId)
     }
+
+    @Test
+    fun refreshVehiclesForSessionLoadsAfterSignInAndClearsAfterSignOut() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = false)
+        val vehicleRepository = FakeProductsVehicleRepository(
+            listResult = UserVehicleListResult.Success(
+                listOf(userVehicle(id = "vehicle-1", brand = "BMW", type = "suv")),
+            ),
+        )
+        val viewModel = productsBookingViewModel(
+            authRepository = authRepository,
+            vehicleRepository = vehicleRepository,
+        )
+
+        viewModel.refreshVehiclesForSession()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Unauthenticated>(viewModel.vehiclesState.value)
+        assertEquals(0, vehicleRepository.listCalls)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshVehiclesForSession()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Loaded>(viewModel.vehiclesState.value)
+        assertEquals(1, vehicleRepository.listCalls)
+
+        authRepository.signOut()
+        viewModel.refreshVehiclesForSession()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Unauthenticated>(viewModel.vehiclesState.value)
+    }
 }
 
 private fun productsBookingViewModel(
@@ -188,28 +221,22 @@ private class FakeProductsVehicleRepository(
 private class FakeProductsAuthRepository(
     authenticated: Boolean,
 ) : AuthRepository {
-    override val sessionState: StateFlow<AuthSessionState> = MutableStateFlow(
+    private val mutableSessionState = MutableStateFlow(
         if (authenticated) {
-            AuthSessionState.Authenticated(
-                AuthSession(
-                    user = AuthUser(
-                        uid = "uid-1",
-                        email = "bruno@example.com",
-                        displayName = "Bruno",
-                        phoneNumber = "",
-                    ),
-                    idToken = "id-token-1",
-                    refreshToken = "refresh-token-1",
-                    expiresInSeconds = 3600,
-                ),
-            )
+            authenticatedSession()
         } else {
             AuthSessionState.Unauthenticated
         },
     )
+    override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
+
+    fun authenticate(uid: String = "uid-1") {
+        mutableSessionState.value = authenticatedSession(uid)
+    }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
-        error("Not used")
+        authenticate()
+        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
     }
 
     override suspend fun register(
@@ -218,14 +245,33 @@ private class FakeProductsAuthRepository(
         phoneNumber: String,
         password: String,
     ): AuthResult {
-        error("Not used")
+        authenticate()
+        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
     }
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
-        error("Not used")
+        return AuthActionResult.Success
     }
 
-    override fun signOut() = Unit
+    override fun signOut() {
+        mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+}
+
+private fun authenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
+    return AuthSessionState.Authenticated(
+        AuthSession(
+            user = AuthUser(
+                uid = uid,
+                email = "bruno@example.com",
+                displayName = "Bruno",
+                phoneNumber = "",
+            ),
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
+            expiresInSeconds = 3600,
+        ),
+    )
 }
 
 private fun availableMonth(monthTitle: String, firstDateId: String): BookingAvailabilityMonth {

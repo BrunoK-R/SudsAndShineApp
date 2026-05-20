@@ -146,6 +146,39 @@ class VehiclesViewModelTest {
         assertIs<VehicleMutationUiState.Success>(viewModel.mutationState.value)
         assertIs<VehiclesUiState.Empty>(viewModel.uiState.value)
     }
+
+    @Test
+    fun refreshForSessionLoadsAfterSignInAndClearsAfterSignOut() = runTest {
+        val authRepository = FakeVehiclesAuthRepository(authenticated = false)
+        val repository = FakeUserVehicleRepository(
+            listResult = UserVehicleListResult.Success(
+                listOf(userVehicle(id = "vehicle-1", brand = "BMW")),
+            ),
+        )
+        val viewModel = VehiclesViewModel(
+            authRepository = authRepository,
+            vehicleRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<VehiclesUiState.Unauthenticated>(viewModel.uiState.value)
+        assertEquals(0, repository.listCalls)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<VehiclesUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, repository.listCalls)
+
+        authRepository.signOut()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<VehiclesUiState.Unauthenticated>(viewModel.uiState.value)
+    }
 }
 
 private class FakeUserVehicleRepository(
@@ -178,28 +211,22 @@ private class FakeUserVehicleRepository(
 private class FakeVehiclesAuthRepository(
     authenticated: Boolean,
 ) : AuthRepository {
-    override val sessionState: StateFlow<AuthSessionState> = MutableStateFlow(
+    private val mutableSessionState = MutableStateFlow(
         if (authenticated) {
-            AuthSessionState.Authenticated(
-                AuthSession(
-                    user = AuthUser(
-                        uid = "uid-1",
-                        email = "bruno@example.com",
-                        displayName = "Bruno",
-                        phoneNumber = "",
-                    ),
-                    idToken = "id-token-1",
-                    refreshToken = "refresh-token-1",
-                    expiresInSeconds = 3600,
-                ),
-            )
+            authenticatedSession()
         } else {
             AuthSessionState.Unauthenticated
         },
     )
+    override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
+
+    fun authenticate(uid: String = "uid-1") {
+        mutableSessionState.value = authenticatedSession(uid)
+    }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
-        error("Not used")
+        authenticate()
+        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
     }
 
     override suspend fun register(
@@ -208,14 +235,33 @@ private class FakeVehiclesAuthRepository(
         phoneNumber: String,
         password: String,
     ): AuthResult {
-        error("Not used")
+        authenticate()
+        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
     }
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
-        error("Not used")
+        return AuthActionResult.Success
     }
 
-    override fun signOut() = Unit
+    override fun signOut() {
+        mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+}
+
+private fun authenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
+    return AuthSessionState.Authenticated(
+        AuthSession(
+            user = AuthUser(
+                uid = uid,
+                email = "bruno@example.com",
+                displayName = "Bruno",
+                phoneNumber = "",
+            ),
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
+            expiresInSeconds = 3600,
+        ),
+    )
 }
 
 private fun userVehicle(

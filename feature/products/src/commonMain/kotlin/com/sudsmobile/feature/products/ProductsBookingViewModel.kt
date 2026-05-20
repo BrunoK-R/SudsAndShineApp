@@ -76,6 +76,7 @@ class ProductsBookingViewModel(
     private val authRepository: AuthRepository,
     private val userVehicleRepository: UserVehicleRepository,
 ) : ViewModel() {
+    val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     private val _availabilityState = MutableStateFlow<BookingAvailabilityUiState>(BookingAvailabilityUiState.Idle)
     val availabilityState: StateFlow<BookingAvailabilityUiState> = _availabilityState.asStateFlow()
 
@@ -84,12 +85,29 @@ class ProductsBookingViewModel(
 
     private val _vehiclesState = MutableStateFlow<BookingVehiclesUiState>(BookingVehiclesUiState.Idle)
     val vehiclesState: StateFlow<BookingVehiclesUiState> = _vehiclesState.asStateFlow()
+    private var loadedVehiclesUid: String? = null
+
+    fun refreshVehiclesForSession() {
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedVehiclesUid = null
+            _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+            return
+        }
+
+        val uid = session.session.user.uid
+        val alreadyLoadedForUser = loadedVehiclesUid == uid &&
+            (_vehiclesState.value is BookingVehiclesUiState.Loaded || _vehiclesState.value is BookingVehiclesUiState.Empty)
+        if (alreadyLoadedForUser) return
+        loadVehicles()
+    }
 
     fun loadVehicles() {
         if (_vehiclesState.value is BookingVehiclesUiState.Loading) return
 
         val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
         if (session == null) {
+            loadedVehiclesUid = null
             _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
             return
         }
@@ -102,7 +120,13 @@ class ProductsBookingViewModel(
                 is UserVehicleListResult.Failure -> result.error.toVehiclesUiState()
             }
             val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            _vehiclesState.value = if (currentUid == requestedUid) nextState else BookingVehiclesUiState.Unauthenticated
+            if (currentUid == requestedUid) {
+                loadedVehiclesUid = requestedUid
+                _vehiclesState.value = nextState
+            } else {
+                loadedVehiclesUid = null
+                _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+            }
         }
     }
 

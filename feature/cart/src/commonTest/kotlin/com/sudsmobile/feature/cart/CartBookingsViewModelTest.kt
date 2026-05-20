@@ -1,5 +1,11 @@
 package com.sudsmobile.feature.cart
 
+import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthResult
+import com.sudsmobile.data.auth.AuthSession
+import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.auth.AuthUser
 import com.sudsmobile.data.booking.BookingAvailabilityRequest
 import com.sudsmobile.data.booking.BookingAvailabilityResult
 import com.sudsmobile.data.booking.BookingCreateRequest
@@ -16,6 +22,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -37,25 +45,26 @@ class CartBookingsViewModelTest {
     }
 
     @Test
-    fun loadBookingsMapsUnauthenticatedState() = runTest {
+    fun loadBookingsRequiresAuthenticatedSessionBeforeRepositoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
         val viewModel = CartBookingsViewModel(
-            FakeBookingRepository(
-                BookingHistoryResult.Failure(
-                    BookingHistoryError.Unauthenticated("Inicie sessão."),
-                ),
-            ),
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = false),
         )
 
         viewModel.loadBookings()
         runCurrent()
 
         assertIs<CartBookingsUiState.Unauthenticated>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
     }
 
     @Test
     fun loadBookingsSplitsUpcomingAndCompletedReservations() = runTest {
         val viewModel = CartBookingsViewModel(
-            FakeBookingRepository(
+            bookingRepository = FakeBookingRepository(
                 BookingHistoryResult.Success(
                     BookingHistory(
                         reservations = listOf(
@@ -78,6 +87,7 @@ class CartBookingsViewModelTest {
                     ),
                 ),
             ),
+            authRepository = FakeCartAuthRepository(authenticated = true),
         )
 
         viewModel.loadBookings()
@@ -90,11 +100,57 @@ class CartBookingsViewModelTest {
         assertEquals("34,00€", loaded.upcoming.single().price)
         assertEquals("completed-1", loaded.completed.single().id)
     }
+
+    @Test
+    fun refreshForSessionReloadsAfterSignInAndClearsAfterSignOut() = runTest {
+        val authRepository = FakeCartAuthRepository(authenticated = false)
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        historyReservation(
+                            id = "upcoming-1",
+                            slotStartIso = "2026-05-21T10:00:00.000Z",
+                            slotEndIso = "2026-05-21T10:45:00.000Z",
+                            upcoming = true,
+                            priceCents = 3400,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<CartBookingsUiState.Unauthenticated>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+
+        authRepository.signOut()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<CartBookingsUiState.Unauthenticated>(viewModel.uiState.value)
+    }
 }
 
 private class FakeBookingRepository(
     private val historyResult: BookingHistoryResult,
 ) : BookingRepository {
+    var historyCalls: Int = 0
+        private set
+
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
         error("Not used")
     }
@@ -103,7 +159,62 @@ private class FakeBookingRepository(
         error("Not used")
     }
 
-    override suspend fun getMyBookings(): BookingHistoryResult = historyResult
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        historyCalls += 1
+        return historyResult
+    }
+}
+
+private class FakeCartAuthRepository(
+    authenticated: Boolean,
+) : AuthRepository {
+    private val mutableSessionState = MutableStateFlow(
+        if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
+    )
+    override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
+
+    fun authenticate(uid: String = "uid-1") {
+        mutableSessionState.value = authenticatedSession(uid)
+    }
+
+    override suspend fun signIn(email: String, password: String): AuthResult {
+        authenticate()
+        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
+    }
+
+    override suspend fun register(
+        displayName: String,
+        email: String,
+        phoneNumber: String,
+        password: String,
+    ): AuthResult {
+        authenticate()
+        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
+    }
+
+    override suspend fun sendPasswordReset(email: String): AuthActionResult {
+        return AuthActionResult.Success
+    }
+
+    override fun signOut() {
+        mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+}
+
+private fun authenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
+    return AuthSessionState.Authenticated(
+        AuthSession(
+            user = AuthUser(
+                uid = uid,
+                email = "bruno@example.com",
+                displayName = "Bruno",
+                phoneNumber = "",
+            ),
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
+            expiresInSeconds = 3600,
+        ),
+    )
 }
 
 private fun historyReservation(

@@ -81,6 +81,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingAvailabilityDay
 import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
@@ -128,6 +129,7 @@ fun ProductsScreen(
     val availabilityState by viewModel.availabilityState.collectAsStateWithLifecycle()
     val submitState by viewModel.submitState.collectAsStateWithLifecycle()
     val vehiclesState by viewModel.vehiclesState.collectAsStateWithLifecycle()
+    val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
@@ -138,10 +140,12 @@ fun ProductsScreen(
         contentPadding = contentPadding,
         catalogState = catalogState,
         vehiclesState = vehiclesState,
+        sessionState = sessionState,
         availabilityState = availabilityState,
         submitState = submitState,
         onLoadCatalog = catalogViewModel::loadCatalog,
         onLoadVehicles = viewModel::loadVehicles,
+        onRefreshVehiclesForSession = viewModel::refreshVehiclesForSession,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onClearSubmitError = viewModel::clearSubmitError,
@@ -159,10 +163,12 @@ private fun ProductsScreenContent(
     contentPadding: PaddingValues,
     catalogState: ProductCatalogUiState,
     vehiclesState: BookingVehiclesUiState,
+    sessionState: AuthSessionState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
     onLoadCatalog: () -> Unit,
     onLoadVehicles: () -> Unit,
+    onRefreshVehiclesForSession: () -> Unit,
     onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
@@ -229,9 +235,9 @@ private fun ProductsScreenContent(
         }
     }
 
-    LaunchedEffect(currentStep) {
+    LaunchedEffect(currentStep, sessionState) {
         if (currentStep == BookingStep.Vehicle) {
-            onLoadVehicles()
+            onRefreshVehiclesForSession()
         }
     }
 

@@ -70,11 +70,12 @@ fun VehiclesScreen(
     val viewModel: VehiclesViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val mutationState by viewModel.mutationState.collectAsStateWithLifecycle()
+    val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     var showEditor by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(VehicleDraftUi()) }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadVehicles()
+    LaunchedEffect(sessionState) {
+        viewModel.refreshForSession()
     }
 
     LaunchedEffect(mutationState) {

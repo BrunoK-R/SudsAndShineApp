@@ -6,6 +6,8 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
@@ -48,18 +50,50 @@ internal sealed interface CartBookingsUiState {
 
 internal class CartBookingsViewModel(
     private val bookingRepository: BookingRepository,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
+    val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     private val _uiState = MutableStateFlow<CartBookingsUiState>(CartBookingsUiState.Idle)
     val uiState: StateFlow<CartBookingsUiState> = _uiState.asStateFlow()
+    private var loadedUid: String? = null
+
+    fun refreshForSession() {
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedUid = null
+            _uiState.value = CartBookingsUiState.Unauthenticated
+            return
+        }
+
+        val uid = session.session.user.uid
+        if (loadedUid == uid && _uiState.value is CartBookingsUiState.Loaded) return
+        loadBookings()
+    }
 
     fun loadBookings() {
         if (_uiState.value is CartBookingsUiState.Loading) return
 
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedUid = null
+            _uiState.value = CartBookingsUiState.Unauthenticated
+            return
+        }
+        val requestedUid = session.session.user.uid
+
         viewModelScope.launch {
             _uiState.value = CartBookingsUiState.Loading
-            _uiState.value = when (val result = bookingRepository.getMyBookings()) {
+            val nextState = when (val result = bookingRepository.getMyBookings()) {
                 is BookingHistoryResult.Success -> result.history.toUiState()
                 is BookingHistoryResult.Failure -> result.error.toUiState()
+            }
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid == requestedUid) {
+                loadedUid = requestedUid
+                _uiState.value = nextState
+            } else {
+                loadedUid = null
+                _uiState.value = CartBookingsUiState.Unauthenticated
             }
         }
     }

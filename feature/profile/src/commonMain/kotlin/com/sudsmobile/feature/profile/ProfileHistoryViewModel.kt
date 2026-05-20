@@ -2,6 +2,8 @@ package com.sudsmobile.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
@@ -47,18 +49,50 @@ internal sealed interface ProfileHistoryUiState {
 
 internal class ProfileHistoryViewModel(
     private val bookingRepository: BookingRepository,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
+    val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     private val _uiState = MutableStateFlow<ProfileHistoryUiState>(ProfileHistoryUiState.Idle)
     val uiState: StateFlow<ProfileHistoryUiState> = _uiState.asStateFlow()
+    private var loadedUid: String? = null
+
+    fun refreshForSession() {
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedUid = null
+            _uiState.value = ProfileHistoryUiState.Unauthenticated
+            return
+        }
+
+        val uid = session.session.user.uid
+        if (loadedUid == uid && _uiState.value is ProfileHistoryUiState.Loaded) return
+        loadHistory()
+    }
 
     fun loadHistory() {
         if (_uiState.value is ProfileHistoryUiState.Loading) return
 
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedUid = null
+            _uiState.value = ProfileHistoryUiState.Unauthenticated
+            return
+        }
+        val requestedUid = session.session.user.uid
+
         viewModelScope.launch {
             _uiState.value = ProfileHistoryUiState.Loading
-            _uiState.value = when (val result = bookingRepository.getMyBookings()) {
+            val nextState = when (val result = bookingRepository.getMyBookings()) {
                 is BookingHistoryResult.Success -> result.history.toUiState()
                 is BookingHistoryResult.Failure -> result.error.toUiState()
+            }
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid == requestedUid) {
+                loadedUid = requestedUid
+                _uiState.value = nextState
+            } else {
+                loadedUid = null
+                _uiState.value = ProfileHistoryUiState.Unauthenticated
             }
         }
     }
