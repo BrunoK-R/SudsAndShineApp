@@ -21,23 +21,26 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Air
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Circle
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,63 +49,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-
-private data class ServiceCatalogItem(
-    val id: String,
-    val name: String,
-    val description: String,
-    val duration: String,
-    val passengerPrice: String,
-    val suvPrice: String,
-    val icon: ImageVector,
-    val popular: Boolean = false,
-)
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 private data class ServiceExtra(
     val id: String,
     val name: String,
     val price: String,
     val icon: ImageVector,
-)
-
-private val catalogServices = listOf(
-    ServiceCatalogItem(
-        id = "standard",
-        name = "Lavagem Standard",
-        description = "Lavagem completa exterior e interior",
-        duration = "30 min",
-        passengerPrice = "25,00€",
-        suvPrice = "27,00€",
-        icon = Icons.Filled.DirectionsCar,
-    ),
-    ServiceCatalogItem(
-        id = "premium",
-        name = "Lavagem Premium",
-        description = "Lavagem detalhada com acabamento premium",
-        duration = "45 min",
-        passengerPrice = "32,00€",
-        suvPrice = "34,00€",
-        icon = Icons.Filled.AutoAwesome,
-        popular = true,
-    ),
-    ServiceCatalogItem(
-        id = "exterior",
-        name = "Lavagem Exterior",
-        description = "Apenas lavagem exterior",
-        duration = "20 min",
-        passengerPrice = "16,00€",
-        suvPrice = "18,50€",
-        icon = Icons.Filled.WaterDrop,
-    ),
-    ServiceCatalogItem(
-        id = "interior",
-        name = "Limpeza do Interior",
-        description = "Apenas limpeza interior",
-        duration = "25 min",
-        passengerPrice = "16,00€",
-        suvPrice = "18,50€",
-        icon = Icons.Filled.Weekend,
-    ),
 )
 
 private val serviceExtras = listOf(
@@ -119,6 +73,13 @@ fun ServicesScreen(
     onBack: () -> Unit,
     onBookService: () -> Unit,
 ) {
+    val catalogViewModel: ProductsCatalogViewModel = koinViewModel()
+    val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        catalogViewModel.loadCatalog()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -135,14 +96,11 @@ fun ServicesScreen(
                 .padding(top = 24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                catalogServices.forEach { service ->
-                    ServiceCatalogCard(
-                        service = service,
-                        onClick = onBookService,
-                    )
-                }
-            }
+            ServicesCatalogContent(
+                catalogState = catalogState,
+                onRetryCatalog = catalogViewModel::loadCatalog,
+                onBookService = onBookService,
+            )
 
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
@@ -229,8 +187,138 @@ private fun ServicesHeader(onBack: () -> Unit) {
 }
 
 @Composable
+private fun ServicesCatalogContent(
+    catalogState: ProductCatalogUiState,
+    onRetryCatalog: () -> Unit,
+    onBookService: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        when (catalogState) {
+            ProductCatalogUiState.Idle,
+            ProductCatalogUiState.Loading -> ServiceCatalogLoadingCard()
+
+            is ProductCatalogUiState.Loaded -> {
+                catalogState.services.forEach { service ->
+                    ServiceCatalogCard(
+                        service = service,
+                        onClick = onBookService,
+                    )
+                }
+            }
+
+            ProductCatalogUiState.Empty -> ServiceCatalogStatusCard(
+                title = "Sem serviços disponíveis",
+                body = "O catálogo ainda não tem serviços ativos para marcação.",
+                onRetry = onRetryCatalog,
+            )
+
+            is ProductCatalogUiState.Error -> ServiceCatalogStatusCard(
+                title = "Não foi possível carregar serviços",
+                body = catalogState.message,
+                onRetry = onRetryCatalog,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ServiceCatalogLoadingCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = MaterialTheme.colorScheme.tertiary,
+                strokeWidth = 2.dp,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "A carregar serviços",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Estamos a consultar o catálogo em tempo real.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServiceCatalogStatusCard(
+    title: String,
+    body: String,
+    onRetry: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            OutlinedButton(
+                onClick = onRetry,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Tentar novamente", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ServiceCatalogCard(
-    service: ServiceCatalogItem,
+    service: ProductServiceUi,
     onClick: () -> Unit,
 ) {
     Card(
@@ -286,7 +374,7 @@ private fun ServiceCatalogCard(
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
-                                text = service.duration,
+                                text = service.durationLabel,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

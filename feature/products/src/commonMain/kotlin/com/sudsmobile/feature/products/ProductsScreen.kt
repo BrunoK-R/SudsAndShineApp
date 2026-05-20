@@ -44,8 +44,6 @@ import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -83,16 +81,6 @@ import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import org.koin.compose.viewmodel.koinViewModel
 
-private data class BookingService(
-    val id: String,
-    val name: String,
-    val description: String,
-    val duration: String,
-    val passengerPrice: String,
-    val icon: ImageVector,
-    val popular: Boolean = false,
-)
-
 private data class BookingVehicle(
     val id: String,
     val name: String,
@@ -108,42 +96,6 @@ private enum class BookingStep {
     Confirmation,
     Success,
 }
-
-private val bookingServices = listOf(
-    BookingService(
-        id = "standard",
-        name = "Lavagem Standard",
-        description = "Lavagem completa exterior e interior",
-        duration = "30 min",
-        passengerPrice = "25,00€",
-        icon = Icons.Filled.DirectionsCar,
-    ),
-    BookingService(
-        id = "premium",
-        name = "Lavagem Premium",
-        description = "Lavagem detalhada com acabamento premium",
-        duration = "45 min",
-        passengerPrice = "32,00€",
-        icon = Icons.Filled.AutoAwesome,
-        popular = true,
-    ),
-    BookingService(
-        id = "exterior",
-        name = "Lavagem Exterior",
-        description = "Apenas lavagem exterior",
-        duration = "20 min",
-        passengerPrice = "16,00€",
-        icon = Icons.Filled.WaterDrop,
-    ),
-    BookingService(
-        id = "interior",
-        name = "Limpeza do Interior",
-        description = "Apenas limpeza interior",
-        duration = "25 min",
-        passengerPrice = "16,00€",
-        icon = Icons.Filled.Weekend,
-    ),
-)
 
 private val bookingVehicles = listOf(
     BookingVehicle(
@@ -168,13 +120,21 @@ fun ProductsScreen(
     onHome: () -> Unit = {},
 ) {
     val viewModel: ProductsBookingViewModel = koinViewModel()
+    val catalogViewModel: ProductsCatalogViewModel = koinViewModel()
     val availabilityState by viewModel.availabilityState.collectAsStateWithLifecycle()
     val submitState by viewModel.submitState.collectAsStateWithLifecycle()
+    val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        catalogViewModel.loadCatalog()
+    }
 
     ProductsScreenContent(
         contentPadding = contentPadding,
+        catalogState = catalogState,
         availabilityState = availabilityState,
         submitState = submitState,
+        onLoadCatalog = catalogViewModel::loadCatalog,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onClearSubmitError = viewModel::clearSubmitError,
@@ -188,8 +148,10 @@ fun ProductsScreen(
 @Composable
 private fun ProductsScreenContent(
     contentPadding: PaddingValues,
+    catalogState: ProductCatalogUiState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
+    onLoadCatalog: () -> Unit,
     onLoadAvailability: (Int) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
@@ -214,7 +176,8 @@ private fun ProductsScreenContent(
         contactPhone.isNotBlank() &&
         contactEmail.isNotBlank() &&
         acceptsPrivacy
-    val selectedService = bookingServices.firstOrNull { it.id == selectedServiceId }
+    val loadedServices = (catalogState as? ProductCatalogUiState.Loaded)?.services.orEmpty()
+    val selectedService = loadedServices.firstOrNull { it.id == selectedServiceId }
     val selectedVehicle = bookingVehicles.firstOrNull { it.id == selectedVehicleId }
     val availabilityMonth = (availabilityState as? BookingAvailabilityUiState.Loaded)?.month
     val selectedDate = availabilityMonth?.days?.firstOrNull { it.id == selectedDateId }
@@ -241,7 +204,18 @@ private fun ProductsScreenContent(
 
     LaunchedEffect(currentStep, selectedService?.id) {
         if (currentStep == BookingStep.DateTime && selectedService != null) {
-            onLoadAvailability(selectedService.durationMinutes())
+            onLoadAvailability(selectedService.durationMinutes)
+        }
+    }
+
+    LaunchedEffect(catalogState) {
+        if (catalogState is ProductCatalogUiState.Loaded &&
+            selectedServiceId != null &&
+            catalogState.services.none { it.id == selectedServiceId }
+        ) {
+            selectedServiceId = null
+            selectedDateId = null
+            selectedTime = null
         }
     }
 
@@ -280,20 +254,19 @@ private fun ProductsScreenContent(
                             .padding(top = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        bookingServices.forEach { service ->
-                            BookingServiceCard(
-                                service = service,
-                                selected = selectedServiceId == service.id,
-                                onSelected = {
-                                    if (selectedServiceId != service.id) {
-                                        selectedDateId = null
-                                        selectedTime = null
-                                    }
-                                    selectedServiceId = service.id
-                                    onClearSubmitError()
-                                },
-                            )
-                        }
+                        BookingServiceStepContent(
+                            catalogState = catalogState,
+                            selectedServiceId = selectedServiceId,
+                            onRetryCatalog = onLoadCatalog,
+                            onServiceSelected = { service ->
+                                if (selectedServiceId != service.id) {
+                                    selectedDateId = null
+                                    selectedTime = null
+                                }
+                                selectedServiceId = service.id
+                                onClearSubmitError()
+                            },
+                        )
                     }
                 }
 
@@ -350,7 +323,7 @@ private fun ProductsScreenContent(
                             onClearSubmitError()
                         },
                         onRetryAvailability = {
-                            selectedService?.let { onLoadAvailability(it.durationMinutes()) }
+                            selectedService?.let { onLoadAvailability(it.durationMinutes) }
                         },
                     )
                 }
@@ -437,7 +410,7 @@ private fun ProductsScreenContent(
         if (currentStep != BookingStep.Success) {
             ContinueBar(
                 enabled = when (currentStep) {
-                    BookingStep.Service -> selectedServiceId != null
+                    BookingStep.Service -> selectedService != null
                     BookingStep.Vehicle -> selectedVehicleId != null
                     BookingStep.DateTime -> selectedDate != null && selectedTime != null
                     BookingStep.Contact -> contactFormValid
@@ -581,7 +554,7 @@ private fun BookingStepHeader(
 
 @Composable
 private fun BookingConfirmationContent(
-    service: BookingService?,
+    service: ProductServiceUi?,
     vehicle: BookingVehicle?,
     date: BookingAvailabilityDay?,
     time: String?,
@@ -656,7 +629,7 @@ private fun BookingConfirmationContent(
 
         PriceSummaryCard(
             serviceName = service?.name ?: "Serviço",
-            price = service?.passengerPrice ?: "0,00€",
+            price = service?.priceForVehicle(vehicle?.id) ?: "0,00€",
         )
 
         BookingSubmitStatusCard(submitState)
@@ -939,7 +912,7 @@ private fun PriceSummaryCard(
 
 @Composable
 private fun BookingSuccessContent(
-    service: BookingService?,
+    service: ProductServiceUi?,
     date: BookingAvailabilityDay?,
     time: String?,
     phone: String,
@@ -1102,7 +1075,7 @@ private fun BookingSuccessContent(
 
 @Composable
 private fun SuccessSummaryCard(
-    service: BookingService?,
+    service: ProductServiceUi?,
     date: BookingAvailabilityDay?,
     time: String?,
     phone: String,
@@ -1767,8 +1740,78 @@ private fun SectionHeader(
 }
 
 @Composable
+private fun BookingServiceStepContent(
+    catalogState: ProductCatalogUiState,
+    selectedServiceId: String?,
+    onRetryCatalog: () -> Unit,
+    onServiceSelected: (ProductServiceUi) -> Unit,
+) {
+    when (catalogState) {
+        ProductCatalogUiState.Idle,
+        ProductCatalogUiState.Loading -> CatalogLoadingCard()
+
+        is ProductCatalogUiState.Loaded -> {
+            catalogState.services.forEach { service ->
+                BookingServiceCard(
+                    service = service,
+                    selected = selectedServiceId == service.id,
+                    onSelected = { onServiceSelected(service) },
+                )
+            }
+        }
+
+        ProductCatalogUiState.Empty -> AvailabilityStatusCard(
+            title = "Sem serviços disponíveis",
+            body = "O catálogo de serviços ainda não tem opções ativas.",
+            onRetry = onRetryCatalog,
+        )
+
+        is ProductCatalogUiState.Error -> AvailabilityStatusCard(
+            title = "Não foi possível carregar serviços",
+            body = catalogState.message,
+            onRetry = onRetryCatalog,
+        )
+    }
+}
+
+@Composable
+private fun CatalogLoadingCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = MaterialTheme.colorScheme.tertiary,
+                strokeWidth = 2.dp,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "A carregar serviços",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Estamos a consultar o catálogo em tempo real.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun BookingServiceCard(
-    service: BookingService,
+    service: ProductServiceUi,
     selected: Boolean,
     onSelected: () -> Unit,
 ) {
@@ -1875,7 +1918,7 @@ private fun BookingServiceCard(
                             modifier = Modifier.size(16.dp),
                         )
                         Text(
-                            text = service.duration,
+                            text = service.durationLabel,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -2040,7 +2083,7 @@ private fun VehicleHelpCard() {
 }
 
 private fun buildBookingDraft(
-    service: BookingService?,
+    service: ProductServiceUi?,
     vehicle: BookingVehicle?,
     date: BookingAvailabilityDay?,
     time: String?,
@@ -2059,16 +2102,15 @@ private fun buildBookingDraft(
         serviceName = service.name,
         dateId = date.id,
         time = time,
-        serviceDurationMinutes = service.durationMinutes(),
+        serviceDurationMinutes = service.durationMinutes,
         vehicleType = vehicle.id,
         gdprConsent = acceptsPrivacy,
         notes = notes,
     )
 }
 
-private fun BookingService.durationMinutes(): Int {
-    val digits = duration.filter { it.isDigit() }
-    return digits.toIntOrNull() ?: 30
+private fun ProductServiceUi.priceForVehicle(vehicleId: String?): String {
+    return if (vehicleId == "suv") suvPrice else passengerPrice
 }
 
 @Composable

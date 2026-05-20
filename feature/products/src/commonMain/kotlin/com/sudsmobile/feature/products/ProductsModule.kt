@@ -5,4 +5,5 @@ import org.koin.dsl.module
 
 val productsModule = module {
     viewModelOf(::ProductsBookingViewModel)
+    viewModelOf(::ProductsCatalogViewModel)
 }
