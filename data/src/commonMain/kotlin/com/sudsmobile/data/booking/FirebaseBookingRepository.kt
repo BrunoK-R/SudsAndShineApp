@@ -55,6 +55,8 @@ class FirebaseBookingRepository(
                 BookingCreateError.Validation("Escolha uma data e hora válidas.")
             request.vehicleType !in setOf("passageiros", "suv") ->
                 BookingCreateError.Validation("Escolha um tipo de veículo válido.")
+            request.userVehicleId?.contains("/") == true ->
+                BookingCreateError.Validation("Escolha um veículo guardado válido.")
             !request.gdprConsent -> BookingCreateError.Validation("Aceite a política de privacidade para continuar.")
             else -> null
         }
@@ -68,6 +70,8 @@ class FirebaseBookingRepository(
         serviceName = serviceName.trim(),
         vehicleType = vehicleType.trim(),
         notes = notes.trim(),
+        userVehicleId = userVehicleId?.trim()?.takeIf { it.isNotBlank() },
+        vehicleLabel = vehicleLabel?.trim()?.takeIf { it.isNotBlank() },
     )
 
     private fun currentIdTokenOrNull(): String? {

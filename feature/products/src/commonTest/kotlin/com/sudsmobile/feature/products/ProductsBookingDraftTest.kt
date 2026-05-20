@@ -17,6 +17,22 @@ class ProductsBookingDraftTest {
     }
 
     @Test
+    fun mapsSavedVehicleMetadataToBackendRequest() {
+        val request = validDraft()
+            .copy(
+                vehicleType = "suv",
+                userVehicleId = "vehicle-1",
+                vehicleLabel = "BMW 320d",
+            )
+            .toCreateRequest()
+
+        assertNotNull(request)
+        assertEquals("suv", request.vehicleType)
+        assertEquals("vehicle-1", request.userVehicleId)
+        assertEquals("BMW 320d", request.vehicleLabel)
+    }
+
+    @Test
     fun invalidTimeDoesNotCreateBackendRequest() {
         val request = validDraft().copy(time = "25:90").toCreateRequest()
 

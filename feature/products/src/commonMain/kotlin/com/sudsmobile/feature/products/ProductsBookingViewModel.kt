@@ -2,6 +2,8 @@ package com.sudsmobile.feature.products
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingAvailabilityError
 import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilityRequest
@@ -11,6 +13,10 @@ import com.sudsmobile.data.booking.BookingCreateRequest
 import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingReceipt
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.vehicle.UserVehicle
+import com.sudsmobile.data.vehicle.UserVehicleError
+import com.sudsmobile.data.vehicle.UserVehicleListResult
+import com.sudsmobile.data.vehicle.UserVehicleRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +34,17 @@ data class ProductsBookingDraft(
     val vehicleType: String,
     val gdprConsent: Boolean,
     val notes: String,
+    val userVehicleId: String? = null,
+    val vehicleLabel: String? = null,
+)
+
+data class BookingVehicleUi(
+    val id: String,
+    val name: String,
+    val description: String,
+    val type: String,
+    val userVehicleId: String?,
+    val vehicleLabel: String?,
 )
 
 sealed interface BookingSubmitUiState {
@@ -45,14 +62,49 @@ sealed interface BookingAvailabilityUiState {
     data class Error(val message: String, val retryable: Boolean) : BookingAvailabilityUiState
 }
 
+sealed interface BookingVehiclesUiState {
+    data object Idle : BookingVehiclesUiState
+    data object Loading : BookingVehiclesUiState
+    data object Unauthenticated : BookingVehiclesUiState
+    data object Empty : BookingVehiclesUiState
+    data class Loaded(val vehicles: List<BookingVehicleUi>) : BookingVehiclesUiState
+    data class Error(val message: String, val retryable: Boolean) : BookingVehiclesUiState
+}
+
 class ProductsBookingViewModel(
     private val bookingRepository: BookingRepository,
+    private val authRepository: AuthRepository,
+    private val userVehicleRepository: UserVehicleRepository,
 ) : ViewModel() {
     private val _availabilityState = MutableStateFlow<BookingAvailabilityUiState>(BookingAvailabilityUiState.Idle)
     val availabilityState: StateFlow<BookingAvailabilityUiState> = _availabilityState.asStateFlow()
 
     private val _submitState = MutableStateFlow<BookingSubmitUiState>(BookingSubmitUiState.Idle)
     val submitState: StateFlow<BookingSubmitUiState> = _submitState.asStateFlow()
+
+    private val _vehiclesState = MutableStateFlow<BookingVehiclesUiState>(BookingVehiclesUiState.Idle)
+    val vehiclesState: StateFlow<BookingVehiclesUiState> = _vehiclesState.asStateFlow()
+
+    fun loadVehicles() {
+        if (_vehiclesState.value is BookingVehiclesUiState.Loading) return
+
+        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+            return
+        }
+
+        val requestedUid = session.session.user.uid
+        viewModelScope.launch {
+            _vehiclesState.value = BookingVehiclesUiState.Loading
+            val nextState = when (val result = userVehicleRepository.getMyVehicles()) {
+                is UserVehicleListResult.Success -> result.vehicles.toVehiclesUiState()
+                is UserVehicleListResult.Failure -> result.error.toVehiclesUiState()
+            }
+            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            _vehiclesState.value = if (currentUid == requestedUid) nextState else BookingVehiclesUiState.Unauthenticated
+        }
+    }
 
     fun loadAvailability(serviceDurationMinutes: Int, anchorDate: String? = null) {
         if (_availabilityState.value is BookingAvailabilityUiState.Loading) return
@@ -124,6 +176,49 @@ class ProductsBookingViewModel(
             this is BookingAvailabilityError.Backend
         return BookingAvailabilityUiState.Error(message = message, retryable = retryable)
     }
+
+    private fun List<UserVehicle>.toVehiclesUiState(): BookingVehiclesUiState {
+        val vehicles = mapNotNull { it.toBookingVehicleUiOrNull() }
+            .sortedWith(compareBy<BookingVehicleUi> { it.name.lowercase() }.thenBy { it.description.lowercase() })
+        return if (vehicles.isEmpty()) BookingVehiclesUiState.Empty else BookingVehiclesUiState.Loaded(vehicles)
+    }
+
+    private fun UserVehicleError.toVehiclesUiState(): BookingVehiclesUiState {
+        return when (this) {
+            is UserVehicleError.Unauthenticated -> BookingVehiclesUiState.Unauthenticated
+            is UserVehicleError.Permission,
+            is UserVehicleError.Validation -> BookingVehiclesUiState.Error(message = message, retryable = false)
+            is UserVehicleError.NotFound,
+            is UserVehicleError.Unavailable,
+            is UserVehicleError.Backend -> BookingVehiclesUiState.Error(message = message, retryable = true)
+        }
+    }
+}
+
+private fun UserVehicle.toBookingVehicleUiOrNull(): BookingVehicleUi? {
+    if (id.isBlank() || brand.isBlank() || model.isBlank() || plate.isBlank()) return null
+    val label = "$brand $model".trim()
+    val normalizedType = type.toBookingVehicleType()
+    val colorDetail = color.takeIf { it.isNotBlank() }?.let { " • $it" }.orEmpty()
+
+    return BookingVehicleUi(
+        id = "saved:$id",
+        name = label,
+        description = "$plate$colorDetail • ${normalizedType.toVehicleTypeLabel()}",
+        type = normalizedType,
+        userVehicleId = id,
+        vehicleLabel = label,
+    )
+}
+
+private fun String.toBookingVehicleType(): String = when (trim().lowercase()) {
+    "suv" -> "suv"
+    else -> "passenger"
+}
+
+private fun String.toVehicleTypeLabel(): String = when (this) {
+    "suv" -> "SUV"
+    else -> "Passageiros"
 }
 
 internal fun ProductsBookingDraft.toCreateRequest(): BookingCreateRequest? {
@@ -146,6 +241,8 @@ internal fun ProductsBookingDraft.toCreateRequest(): BookingCreateRequest? {
             "passenger" -> "passageiros"
             else -> vehicleType
         },
+        userVehicleId = userVehicleId,
+        vehicleLabel = vehicleLabel,
         gdprConsent = gdprConsent,
         notes = notes,
     )

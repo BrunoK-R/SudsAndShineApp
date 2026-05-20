@@ -11,6 +11,8 @@ data class BookingCreateRequest(
     val vehicleType: String,
     val gdprConsent: Boolean,
     val notes: String,
+    val userVehicleId: String? = null,
+    val vehicleLabel: String? = null,
 )
 
 data class BookingReceipt(
@@ -31,6 +33,7 @@ data class BookingHistoryReservation(
     val slotEndIso: String,
     val status: String,
     val vehicleType: String,
+    val vehicleLabel: String? = null,
     val priceCents: Int?,
     val upcoming: Boolean,
 )

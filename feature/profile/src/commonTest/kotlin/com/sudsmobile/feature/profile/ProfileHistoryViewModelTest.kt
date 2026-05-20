@@ -64,6 +64,7 @@ class ProfileHistoryViewModelTest {
                                 slotStartIso = "2026-05-18T10:00:00.000Z",
                                 upcoming = false,
                                 priceCents = 3200,
+                                vehicleLabel = "BMW 320d",
                             ),
                             historyReservation(
                                 id = "completed-2",
@@ -98,7 +99,7 @@ class ProfileHistoryViewModelTest {
         assertEquals("57,00€", loaded.summary.totalSpent)
         assertEquals(listOf("completed-1", "completed-2"), loaded.items.map { it.id })
         assertEquals("18 de maio, 2026", loaded.items.first().date)
-        assertEquals("SUV", loaded.items.first().vehicle)
+        assertEquals("BMW 320d", loaded.items.first().vehicle)
     }
 
     @Test
@@ -140,6 +141,7 @@ private fun historyReservation(
     upcoming: Boolean,
     status: String = if (upcoming) "pending" else "completed",
     priceCents: Int?,
+    vehicleLabel: String? = null,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -149,6 +151,7 @@ private fun historyReservation(
     slotEndIso = slotStartIso,
     status = status,
     vehicleType = "suv",
+    vehicleLabel = vehicleLabel,
     priceCents = priceCents,
     upcoming = upcoming,
 )

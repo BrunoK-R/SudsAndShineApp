@@ -98,7 +98,7 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         id = id,
         service = serviceName.ifBlank { "Serviço" },
         date = slotStartIso.toDateLabel(),
-        vehicle = vehicleType.toVehicleLabel(),
+        vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         priceCents = priceCents,
         status = status.toHistoryStatusUi(),

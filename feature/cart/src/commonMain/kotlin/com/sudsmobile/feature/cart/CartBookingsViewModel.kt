@@ -92,7 +92,7 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         service = serviceName.ifBlank { "Serviço" },
         date = slotStartIso.toDateLabel(),
         time = slotStartIso.toTimeLabel(),
-        vehicle = vehicleType.toVehicleLabel(),
+        vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         status = status.toStatusUi(),
         icon = serviceIcon(),

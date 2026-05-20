@@ -110,6 +110,8 @@ fun MainNavigation(
                             restoreState = true
                         }
                     },
+                    onRequestSignIn = onRequestSignIn,
+                    onManageVehicles = { navController.navigate(Routes.Vehicles) },
                 )
             }
             composable(Routes.Cart) {

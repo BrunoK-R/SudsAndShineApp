@@ -147,6 +147,8 @@ private data class CreateReservationPayload(
     val vehicleType: String,
     val gdprConsent: Boolean,
     val notes: String,
+    val userVehicleId: String? = null,
+    val vehicleLabel: String? = null,
 ) {
     companion object {
         fun from(request: BookingCreateRequest): CreateReservationPayload = CreateReservationPayload(
@@ -160,6 +162,8 @@ private data class CreateReservationPayload(
             vehicleType = request.vehicleType,
             gdprConsent = request.gdprConsent,
             notes = request.notes,
+            userVehicleId = request.userVehicleId,
+            vehicleLabel = request.vehicleLabel,
         )
     }
 }
@@ -253,6 +257,7 @@ private data class MyReservationItem(
     val slotEnd: String,
     val status: String = "pending",
     val vehicleType: String = "passageiros",
+    val vehicleLabel: String? = null,
     val priceCents: Int? = null,
     val upcoming: Boolean = true,
 ) {
@@ -265,6 +270,7 @@ private data class MyReservationItem(
         slotEndIso = slotEnd,
         status = status,
         vehicleType = vehicleType,
+        vehicleLabel = vehicleLabel,
         priceCents = priceCents,
         upcoming = upcoming,
     )

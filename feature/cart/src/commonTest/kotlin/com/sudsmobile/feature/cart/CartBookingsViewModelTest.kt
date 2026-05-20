@@ -65,6 +65,7 @@ class CartBookingsViewModelTest {
                                 slotEndIso = "2026-05-21T10:45:00.000Z",
                                 upcoming = true,
                                 priceCents = 3400,
+                                vehicleLabel = "BMW 320d",
                             ),
                             historyReservation(
                                 id = "completed-1",
@@ -85,6 +86,7 @@ class CartBookingsViewModelTest {
         val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
         assertEquals("upcoming-1", loaded.upcoming.single().id)
         assertEquals("21 de maio, 2026", loaded.upcoming.single().date)
+        assertEquals("BMW 320d", loaded.upcoming.single().vehicle)
         assertEquals("34,00€", loaded.upcoming.single().price)
         assertEquals("completed-1", loaded.completed.single().id)
     }
@@ -110,6 +112,7 @@ private fun historyReservation(
     slotEndIso: String,
     upcoming: Boolean,
     priceCents: Int?,
+    vehicleLabel: String? = null,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -119,6 +122,7 @@ private fun historyReservation(
     slotEndIso = slotEndIso,
     status = if (upcoming) "pending" else "completed",
     vehicleType = "suv",
+    vehicleLabel = vehicleLabel,
     priceCents = priceCents,
     upcoming = upcoming,
 )

@@ -172,6 +172,7 @@ class KtorBookingFunctionsApiTest {
                         "slotEnd": "2026-05-20T10:15:00.000Z",
                         "status": "pending",
                         "vehicleType": "suv",
+                        "vehicleLabel": "BMW 320d",
                         "priceCents": 3400,
                         "upcoming": true
                       }
@@ -190,6 +191,7 @@ class KtorBookingFunctionsApiTest {
         val success = assertIs<BookingHistoryResult.Success>(result)
         assertEquals("/test-project/europe-west1/getMyReservations", requestedPath)
         assertEquals("reservation-1", success.history.reservations.first().id)
+        assertEquals("BMW 320d", success.history.reservations.first().vehicleLabel)
         assertEquals(3400, success.history.reservations.first().priceCents)
         assertEquals(true, success.history.reservations.first().upcoming)
     }

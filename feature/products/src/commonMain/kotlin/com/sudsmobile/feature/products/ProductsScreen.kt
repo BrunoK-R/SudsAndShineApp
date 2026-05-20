@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AirportShuttle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -84,13 +86,6 @@ import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import org.koin.compose.viewmodel.koinViewModel
 
-private data class BookingVehicle(
-    val id: String,
-    val name: String,
-    val description: String,
-    val icon: ImageVector,
-)
-
 private enum class BookingStep {
     Service,
     Vehicle,
@@ -100,18 +95,22 @@ private enum class BookingStep {
     Success,
 }
 
-private val bookingVehicles = listOf(
-    BookingVehicle(
+private val bookingVehicleCategories = listOf(
+    BookingVehicleUi(
         id = "passenger",
         name = "Passageiros",
         description = "Carros normais, sedans, compactos",
-        icon = Icons.Filled.DirectionsCar,
+        type = "passenger",
+        userVehicleId = null,
+        vehicleLabel = null,
     ),
-    BookingVehicle(
+    BookingVehicleUi(
         id = "suv",
         name = "SUV",
         description = "SUVs, vans, carrinhas",
-        icon = Icons.Filled.AirportShuttle,
+        type = "suv",
+        userVehicleId = null,
+        vehicleLabel = null,
     ),
 )
 
@@ -121,11 +120,14 @@ fun ProductsScreen(
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
+    onRequestSignIn: () -> Unit = {},
+    onManageVehicles: () -> Unit = {},
 ) {
     val viewModel: ProductsBookingViewModel = koinViewModel()
     val catalogViewModel: ProductsCatalogViewModel = koinViewModel()
     val availabilityState by viewModel.availabilityState.collectAsStateWithLifecycle()
     val submitState by viewModel.submitState.collectAsStateWithLifecycle()
+    val vehiclesState by viewModel.vehiclesState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
@@ -135,9 +137,11 @@ fun ProductsScreen(
     ProductsScreenContent(
         contentPadding = contentPadding,
         catalogState = catalogState,
+        vehiclesState = vehiclesState,
         availabilityState = availabilityState,
         submitState = submitState,
         onLoadCatalog = catalogViewModel::loadCatalog,
+        onLoadVehicles = viewModel::loadVehicles,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onClearSubmitError = viewModel::clearSubmitError,
@@ -145,6 +149,8 @@ fun ProductsScreen(
         onBack = onBack,
         onViewBooking = onViewBooking,
         onHome = onHome,
+        onRequestSignIn = onRequestSignIn,
+        onManageVehicles = onManageVehicles,
     )
 }
 
@@ -152,9 +158,11 @@ fun ProductsScreen(
 private fun ProductsScreenContent(
     contentPadding: PaddingValues,
     catalogState: ProductCatalogUiState,
+    vehiclesState: BookingVehiclesUiState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
     onLoadCatalog: () -> Unit,
+    onLoadVehicles: () -> Unit,
     onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
@@ -162,6 +170,8 @@ private fun ProductsScreenContent(
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
+    onRequestSignIn: () -> Unit = {},
+    onManageVehicles: () -> Unit = {},
 ) {
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -183,7 +193,9 @@ private fun ProductsScreenContent(
         acceptsPrivacy
     val loadedServices = (catalogState as? ProductCatalogUiState.Loaded)?.services.orEmpty()
     val selectedService = loadedServices.firstOrNull { it.id == selectedServiceId }
-    val selectedVehicle = bookingVehicles.firstOrNull { it.id == selectedVehicleId }
+    val savedVehicles = (vehiclesState as? BookingVehiclesUiState.Loaded)?.vehicles.orEmpty()
+    val vehicleOptions = savedVehicles + bookingVehicleCategories
+    val selectedVehicle = vehicleOptions.firstOrNull { it.id == selectedVehicleId }
     val availabilityMonth = when (availabilityState) {
         is BookingAvailabilityUiState.Empty -> availabilityState.month
         is BookingAvailabilityUiState.Loaded -> availabilityState.month
@@ -217,6 +229,12 @@ private fun ProductsScreenContent(
         }
     }
 
+    LaunchedEffect(currentStep) {
+        if (currentStep == BookingStep.Vehicle) {
+            onLoadVehicles()
+        }
+    }
+
     LaunchedEffect(catalogState) {
         if (catalogState is ProductCatalogUiState.Loaded &&
             selectedServiceId != null &&
@@ -241,6 +259,12 @@ private fun ProductsScreenContent(
         if (!selectedDateStillAvailable) {
             selectedDateId = days.firstOrNull { it.available }?.id
             selectedTime = null
+        }
+    }
+
+    LaunchedEffect(vehiclesState) {
+        if (selectedVehicleId != null && vehicleOptions.none { it.id == selectedVehicleId }) {
+            selectedVehicleId = null
         }
     }
 
@@ -289,33 +313,17 @@ private fun ProductsScreenContent(
                         onBack = { currentStepName = BookingStep.Service.name },
                     )
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .offset(y = (-16).dp)
-                            .padding(top = 0.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Text(
-                            text = "Selecione o tipo de veículo para calcular o preço correto",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
-                        )
-
-                        bookingVehicles.forEach { vehicle ->
-                            BookingVehicleCard(
-                                vehicle = vehicle,
-                                selected = selectedVehicleId == vehicle.id,
-                                onSelected = {
-                                    selectedVehicleId = vehicle.id
-                                    onClearSubmitError()
-                                },
-                            )
-                        }
-
-                        VehicleHelpCard()
-                    }
+                    BookingVehicleStepContent(
+                        vehiclesState = vehiclesState,
+                        selectedVehicleId = selectedVehicleId,
+                        onRetryVehicles = onLoadVehicles,
+                        onRequestSignIn = onRequestSignIn,
+                        onManageVehicles = onManageVehicles,
+                        onVehicleSelected = { vehicle ->
+                            selectedVehicleId = vehicle.id
+                            onClearSubmitError()
+                        },
+                    )
                 }
 
                 BookingStep.DateTime -> {
@@ -603,7 +611,7 @@ private fun BookingStepHeader(
 @Composable
 private fun BookingConfirmationContent(
     service: ProductServiceUi?,
-    vehicle: BookingVehicle?,
+    vehicle: BookingVehicleUi?,
     date: BookingAvailabilityDay?,
     time: String?,
     name: String,
@@ -677,7 +685,7 @@ private fun BookingConfirmationContent(
 
         PriceSummaryCard(
             serviceName = service?.name ?: "Serviço",
-            price = service?.priceForVehicle(vehicle?.id) ?: "0,00€",
+            price = service?.priceForVehicle(vehicle?.type) ?: "0,00€",
         )
 
         BookingSubmitStatusCard(submitState)
@@ -2077,8 +2085,174 @@ private fun PopularBadge() {
 }
 
 @Composable
+private fun BookingVehicleStepContent(
+    vehiclesState: BookingVehiclesUiState,
+    selectedVehicleId: String?,
+    onRetryVehicles: () -> Unit,
+    onRequestSignIn: () -> Unit,
+    onManageVehicles: () -> Unit,
+    onVehicleSelected: (BookingVehicleUi) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .offset(y = (-16).dp)
+            .padding(top = 0.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = "Selecione um veículo guardado ou apenas a categoria para calcular o preço correto",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
+        )
+
+        when (vehiclesState) {
+            BookingVehiclesUiState.Idle,
+            BookingVehiclesUiState.Loading -> VehicleStateCard(
+                title = "A carregar veículos",
+                body = "Estamos a consultar os veículos associados à sua conta.",
+                icon = Icons.Filled.DirectionsCar,
+                loading = true,
+            )
+
+            BookingVehiclesUiState.Unauthenticated -> VehicleStateCard(
+                title = "Use os seus veículos guardados",
+                body = "Entre na conta para escolher um veículo registado nesta marcação.",
+                icon = Icons.Filled.Lock,
+                actionLabel = "Entrar",
+                onAction = onRequestSignIn,
+            )
+
+            BookingVehiclesUiState.Empty -> VehicleStateCard(
+                title = "Sem veículos guardados",
+                body = "Pode adicionar veículos ao perfil para acelerar futuras marcações.",
+                icon = Icons.Filled.Add,
+                actionLabel = "Gerir veículos",
+                onAction = onManageVehicles,
+            )
+
+            is BookingVehiclesUiState.Error -> VehicleStateCard(
+                title = "Não foi possível carregar veículos",
+                body = vehiclesState.message,
+                icon = Icons.Filled.Info,
+                actionLabel = if (vehiclesState.retryable) "Tentar novamente" else null,
+                onAction = if (vehiclesState.retryable) onRetryVehicles else null,
+            )
+
+            is BookingVehiclesUiState.Loaded -> {
+                VehicleSectionTitle("Veículos guardados")
+                vehiclesState.vehicles.forEach { vehicle ->
+                    BookingVehicleCard(
+                        vehicle = vehicle,
+                        selected = selectedVehicleId == vehicle.id,
+                        onSelected = { onVehicleSelected(vehicle) },
+                    )
+                }
+            }
+        }
+
+        VehicleSectionTitle(
+            if (vehiclesState is BookingVehiclesUiState.Loaded) {
+                "Ou selecione a categoria"
+            } else {
+                "Tipo de veículo"
+            },
+        )
+
+        bookingVehicleCategories.forEach { vehicle ->
+            BookingVehicleCard(
+                vehicle = vehicle,
+                selected = selectedVehicleId == vehicle.id,
+                onSelected = { onVehicleSelected(vehicle) },
+            )
+        }
+
+        VehicleHelpCard()
+    }
+}
+
+@Composable
+private fun VehicleSectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontWeight = FontWeight.Bold,
+    )
+}
+
+@Composable
+private fun VehicleStateCard(
+    title: String,
+    body: String,
+    icon: ImageVector,
+    loading: Boolean = false,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (actionLabel != null && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.tertiary,
+                    ),
+                ) {
+                    Text(actionLabel, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BookingVehicleCard(
-    vehicle: BookingVehicle,
+    vehicle: BookingVehicleUi,
     selected: Boolean,
     onSelected: () -> Unit,
 ) {
@@ -2120,7 +2294,7 @@ private fun BookingVehicleCard(
                 },
             ) {
                 Icon(
-                    imageVector = vehicle.icon,
+                    imageVector = vehicle.icon(),
                     contentDescription = null,
                     modifier = Modifier.padding(20.dp),
                 )
@@ -2200,7 +2374,7 @@ private fun VehicleHelpCard() {
 
 private fun buildBookingDraft(
     service: ProductServiceUi?,
-    vehicle: BookingVehicle?,
+    vehicle: BookingVehicleUi?,
     date: BookingAvailabilityDay?,
     time: String?,
     name: String,
@@ -2219,14 +2393,20 @@ private fun buildBookingDraft(
         dateId = date.id,
         time = time,
         serviceDurationMinutes = service.durationMinutes,
-        vehicleType = vehicle.id,
+        vehicleType = vehicle.type,
+        userVehicleId = vehicle.userVehicleId,
+        vehicleLabel = vehicle.vehicleLabel,
         gdprConsent = acceptsPrivacy,
         notes = notes,
     )
 }
 
-private fun ProductServiceUi.priceForVehicle(vehicleId: String?): String {
-    return if (vehicleId == "suv") suvPrice else passengerPrice
+private fun ProductServiceUi.priceForVehicle(vehicleType: String?): String {
+    return if (vehicleType == "suv") suvPrice else passengerPrice
+}
+
+private fun BookingVehicleUi.icon(): ImageVector {
+    return if (type == "suv") Icons.Filled.AirportShuttle else Icons.Filled.DirectionsCar
 }
 
 @Composable
