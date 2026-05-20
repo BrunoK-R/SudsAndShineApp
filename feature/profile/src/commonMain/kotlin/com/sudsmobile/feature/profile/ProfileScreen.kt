@@ -76,6 +76,7 @@ private data class ProfileMenuItem(
 
 private enum class ProfileMenuAction {
     None,
+    PersonalData,
     Vehicles,
     Loyalty,
     History,
@@ -83,7 +84,11 @@ private enum class ProfileMenuAction {
 }
 
 private val menuItems = listOf(
-    ProfileMenuItem(icon = Icons.Filled.Person, label = "Dados Pessoais"),
+    ProfileMenuItem(
+        icon = Icons.Filled.Person,
+        label = "Dados Pessoais",
+        action = ProfileMenuAction.PersonalData,
+    ),
     ProfileMenuItem(
         icon = Icons.Filled.DirectionsCar,
         label = "Meus Veículos",
@@ -112,6 +117,7 @@ private val menuItems = listOf(
 fun ProfileScreen(
     contentPadding: PaddingValues,
     onRequestSignIn: () -> Unit,
+    onOpenPersonalData: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
@@ -132,6 +138,7 @@ fun ProfileScreen(
         onRequestSignIn = onRequestSignIn,
         onSignOut = viewModel::signOut,
         onRetryStats = viewModel::loadStats,
+        onOpenPersonalData = onOpenPersonalData,
         onManageVehicles = onManageVehicles,
         onOpenHistory = onOpenHistory,
         onOpenContact = onOpenContact,
@@ -147,6 +154,7 @@ private fun ProfileScreenContent(
     onRequestSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onRetryStats: () -> Unit,
+    onOpenPersonalData: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
@@ -184,6 +192,7 @@ private fun ProfileScreenContent(
             NearestLocationCard()
             if (authenticatedUser != null) {
                 ProfileMenuCard(
+                    onOpenPersonalData = onOpenPersonalData,
                     onManageVehicles = onManageVehicles,
                     onOpenHistory = onOpenHistory,
                     onOpenContact = onOpenContact,
@@ -731,6 +740,7 @@ private fun NearestLocationCard() {
 
 @Composable
 private fun ProfileMenuCard(
+    onOpenPersonalData: () -> Unit,
     onManageVehicles: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenContact: () -> Unit,
@@ -749,6 +759,7 @@ private fun ProfileMenuCard(
                     onClick = {
                         when (item.action) {
                             ProfileMenuAction.None -> Unit
+                            ProfileMenuAction.PersonalData -> onOpenPersonalData()
                             ProfileMenuAction.Vehicles -> onManageVehicles()
                             ProfileMenuAction.Loyalty -> onOpenRewards()
                             ProfileMenuAction.History -> onOpenHistory()

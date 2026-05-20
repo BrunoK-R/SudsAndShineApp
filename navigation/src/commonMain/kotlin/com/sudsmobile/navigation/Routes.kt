@@ -10,6 +10,7 @@ object Routes {
     const val Cart = "cart"
     const val Rating = "rating"
     const val Profile = "profile"
+    const val PersonalData = "personal_data"
     const val Vehicles = "vehicles"
     const val History = "history"
     const val Contact = "contact"

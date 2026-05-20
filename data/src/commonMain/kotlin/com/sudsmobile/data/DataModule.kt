@@ -18,6 +18,10 @@ import com.sudsmobile.data.catalog.FirebaseServiceCatalogRepository
 import com.sudsmobile.data.catalog.KtorCatalogFunctionsApi
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
 import com.sudsmobile.data.network.createSudsHttpClient
+import com.sudsmobile.data.profile.FirebaseUserProfileRepository
+import com.sudsmobile.data.profile.KtorProfileFunctionsApi
+import com.sudsmobile.data.profile.ProfileFunctionsApi
+import com.sudsmobile.data.profile.UserProfileRepository
 import com.sudsmobile.data.vehicle.FirebaseUserVehicleRepository
 import com.sudsmobile.data.vehicle.KtorVehicleFunctionsApi
 import com.sudsmobile.data.vehicle.UserVehicleRepository
@@ -47,6 +51,8 @@ val dataModule = module {
     single<BookingRepository> { FirebaseBookingRepository(get(), get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }
     single<ServiceCatalogRepository> { FirebaseServiceCatalogRepository(get()) }
+    single<ProfileFunctionsApi> { KtorProfileFunctionsApi(get(), get()) }
+    single<UserProfileRepository> { FirebaseUserProfileRepository(get(), get()) }
     single<VehicleFunctionsApi> { KtorVehicleFunctionsApi(get(), get()) }
     single<UserVehicleRepository> { FirebaseUserVehicleRepository(get(), get()) }
     single<AppRepository> { AppRepositoryImpl() }

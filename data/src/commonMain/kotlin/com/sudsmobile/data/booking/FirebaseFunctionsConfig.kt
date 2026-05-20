@@ -46,6 +46,12 @@ data class FirebaseFunctionsConfig(
     val deleteVehicleUrl: String
         get() = functionUrl("deleteVehicle")
 
+    val getMyProfileUrl: String
+        get() = functionUrl("getMyProfile")
+
+    val updateMyProfileUrl: String
+        get() = functionUrl("updateMyProfile")
+
     private fun functionUrl(functionName: String): String {
         return if (useEmulator) {
             "http://$emulatorHost:5001/$projectId/$region/$functionName"

@@ -35,6 +35,7 @@ import com.sudsmobile.feature.home.HomeScreen
 import com.sudsmobile.feature.payment.PaymentScreen
 import com.sudsmobile.feature.profile.ContactScreen
 import com.sudsmobile.feature.profile.HistoryScreen
+import com.sudsmobile.feature.profile.PersonalDataScreen
 import com.sudsmobile.feature.products.ProductsScreen
 import com.sudsmobile.feature.products.ServicesScreen
 import com.sudsmobile.feature.profile.ProfileScreen
@@ -140,10 +141,18 @@ fun MainNavigation(
                 ProfileScreen(
                     contentPadding = paddingValues,
                     onRequestSignIn = onRequestSignIn,
+                    onOpenPersonalData = { navController.navigate(Routes.PersonalData) },
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
                     onOpenHistory = { navController.navigate(Routes.History) },
                     onOpenContact = { navController.navigate(Routes.Contact) },
                     onOpenRewards = { navController.navigate(Routes.Loyalty) },
+                )
+            }
+            composable(Routes.PersonalData) {
+                PersonalDataScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
                 )
             }
             composable(Routes.Vehicles) {
