@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.AirportShuttle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -77,6 +78,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -207,11 +209,14 @@ private fun ProductsScreenContent(
     var contactEmail by rememberSaveable { mutableStateOf("") }
     var contactNotes by rememberSaveable { mutableStateOf("") }
     var acceptsPrivacy by rememberSaveable { mutableStateOf(false) }
+    var loyaltyRewardCode by rememberSaveable { mutableStateOf("") }
     var appliedContactProfileUid by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedContactName by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedContactEmail by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedContactPhone by rememberSaveable { mutableStateOf<String?>(null) }
     var reservationCode by rememberSaveable { mutableStateOf<String?>(null) }
+    var successLoyaltyRewardApplied by rememberSaveable { mutableStateOf(false) }
+    var successLoyaltyRewardCode by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedInitialServiceRequestKey by rememberSaveable { mutableStateOf<Long?>(null) }
     var unavailableInitialServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     val currentStep = BookingStep.valueOf(currentStepName)
@@ -240,6 +245,7 @@ private fun ProductsScreenContent(
         email = contactEmail,
         notes = contactNotes,
         acceptsPrivacy = acceptsPrivacy,
+        loyaltyRewardCode = loyaltyRewardCode,
     )
 
     fun clearAppliedContactProfileIfUnchanged() {
@@ -271,6 +277,8 @@ private fun ProductsScreenContent(
         val state = submitState
         if (state is BookingSubmitUiState.Success) {
             reservationCode = state.receipt.reservationCode
+            successLoyaltyRewardApplied = state.receipt.loyaltyRewardApplied
+            successLoyaltyRewardCode = state.receipt.loyaltyRewardCode
             currentStepName = BookingStep.Success.name
             onSubmitSuccessConsumed()
         }
@@ -546,6 +554,13 @@ private fun ProductsScreenContent(
                         phone = contactPhone,
                         email = contactEmail,
                         notes = contactNotes,
+                        loyaltyRewardCode = loyaltyRewardCode,
+                        onLoyaltyRewardCodeChange = {
+                            loyaltyRewardCode = it
+                            onClearSubmitError()
+                        },
+                        sessionState = sessionState,
+                        onRequestSignIn = onRequestSignIn,
                         onEditService = {
                             currentStepName = BookingStep.Service.name
                             onClearSubmitError()
@@ -584,6 +599,8 @@ private fun ProductsScreenContent(
                         time = selectedTime,
                         phone = contactPhone,
                         reservationCode = reservationCode,
+                        loyaltyRewardApplied = successLoyaltyRewardApplied,
+                        loyaltyRewardCode = successLoyaltyRewardCode,
                         onAddToCalendar = {},
                         onViewBooking = onViewBooking,
                         onHome = onHome,
@@ -762,6 +779,10 @@ private fun BookingConfirmationContent(
     phone: String,
     email: String,
     notes: String,
+    loyaltyRewardCode: String,
+    onLoyaltyRewardCodeChange: (String) -> Unit,
+    sessionState: AuthSessionState,
+    onRequestSignIn: () -> Unit,
     onEditService: () -> Unit,
     onEditDateTime: () -> Unit,
     onEditContact: () -> Unit,
@@ -828,15 +849,138 @@ private fun BookingConfirmationContent(
             )
         }
 
+        LoyaltyRewardCodeCard(
+            rewardCode = loyaltyRewardCode,
+            sessionState = sessionState,
+            onRewardCodeChange = onLoyaltyRewardCodeChange,
+            onRequestSignIn = onRequestSignIn,
+        )
+
+        val basePriceCents = service?.priceCentsForVehicle(vehicle?.type) ?: 0
+        val rewardApplied = loyaltyRewardCode.isNotBlank() && sessionState is AuthSessionState.Authenticated
         PriceSummaryCard(
             serviceName = service?.name ?: "Serviço",
-            price = service?.priceForVehicle(vehicle?.type) ?: "0,00€",
+            basePrice = basePriceCents.toEuroLabel(),
+            discount = if (rewardApplied) basePriceCents.toEuroLabel() else null,
+            total = if (rewardApplied) 0.toEuroLabel() else basePriceCents.toEuroLabel(),
         )
 
         BookingSubmitStatusCard(
             submitState = submitState,
             onAction = onSubmitErrorAction,
         )
+    }
+}
+
+@Composable
+private fun LoyaltyRewardCodeCard(
+    rewardCode: String,
+    sessionState: AuthSessionState,
+    onRewardCodeChange: (String) -> Unit,
+    onRequestSignIn: () -> Unit,
+) {
+    val authenticated = sessionState is AuthSessionState.Authenticated
+
+    ConfirmationCard(title = "Recompensa") {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f),
+                contentColor = MaterialTheme.colorScheme.tertiary,
+            ) {
+                Icon(
+                    imageVector = if (authenticated) Icons.Filled.CardGiftcard else Icons.Filled.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.padding(10.dp),
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = if (authenticated) {
+                        "Aplicar código de lavagem grátis"
+                    } else {
+                        "Entre para aplicar recompensas"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = if (authenticated) {
+                        "O código é validado na sua conta ao confirmar a marcação."
+                    } else {
+                        "As recompensas emitidas ficam associadas à sua conta e só podem ser usadas uma vez."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                if (authenticated) {
+                    OutlinedTextField(
+                        value = rewardCode,
+                        onValueChange = { input ->
+                            onRewardCodeChange(input.take(80).uppercase())
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = {
+                            Text(
+                                text = "Código da recompensa",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        },
+                        placeholder = {
+                            Text(
+                                text = "SS-FREE-XXXX-0001",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Characters,
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.tertiary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            focusedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = onRequestSignIn,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.tertiary,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Entrar", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1100,7 +1244,9 @@ private fun ConfirmationLine(
 @Composable
 private fun PriceSummaryCard(
     serviceName: String,
-    price: String,
+    basePrice: String,
+    discount: String?,
+    total: String,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1141,10 +1287,29 @@ private fun PriceSummaryCard(
                     color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
                 )
                 Text(
-                    text = price,
+                    text = basePrice,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
                 )
+            }
+
+            if (discount != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "Recompensa fidelização",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
+                    )
+                    Text(
+                        text = "-$discount",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.18f))
@@ -1161,7 +1326,7 @@ private fun PriceSummaryCard(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = price,
+                    text = total,
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     fontWeight = FontWeight.Bold,
@@ -1178,6 +1343,8 @@ private fun BookingSuccessContent(
     time: String?,
     phone: String,
     reservationCode: String?,
+    loyaltyRewardApplied: Boolean,
+    loyaltyRewardCode: String?,
     onAddToCalendar: () -> Unit,
     onViewBooking: () -> Unit,
     onHome: () -> Unit,
@@ -1265,6 +1432,11 @@ private fun BookingSuccessContent(
 
         Spacer(Modifier.height(16.dp))
 
+        if (loyaltyRewardApplied) {
+            LoyaltyRewardAppliedCard(rewardCode = loyaltyRewardCode)
+            Spacer(Modifier.height(16.dp))
+        }
+
         ConfirmationSentCard()
 
         Spacer(Modifier.height(28.dp))
@@ -1328,6 +1500,45 @@ private fun BookingSuccessContent(
                     text = "Voltar ao Início",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoyaltyRewardAppliedCard(rewardCode: String?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f),
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CardGiftcard,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Recompensa aplicada",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = rewardCode?.let {
+                        "A lavagem grátis $it foi associada a esta marcação."
+                    } ?: "A lavagem grátis foi associada a esta marcação.",
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
@@ -2744,6 +2955,7 @@ private fun buildBookingDraft(
     email: String,
     notes: String,
     acceptsPrivacy: Boolean,
+    loyaltyRewardCode: String,
 ): ProductsBookingDraft? {
     if (service == null || vehicle == null || date == null || time == null) return null
     return ProductsBookingDraft(
@@ -2760,6 +2972,7 @@ private fun buildBookingDraft(
         vehicleLabel = vehicle.vehicleLabel,
         gdprConsent = acceptsPrivacy,
         notes = notes,
+        loyaltyRewardCode = loyaltyRewardCode.trim().takeIf { it.isNotBlank() },
     )
 }
 
@@ -2775,8 +2988,8 @@ private fun String?.normalizedInitialServiceId(): String? = this
     ?.trim()
     ?.takeIf { it.isNotBlank() }
 
-private fun ProductServiceUi.priceForVehicle(vehicleType: String?): String {
-    return if (vehicleType == "suv") suvPrice else passengerPrice
+private fun ProductServiceUi.priceCentsForVehicle(vehicleType: String?): Int {
+    return if (vehicleType == "suv") suvPriceCents else passengerPriceCents
 }
 
 private fun BookingVehicleUi.icon(): ImageVector {

@@ -33,6 +33,16 @@ class ProductsBookingDraftTest {
     }
 
     @Test
+    fun mapsLoyaltyRewardCodeToBackendRequest() {
+        val request = validDraft()
+            .copy(loyaltyRewardCode = "SS-FREE-UID1-0001")
+            .toCreateRequest()
+
+        assertNotNull(request)
+        assertEquals("SS-FREE-UID1-0001", request.loyaltyRewardCode)
+    }
+
+    @Test
     fun invalidTimeDoesNotCreateBackendRequest() {
         val request = validDraft().copy(time = "25:90").toCreateRequest()
 

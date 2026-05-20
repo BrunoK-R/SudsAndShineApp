@@ -65,6 +65,45 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun normalizesLoyaltyRewardCodeBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.createBooking(
+            validRequest().copy(loyaltyRewardCode = " ss-free-uid1-0001 "),
+        )
+
+        assertIs<BookingCreateResult.Success>(result)
+        assertEquals(1, api.calls)
+        assertEquals("SS-FREE-UID1-0001", api.lastRequest?.loyaltyRewardCode)
+        assertEquals("id-token-1", api.lastIdToken)
+    }
+
+    @Test
+    fun rejectsLoyaltyRewardCodeWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.createBooking(validRequest().copy(loyaltyRewardCode = "SS-FREE-UID1-0001"))
+
+        assertIs<BookingCreateResult.Failure>(result)
+        assertIs<BookingCreateError.Unauthenticated>(result.error)
+        assertEquals(0, api.calls)
+    }
+
+    @Test
+    fun rejectsInvalidLoyaltyRewardCodeBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.createBooking(validRequest().copy(loyaltyRewardCode = "users/other/reward"))
+
+        assertIs<BookingCreateResult.Failure>(result)
+        assertIs<BookingCreateError.Validation>(result.error)
+        assertEquals(0, api.calls)
+    }
+
+    @Test
     fun successfulBookingNotifiesBookingHistoryObservers() = runTest {
         val api = RecordingBookingFunctionsApi()
         val changeNotifier = MutableBookingChangeNotifier()

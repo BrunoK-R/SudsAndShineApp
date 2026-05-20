@@ -15,11 +15,16 @@ data class BookingCreateRequest(
     val notes: String,
     val userVehicleId: String? = null,
     val vehicleLabel: String? = null,
+    val loyaltyRewardCode: String? = null,
 )
 
 data class BookingReceipt(
     val reservationId: String,
     val reservationCode: String,
+    val loyaltyRewardApplied: Boolean = false,
+    val loyaltyRewardCode: String? = null,
+    val priceCents: Int? = null,
+    val discountCents: Int? = null,
 )
 
 data class BookingHistory(

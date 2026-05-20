@@ -17,12 +17,20 @@ class FirebaseBookingRepository(
     }
 
     override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
-        val validationError = validate(request)
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
         if (validationError != null) {
             return BookingCreateResult.Failure(validationError)
         }
 
-        return api.createReservation(request.normalized(), currentIdTokenOrNull())
+        val session = authRepository.currentSession()
+        if (!normalizedRequest.loyaltyRewardCode.isNullOrBlank() && session == null) {
+            return BookingCreateResult.Failure(
+                BookingCreateError.Unauthenticated("Inicie sessão para aplicar esta recompensa."),
+            )
+        }
+
+        return api.createReservation(normalizedRequest, session?.idToken)
             .also { result ->
                 if (result is BookingCreateResult.Success) {
                     bookingChangeNotifier.notifyBookingsChanged()
@@ -114,6 +122,8 @@ class FirebaseBookingRepository(
                 BookingCreateError.Validation("Escolha um tipo de veículo válido.")
             request.userVehicleId?.contains("/") == true ->
                 BookingCreateError.Validation("Escolha um veículo guardado válido.")
+            request.loyaltyRewardCode?.contains("/") == true || request.loyaltyRewardCode?.length.orZero() > 80 ->
+                BookingCreateError.Validation("Indique um código de recompensa válido.")
             !request.gdprConsent -> BookingCreateError.Validation("Aceite a política de privacidade para continuar.")
             else -> null
         }
@@ -153,6 +163,11 @@ class FirebaseBookingRepository(
         notes = notes.trim(),
         userVehicleId = userVehicleId?.trim()?.takeIf { it.isNotBlank() },
         vehicleLabel = vehicleLabel?.trim()?.takeIf { it.isNotBlank() },
+        loyaltyRewardCode = loyaltyRewardCode
+            ?.trim()
+            ?.replace(Regex("\\s+"), "")
+            ?.uppercase()
+            ?.takeIf { it.isNotBlank() },
     )
 
     private fun BookingReviewRequest.normalized(): BookingReviewRequest = copy(
@@ -169,10 +184,11 @@ class FirebaseBookingRepository(
         reservationId = reservationId.trim(),
     )
 
-    private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken
 }
 
 private fun isValidDateId(dateId: String): Boolean {
     if (dateId.length != 10) return false
     return dateId[4] == '-' && dateId[7] == '-'
 }
+
+private fun Int?.orZero(): Int = this ?: 0

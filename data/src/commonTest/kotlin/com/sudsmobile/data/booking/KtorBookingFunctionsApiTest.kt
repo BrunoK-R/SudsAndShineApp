@@ -90,7 +90,11 @@ class KtorBookingFunctionsApiTest {
                   "result": {
                     "ok": true,
                     "reservationId": "reservation-1",
-                    "reservationCode": "SS-ABCDEFGH"
+                    "reservationCode": "SS-ABCDEFGH",
+                    "loyaltyRewardApplied": true,
+                    "loyaltyRewardCode": "SS-FREE-UID1-0001",
+                    "priceCents": 0,
+                    "discountCents": 3200
                   }
                 }
                 """.trimIndent(),
@@ -103,6 +107,10 @@ class KtorBookingFunctionsApiTest {
         val success = assertIs<BookingCreateResult.Success>(result)
         assertEquals("reservation-1", success.receipt.reservationId)
         assertEquals("SS-ABCDEFGH", success.receipt.reservationCode)
+        assertEquals(true, success.receipt.loyaltyRewardApplied)
+        assertEquals("SS-FREE-UID1-0001", success.receipt.loyaltyRewardCode)
+        assertEquals(0, success.receipt.priceCents)
+        assertEquals(3200, success.receipt.discountCents)
     }
 
     @Test
@@ -126,6 +134,32 @@ class KtorBookingFunctionsApiTest {
         val failure = assertIs<BookingCreateResult.Failure>(result)
         assertIs<BookingCreateError.Conflict>(failure.error)
         assertEquals("Este horário deixou de estar disponível.", failure.error.message)
+    }
+
+    @Test
+    fun mapsCallableRewardPreconditionErrorToValidationState() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "FAILED_PRECONDITION",
+                    "message": "Loyalty reward has already been used"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.createReservation(
+            validRequest().copy(loyaltyRewardCode = "SS-FREE-UID1-0001"),
+            idToken = "id-token-1",
+        )
+
+        val failure = assertIs<BookingCreateResult.Failure>(result)
+        assertIs<BookingCreateError.Validation>(failure.error)
+        assertEquals("Esta recompensa não está disponível ou já foi utilizada.", failure.error.message)
     }
 
     @Test

@@ -54,6 +54,10 @@ class KtorBookingFunctionsApi(
                     BookingReceipt(
                         reservationId = body.result.reservationId,
                         reservationCode = body.result.reservationCode,
+                        loyaltyRewardApplied = body.result.loyaltyRewardApplied,
+                        loyaltyRewardCode = body.result.loyaltyRewardCode,
+                        priceCents = body.result.priceCents,
+                        discountCents = body.result.discountCents,
                     ),
                 )
                 else -> BookingCreateResult.Failure(
@@ -259,6 +263,7 @@ private data class CreateReservationPayload(
     val notes: String,
     val userVehicleId: String? = null,
     val vehicleLabel: String? = null,
+    val loyaltyRewardCode: String? = null,
 ) {
     companion object {
         fun from(request: BookingCreateRequest): CreateReservationPayload = CreateReservationPayload(
@@ -274,6 +279,7 @@ private data class CreateReservationPayload(
             notes = request.notes,
             userVehicleId = request.userVehicleId,
             vehicleLabel = request.vehicleLabel,
+            loyaltyRewardCode = request.loyaltyRewardCode,
         )
     }
 }
@@ -392,6 +398,10 @@ private data class CreateReservationResult(
     val ok: Boolean = false,
     val reservationId: String,
     val reservationCode: String,
+    val loyaltyRewardApplied: Boolean = false,
+    val loyaltyRewardCode: String? = null,
+    val priceCents: Int? = null,
+    val discountCents: Int? = null,
 )
 
 @Serializable
@@ -530,6 +540,8 @@ private data class CallableError(
         return when (normalizedCode) {
             "INVALID_ARGUMENT" -> BookingCreateError.Validation(fallbackMessage)
             "ALREADY_EXISTS" -> BookingCreateError.Conflict("Este horário deixou de estar disponível.")
+            "FAILED_PRECONDITION", "NOT_FOUND" ->
+                BookingCreateError.Validation("Esta recompensa não está disponível ou já foi utilizada.")
             "PERMISSION_DENIED" -> BookingCreateError.Permission("Não tem permissões para criar esta marcação.")
             "UNAUTHENTICATED" -> BookingCreateError.Unauthenticated("Inicie sessão para continuar.")
             "UNAVAILABLE" -> BookingCreateError.Unavailable("O serviço de marcações está indisponível.")

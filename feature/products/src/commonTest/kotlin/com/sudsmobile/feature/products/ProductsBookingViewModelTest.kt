@@ -321,6 +321,25 @@ class ProductsBookingViewModelTest {
         assertEquals(BookingSubmitResolution.Retry, error.resolution)
         assertEquals(true, error.retryable)
     }
+
+    @Test
+    fun submitBookingMapsRewardAuthErrorToSignInResolution() = runTest {
+        val viewModel = productsBookingViewModel(
+            bookingRepository = FakeBookingRepository(
+                availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+                createResult = BookingCreateResult.Failure(
+                    BookingCreateError.Unauthenticated("Inicie sessão para aplicar esta recompensa."),
+                ),
+            ),
+        )
+
+        viewModel.submitBooking(validDraft().copy(loyaltyRewardCode = "SS-FREE-UID1-0001"))
+        runCurrent()
+
+        val error = assertIs<BookingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals(BookingSubmitResolution.SignIn, error.resolution)
+        assertEquals(false, error.retryable)
+    }
 }
 
 private fun productsBookingViewModel(
