@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -22,15 +23,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,74 +47,39 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-
-private data class HistoryItem(
-    val id: Int,
-    val service: String,
-    val date: String,
-    val vehicle: String,
-    val priceCents: Int,
-)
-
-private val washHistory = listOf(
-    HistoryItem(
-        id = 1,
-        service = "Lavagem Premium",
-        date = "15 de Março, 2026",
-        vehicle = "BMW 320d",
-        priceCents = 3200,
-    ),
-    HistoryItem(
-        id = 2,
-        service = "Lavagem Exterior",
-        date = "10 de Março, 2026",
-        vehicle = "BMW 320d",
-        priceCents = 1600,
-    ),
-    HistoryItem(
-        id = 3,
-        service = "Lavagem Standard",
-        date = "5 de Março, 2026",
-        vehicle = "VW Golf",
-        priceCents = 2500,
-    ),
-    HistoryItem(
-        id = 4,
-        service = "Lavagem Premium",
-        date = "28 de Fevereiro, 2026",
-        vehicle = "BMW 320d",
-        priceCents = 3200,
-    ),
-    HistoryItem(
-        id = 5,
-        service = "Limpeza do Interior",
-        date = "20 de Fevereiro, 2026",
-        vehicle = "VW Golf",
-        priceCents = 1600,
-    ),
-    HistoryItem(
-        id = 6,
-        service = "Lavagem Standard",
-        date = "15 de Fevereiro, 2026",
-        vehicle = "BMW 320d",
-        priceCents = 2500,
-    ),
-    HistoryItem(
-        id = 7,
-        service = "Lavagem Premium",
-        date = "8 de Fevereiro, 2026",
-        vehicle = "VW Golf",
-        priceCents = 3200,
-    ),
-)
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun HistoryScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
+    onRequestSignIn: () -> Unit = {},
 ) {
-    val totalCents = washHistory.sumOf { it.priceCents }
+    val viewModel: ProfileHistoryViewModel = koinViewModel()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    LaunchedEffect(Unit) {
+        viewModel.loadHistory()
+    }
+
+    HistoryScreenContent(
+        contentPadding = contentPadding,
+        uiState = uiState,
+        onBack = onBack,
+        onRetry = viewModel::loadHistory,
+        onRequestSignIn = onRequestSignIn,
+    )
+}
+
+@Composable
+private fun HistoryScreenContent(
+    contentPadding: PaddingValues,
+    uiState: ProfileHistoryUiState,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onRequestSignIn: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -118,18 +92,50 @@ fun HistoryScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 16.dp),
+                .offset(y = (-16).dp)
+                .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            HistorySummaryCard(
-                washCount = washHistory.size,
-                totalCents = totalCents,
-            )
+            when (uiState) {
+                ProfileHistoryUiState.Idle,
+                ProfileHistoryUiState.Loading -> HistoryStatusCard(
+                    title = "A carregar histórico",
+                    body = "Estamos a consultar as lavagens associadas à sua conta.",
+                    loading = true,
+                )
 
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                washHistory.forEach { item ->
-                    HistoryItemCard(item = item)
+                ProfileHistoryUiState.Unauthenticated -> HistoryStatusCard(
+                    title = "Sessão necessária",
+                    body = "Entre na sua conta para ver o histórico de lavagens.",
+                    icon = HistoryStatusIcon.Locked,
+                    actionLabel = "Entrar ou criar conta",
+                    onAction = onRequestSignIn,
+                )
+
+                ProfileHistoryUiState.Empty -> HistoryStatusCard(
+                    title = "Sem lavagens concluídas",
+                    body = "Quando uma lavagem for concluída, o detalhe aparece aqui.",
+                    icon = HistoryStatusIcon.Empty,
+                    actionLabel = "Atualizar",
+                    onAction = onRetry,
+                )
+
+                is ProfileHistoryUiState.Error -> HistoryStatusCard(
+                    title = "Não foi possível carregar",
+                    body = uiState.message,
+                    icon = HistoryStatusIcon.Error,
+                    actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+                    onAction = if (uiState.retryable) onRetry else null,
+                )
+
+                is ProfileHistoryUiState.Loaded -> {
+                    HistorySummaryCard(summary = uiState.summary)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        uiState.items.forEach { item ->
+                            HistoryItemCard(item = item)
+                        }
+                    }
                 }
             }
         }
@@ -191,10 +197,7 @@ private fun HistoryHeader(onBack: () -> Unit) {
 }
 
 @Composable
-private fun HistorySummaryCard(
-    washCount: Int,
-    totalCents: Int,
-) {
+private fun HistorySummaryCard(summary: ProfileHistorySummaryUi) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary),
@@ -209,12 +212,12 @@ private fun HistorySummaryCard(
         ) {
             HistorySummaryStat(
                 label = "Total de Lavagens",
-                value = washCount.toString(),
+                value = summary.washCount,
                 modifier = Modifier.weight(1f),
             )
             HistorySummaryStat(
                 label = "Total Investido",
-                value = formatEuro(totalCents),
+                value = summary.totalSpent,
                 modifier = Modifier.weight(1f),
                 alignEnd = true,
             )
@@ -251,7 +254,7 @@ private fun HistorySummaryStat(
 }
 
 @Composable
-private fun HistoryItemCard(item: HistoryItem) {
+private fun HistoryItemCard(item: ProfileHistoryItemUi) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -267,9 +270,9 @@ private fun HistoryItemCard(item: HistoryItem) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top,
             ) {
-                CompletedBadge()
+                HistoryStatusBadge(status = item.status)
                 Text(
-                    text = formatEuro(item.priceCents),
+                    text = item.price,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.tertiary,
                     fontWeight = FontWeight.Bold,
@@ -312,10 +315,21 @@ private fun HistoryItemCard(item: HistoryItem) {
 }
 
 @Composable
-private fun CompletedBadge() {
+private fun HistoryStatusBadge(status: ProfileHistoryStatusUi) {
+    val containerColor = when (status) {
+        ProfileHistoryStatusUi.Completed -> MaterialTheme.colorScheme.primaryContainer
+        ProfileHistoryStatusUi.Cancelled -> MaterialTheme.colorScheme.errorContainer
+        ProfileHistoryStatusUi.Past -> MaterialTheme.colorScheme.secondaryContainer
+    }
+    val contentColor = when (status) {
+        ProfileHistoryStatusUi.Completed -> MaterialTheme.colorScheme.onPrimaryContainer
+        ProfileHistoryStatusUi.Cancelled -> MaterialTheme.colorScheme.onErrorContainer
+        ProfileHistoryStatusUi.Past -> MaterialTheme.colorScheme.onSecondaryContainer
+    }
+
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        color = containerColor,
+        contentColor = contentColor,
         shape = CircleShape,
     ) {
         Row(
@@ -329,7 +343,7 @@ private fun CompletedBadge() {
                 modifier = Modifier.size(14.dp),
             )
             Text(
-                text = "Concluído",
+                text = status.label,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -337,8 +351,114 @@ private fun CompletedBadge() {
     }
 }
 
-private fun formatEuro(cents: Int): String {
-    val euros = cents / 100
-    val remainder = cents % 100
-    return "$euros,${remainder.toString().padStart(2, '0')}€"
+private enum class HistoryStatusIcon {
+    Empty,
+    Error,
+    Locked,
+}
+
+@Composable
+private fun HistoryStatusCard(
+    title: String,
+    body: String,
+    loading: Boolean = false,
+    icon: HistoryStatusIcon = HistoryStatusIcon.Empty,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.34f),
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = when (icon) {
+                                    HistoryStatusIcon.Empty -> Icons.Filled.History
+                                    HistoryStatusIcon.Error -> Icons.Filled.ErrorOutline
+                                    HistoryStatusIcon.Locked -> Icons.Filled.Lock
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (actionLabel != null && onAction != null) {
+                if (icon == HistoryStatusIcon.Locked) {
+                    Button(
+                        onClick = onAction,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary,
+                        ),
+                    ) {
+                        Text(
+                            text = actionLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onAction,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(
+                            text = actionLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

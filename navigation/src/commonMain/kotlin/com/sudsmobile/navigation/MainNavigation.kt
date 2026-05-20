@@ -154,6 +154,7 @@ fun MainNavigation(
                 HistoryScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
                 )
             }
             composable(Routes.Contact) {
