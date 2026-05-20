@@ -25,6 +25,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AirportShuttle
@@ -53,6 +55,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -152,7 +155,7 @@ private fun ProductsScreenContent(
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
     onLoadCatalog: () -> Unit,
-    onLoadAvailability: (Int) -> Unit,
+    onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
     onSubmitSuccessConsumed: () -> Unit,
@@ -165,6 +168,8 @@ private fun ProductsScreenContent(
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDateId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
+    var availabilityAnchorDate by rememberSaveable { mutableStateOf<String?>(null) }
+    var minimumAvailabilityMonthAnchor by rememberSaveable { mutableStateOf<String?>(null) }
     var contactName by rememberSaveable { mutableStateOf("") }
     var contactPhone by rememberSaveable { mutableStateOf("") }
     var contactEmail by rememberSaveable { mutableStateOf("") }
@@ -179,7 +184,11 @@ private fun ProductsScreenContent(
     val loadedServices = (catalogState as? ProductCatalogUiState.Loaded)?.services.orEmpty()
     val selectedService = loadedServices.firstOrNull { it.id == selectedServiceId }
     val selectedVehicle = bookingVehicles.firstOrNull { it.id == selectedVehicleId }
-    val availabilityMonth = (availabilityState as? BookingAvailabilityUiState.Loaded)?.month
+    val availabilityMonth = when (availabilityState) {
+        is BookingAvailabilityUiState.Empty -> availabilityState.month
+        is BookingAvailabilityUiState.Loaded -> availabilityState.month
+        else -> null
+    }
     val selectedDate = availabilityMonth?.days?.firstOrNull { it.id == selectedDateId }
     val bookingDraft = buildBookingDraft(
         service = selectedService,
@@ -202,9 +211,9 @@ private fun ProductsScreenContent(
         }
     }
 
-    LaunchedEffect(currentStep, selectedService?.id) {
+    LaunchedEffect(currentStep, selectedService?.id, availabilityAnchorDate) {
         if (currentStep == BookingStep.DateTime && selectedService != null) {
-            onLoadAvailability(selectedService.durationMinutes)
+            onLoadAvailability(selectedService.durationMinutes, availabilityAnchorDate)
         }
     }
 
@@ -222,6 +231,9 @@ private fun ProductsScreenContent(
     LaunchedEffect(availabilityMonth) {
         val days = availabilityMonth?.days.orEmpty()
         if (days.isEmpty()) return@LaunchedEffect
+        if (minimumAvailabilityMonthAnchor == null) {
+            minimumAvailabilityMonthAnchor = availabilityMonth?.monthAnchorDate()
+        }
 
         val selectedDateStillAvailable = days.any { day ->
             day.id == selectedDateId && day.available
@@ -262,6 +274,8 @@ private fun ProductsScreenContent(
                                 if (selectedServiceId != service.id) {
                                     selectedDateId = null
                                     selectedTime = null
+                                    availabilityAnchorDate = null
+                                    minimumAvailabilityMonthAnchor = null
                                 }
                                 selectedServiceId = service.id
                                 onClearSubmitError()
@@ -323,7 +337,41 @@ private fun ProductsScreenContent(
                             onClearSubmitError()
                         },
                         onRetryAvailability = {
-                            selectedService?.let { onLoadAvailability(it.durationMinutes) }
+                            selectedService?.let {
+                                onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                            }
+                        },
+                        minimumMonthAnchor = minimumAvailabilityMonthAnchor,
+                        onPreviousMonth = {
+                            val currentAnchor = availabilityMonth?.monthAnchorDate()
+                            val previousAnchor = shiftMonthAnchorDate(currentAnchor, monthOffset = -1)
+                            val minimumAnchor = minimumAvailabilityMonthAnchor
+                            if (
+                                previousAnchor != null &&
+                                minimumAnchor != null &&
+                                previousAnchor >= minimumAnchor
+                            ) {
+                                selectedDateId = null
+                                selectedTime = null
+                                availabilityAnchorDate = if (previousAnchor == minimumAnchor) {
+                                    null
+                                } else {
+                                    previousAnchor
+                                }
+                                onClearSubmitError()
+                            }
+                        },
+                        onNextMonth = {
+                            val nextAnchor = shiftMonthAnchorDate(
+                                availabilityMonth?.monthAnchorDate(),
+                                monthOffset = 1,
+                            )
+                            if (nextAnchor != null) {
+                                selectedDateId = null
+                                selectedTime = null
+                                availabilityAnchorDate = nextAnchor
+                                onClearSubmitError()
+                            }
                         },
                     )
                 }
@@ -1300,9 +1348,20 @@ private fun DateTimeStepContent(
     onDateSelected: (String) -> Unit,
     onTimeSelected: (String) -> Unit,
     onRetryAvailability: () -> Unit,
+    minimumMonthAnchor: String?,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
 ) {
-    val month = (availabilityState as? BookingAvailabilityUiState.Loaded)?.month
+    val month = when (availabilityState) {
+        is BookingAvailabilityUiState.Empty -> availabilityState.month
+        is BookingAvailabilityUiState.Loaded -> availabilityState.month
+        else -> null
+    }
     val selectedDay = month?.days?.firstOrNull { it.id == selectedDateId }
+    val currentMonthAnchor = month?.monthAnchorDate()
+    val canNavigatePrevious = currentMonthAnchor != null &&
+        minimumMonthAnchor != null &&
+        currentMonthAnchor > minimumMonthAnchor
 
     Column(
         modifier = Modifier
@@ -1320,6 +1379,9 @@ private fun DateTimeStepContent(
                 CalendarSelectionCard(
                     month = availabilityState.month,
                     selectedDateId = selectedDateId,
+                    canNavigatePrevious = canNavigatePrevious,
+                    onPreviousMonth = onPreviousMonth,
+                    onNextMonth = onNextMonth,
                     onDateSelected = onDateSelected,
                 )
 
@@ -1330,11 +1392,22 @@ private fun DateTimeStepContent(
                 )
             }
 
-            BookingAvailabilityUiState.Empty -> AvailabilityStatusCard(
-                title = "Sem horários disponíveis",
-                body = "Não há vagas abertas para este mês.",
-                onRetry = onRetryAvailability,
-            )
+            is BookingAvailabilityUiState.Empty -> {
+                CalendarSelectionCard(
+                    month = availabilityState.month,
+                    selectedDateId = selectedDateId,
+                    canNavigatePrevious = canNavigatePrevious,
+                    onPreviousMonth = onPreviousMonth,
+                    onNextMonth = onNextMonth,
+                    onDateSelected = onDateSelected,
+                )
+
+                AvailabilityStatusCard(
+                    title = "Sem horários disponíveis",
+                    body = "Não há vagas abertas para ${availabilityState.month.monthTitle}.",
+                    onRetry = onRetryAvailability,
+                )
+            }
 
             is BookingAvailabilityUiState.Error -> AvailabilityStatusCard(
                 title = "Não foi possível carregar horários",
@@ -1447,6 +1520,9 @@ private fun AvailabilityStatusCard(
 private fun CalendarSelectionCard(
     month: BookingAvailabilityMonth,
     selectedDateId: String?,
+    canNavigatePrevious: Boolean,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
     onDateSelected: (String) -> Unit,
 ) {
     Card(
@@ -1467,6 +1543,9 @@ private fun CalendarSelectionCard(
             CalendarMonthPicker(
                 month = month,
                 selectedDateId = selectedDateId,
+                canNavigatePrevious = canNavigatePrevious,
+                onPreviousMonth = onPreviousMonth,
+                onNextMonth = onNextMonth,
                 onDateSelected = onDateSelected,
             )
         }
@@ -1477,6 +1556,9 @@ private fun CalendarSelectionCard(
 private fun CalendarMonthPicker(
     month: BookingAvailabilityMonth,
     selectedDateId: String?,
+    canNavigatePrevious: Boolean,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
     onDateSelected: (String) -> Unit,
 ) {
     val cells: List<BookingAvailabilityDay?> = List(month.leadingEmptyCells) { null } + month.days
@@ -1489,14 +1571,48 @@ private fun CalendarMonthPicker(
             shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
-            Text(
-                text = month.monthTitle,
-                modifier = Modifier.padding(vertical = 12.dp),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = onPreviousMonth,
+                    enabled = canNavigatePrevious,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Mês anterior",
+                        tint = if (canNavigatePrevious) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.36f)
+                        },
+                    )
+                }
+
+                Text(
+                    text = month.monthTitle,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+
+                IconButton(
+                    onClick = onNextMonth,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Mês seguinte",
+                        tint = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+            }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

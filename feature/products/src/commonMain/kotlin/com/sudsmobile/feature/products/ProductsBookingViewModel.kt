@@ -41,7 +41,7 @@ sealed interface BookingAvailabilityUiState {
     data object Idle : BookingAvailabilityUiState
     data object Loading : BookingAvailabilityUiState
     data class Loaded(val month: BookingAvailabilityMonth) : BookingAvailabilityUiState
-    data object Empty : BookingAvailabilityUiState
+    data class Empty(val month: BookingAvailabilityMonth) : BookingAvailabilityUiState
     data class Error(val message: String, val retryable: Boolean) : BookingAvailabilityUiState
 }
 
@@ -54,21 +54,24 @@ class ProductsBookingViewModel(
     private val _submitState = MutableStateFlow<BookingSubmitUiState>(BookingSubmitUiState.Idle)
     val submitState: StateFlow<BookingSubmitUiState> = _submitState.asStateFlow()
 
-    fun loadAvailability(serviceDurationMinutes: Int) {
+    fun loadAvailability(serviceDurationMinutes: Int, anchorDate: String? = null) {
         if (_availabilityState.value is BookingAvailabilityUiState.Loading) return
 
         viewModelScope.launch {
             _availabilityState.value = BookingAvailabilityUiState.Loading
             _availabilityState.value = when (
                 val result = bookingRepository.getAvailability(
-                    BookingAvailabilityRequest(serviceDurationMinutes = serviceDurationMinutes),
+                    BookingAvailabilityRequest(
+                        anchorDate = anchorDate,
+                        serviceDurationMinutes = serviceDurationMinutes,
+                    ),
                 )
             ) {
                 is BookingAvailabilityResult.Success -> {
                     if (result.month.days.any { it.available }) {
                         BookingAvailabilityUiState.Loaded(result.month)
                     } else {
-                        BookingAvailabilityUiState.Empty
+                        BookingAvailabilityUiState.Empty(result.month)
                     }
                 }
                 is BookingAvailabilityResult.Failure -> result.error.toUiState()
@@ -177,7 +180,35 @@ private fun parseTime(time: String): Pair<Int, Int>? {
 
 private fun isValidDateId(dateId: String): Boolean {
     if (dateId.length != 10) return false
-    return dateId[4] == '-' && dateId[7] == '-'
+    if (dateId[4] != '-' || dateId[7] != '-') return false
+
+    val year = dateId.substring(0, 4).toIntOrNull() ?: return false
+    val month = dateId.substring(5, 7).toIntOrNull() ?: return false
+    val day = dateId.substring(8, 10).toIntOrNull() ?: return false
+    return year > 0 && month in 1..12 && day in 1..31
 }
 
 private fun Int.twoDigits(): String = toString().padStart(length = 2, padChar = '0')
+
+internal fun BookingAvailabilityMonth.monthAnchorDate(): String? {
+    return days.firstOrNull()?.id.toMonthAnchorDateOrNull()
+}
+
+internal fun String?.toMonthAnchorDateOrNull(): String? {
+    val dateId = this ?: return null
+    if (!isValidDateId(dateId)) return null
+    return dateId.substring(0, 8) + "01"
+}
+
+internal fun shiftMonthAnchorDate(dateId: String?, monthOffset: Int): String? {
+    val monthAnchor = dateId.toMonthAnchorDateOrNull() ?: return null
+    val year = monthAnchor.substring(0, 4).toIntOrNull() ?: return null
+    val month = monthAnchor.substring(5, 7).toIntOrNull() ?: return null
+    val zeroBasedMonth = month - 1
+    val shiftedMonthIndex = year * 12 + zeroBasedMonth + monthOffset
+    if (shiftedMonthIndex < 12) return null
+
+    val shiftedYear = shiftedMonthIndex / 12
+    val shiftedMonth = shiftedMonthIndex % 12 + 1
+    return "$shiftedYear-${shiftedMonth.twoDigits()}-01"
+}
