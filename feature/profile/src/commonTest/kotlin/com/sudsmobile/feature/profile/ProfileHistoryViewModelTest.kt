@@ -15,6 +15,7 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -171,6 +172,48 @@ class ProfileHistoryViewModelTest {
         runCurrent()
 
         assertIs<ProfileHistoryUiState.Unauthenticated>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun refreshForSessionReloadsWhenBookingRevisionChanges() = runTest {
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        historyReservation(
+                            id = "completed-1",
+                            slotStartIso = "2026-05-18T10:00:00.000Z",
+                            upcoming = false,
+                            priceCents = 3200,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProfileHistoryAuthRepository(authenticated = true),
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(1, repository.historyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(2, repository.historyCalls)
     }
 }
 

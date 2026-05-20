@@ -129,6 +129,7 @@ fun ProductsScreen(
     val availabilityState by viewModel.availabilityState.collectAsStateWithLifecycle()
     val submitState by viewModel.submitState.collectAsStateWithLifecycle()
     val vehiclesState by viewModel.vehiclesState.collectAsStateWithLifecycle()
+    val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
     val contactProfileState by viewModel.contactProfileState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
@@ -141,6 +142,7 @@ fun ProductsScreen(
         contentPadding = contentPadding,
         catalogState = catalogState,
         vehiclesState = vehiclesState,
+        vehicleRevision = vehicleRevision,
         contactProfileState = contactProfileState,
         sessionState = sessionState,
         availabilityState = availabilityState,
@@ -167,6 +169,7 @@ private fun ProductsScreenContent(
     contentPadding: PaddingValues,
     catalogState: ProductCatalogUiState,
     vehiclesState: BookingVehiclesUiState,
+    vehicleRevision: Long,
     contactProfileState: BookingContactProfileUiState,
     sessionState: AuthSessionState,
     availabilityState: BookingAvailabilityUiState,
@@ -271,10 +274,13 @@ private fun ProductsScreenContent(
         }
     }
 
-    LaunchedEffect(currentStep, sessionState) {
+    LaunchedEffect(currentStep, sessionState, vehicleRevision) {
         if (currentStep == BookingStep.Vehicle) {
             onRefreshVehiclesForSession()
         }
+    }
+
+    LaunchedEffect(currentStep, sessionState) {
         if (currentStep == BookingStep.Contact) {
             onRefreshContactProfileForSession()
         }

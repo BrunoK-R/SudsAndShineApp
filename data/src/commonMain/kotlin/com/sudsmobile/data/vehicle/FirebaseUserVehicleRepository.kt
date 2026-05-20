@@ -5,6 +5,7 @@ import com.sudsmobile.data.auth.AuthRepository
 class FirebaseUserVehicleRepository(
     private val api: VehicleFunctionsApi,
     private val authRepository: AuthRepository,
+    private val userVehicleChangeNotifier: MutableUserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
 ) : UserVehicleRepository {
     override suspend fun getMyVehicles(): UserVehicleListResult {
         val idToken = currentIdTokenOrNull()
@@ -20,6 +21,11 @@ class FirebaseUserVehicleRepository(
         if (validationError != null) return UserVehicleMutationResult.Failure(validationError)
 
         return api.createVehicle(request.normalized(), idToken)
+            .also { result ->
+                if (result is UserVehicleMutationResult.Success) {
+                    userVehicleChangeNotifier.notifyVehiclesChanged()
+                }
+            }
     }
 
     override suspend fun updateVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
@@ -29,6 +35,11 @@ class FirebaseUserVehicleRepository(
         if (validationError != null) return UserVehicleMutationResult.Failure(validationError)
 
         return api.updateVehicle(request.normalized(), idToken)
+            .also { result ->
+                if (result is UserVehicleMutationResult.Success) {
+                    userVehicleChangeNotifier.notifyVehiclesChanged()
+                }
+            }
     }
 
     override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult {
@@ -40,6 +51,11 @@ class FirebaseUserVehicleRepository(
         }
 
         return api.deleteVehicle(normalizedVehicleId, idToken)
+            .also { result ->
+                if (result is UserVehicleDeleteResult.Success) {
+                    userVehicleChangeNotifier.notifyVehiclesChanged()
+                }
+            }
     }
 
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken

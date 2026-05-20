@@ -15,6 +15,8 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicle
 import com.sudsmobile.data.vehicle.UserVehicleDeleteResult
 import com.sudsmobile.data.vehicle.UserVehicleError
@@ -143,6 +145,58 @@ class ProfileViewModelTest {
         assertEquals("0", loaded.stats.vehicleCount)
         assertEquals("Veículos indisponíveis.", loaded.warningMessage)
         assertEquals(true, loaded.warningRetryable)
+    }
+
+    @Test
+    fun refreshForSessionReloadsWhenBookingOrVehicleRevisionChanges() = runTest {
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val vehicleChangeNotifier = MutableUserVehicleChangeNotifier()
+        val bookingRepository = ProfileStatsFakeBookingRepository(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(profileStatsHistoryReservation("completed-1", upcoming = false)),
+                ),
+            ),
+        )
+        val vehicleRepository = ProfileStatsFakeVehicleRepository(
+            UserVehicleListResult.Success(listOf(profileStatsVehicle("vehicle-1"))),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = bookingRepository,
+            userVehicleRepository = vehicleRepository,
+            bookingChangeNotifier = bookingChangeNotifier,
+            userVehicleChangeNotifier = vehicleChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
+        assertEquals(1, bookingRepository.historyCalls)
+        assertEquals(1, vehicleRepository.listCalls)
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(1, bookingRepository.historyCalls)
+        assertEquals(1, vehicleRepository.listCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
+        assertEquals(2, bookingRepository.historyCalls)
+        assertEquals(2, vehicleRepository.listCalls)
+
+        vehicleChangeNotifier.notifyVehiclesChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
+        assertEquals(3, bookingRepository.historyCalls)
+        assertEquals(3, vehicleRepository.listCalls)
     }
 
     @Test

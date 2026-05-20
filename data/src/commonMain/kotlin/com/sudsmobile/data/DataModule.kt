@@ -24,6 +24,8 @@ import com.sudsmobile.data.profile.ProfileFunctionsApi
 import com.sudsmobile.data.profile.UserProfileRepository
 import com.sudsmobile.data.vehicle.FirebaseUserVehicleRepository
 import com.sudsmobile.data.vehicle.KtorVehicleFunctionsApi
+import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
+import com.sudsmobile.data.vehicle.UserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicleRepository
 import com.sudsmobile.data.vehicle.VehicleFunctionsApi
 import io.ktor.client.HttpClient
@@ -54,6 +56,8 @@ val dataModule = module {
     single<ProfileFunctionsApi> { KtorProfileFunctionsApi(get(), get()) }
     single<UserProfileRepository> { FirebaseUserProfileRepository(get(), get()) }
     single<VehicleFunctionsApi> { KtorVehicleFunctionsApi(get(), get()) }
-    single<UserVehicleRepository> { FirebaseUserVehicleRepository(get(), get()) }
+    single { MutableUserVehicleChangeNotifier() }
+    single<UserVehicleChangeNotifier> { get<MutableUserVehicleChangeNotifier>() }
+    single<UserVehicleRepository> { FirebaseUserVehicleRepository(get(), get(), get()) }
     single<AppRepository> { AppRepositoryImpl() }
 }

@@ -125,10 +125,12 @@ fun ProfileScreen(
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
+    val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
     val statsState by viewModel.statsState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(sessionState) {
-        viewModel.loadStats()
+    LaunchedEffect(sessionState, bookingRevision, vehicleRevision) {
+        viewModel.refreshForSession()
     }
 
     ProfileScreenContent(

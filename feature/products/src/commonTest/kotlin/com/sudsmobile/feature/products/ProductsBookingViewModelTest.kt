@@ -29,6 +29,7 @@ import com.sudsmobile.data.vehicle.UserVehicleListResult
 import com.sudsmobile.data.vehicle.UserVehicleMutationResult
 import com.sudsmobile.data.vehicle.UserVehicleRepository
 import com.sudsmobile.data.vehicle.UserVehicleSaveRequest
+import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -168,6 +169,38 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun refreshVehiclesForSessionReloadsWhenVehicleRevisionChanges() = runTest {
+        val vehicleChangeNotifier = MutableUserVehicleChangeNotifier()
+        val vehicleRepository = FakeProductsVehicleRepository(
+            listResult = UserVehicleListResult.Success(
+                listOf(userVehicle(id = "vehicle-1", brand = "BMW")),
+            ),
+        )
+        val viewModel = productsBookingViewModel(
+            vehicleRepository = vehicleRepository,
+            userVehicleChangeNotifier = vehicleChangeNotifier,
+        )
+
+        viewModel.refreshVehiclesForSession()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Loaded>(viewModel.vehiclesState.value)
+        assertEquals(1, vehicleRepository.listCalls)
+
+        viewModel.refreshVehiclesForSession()
+        runCurrent()
+
+        assertEquals(1, vehicleRepository.listCalls)
+
+        vehicleChangeNotifier.notifyVehiclesChanged()
+        viewModel.refreshVehiclesForSession()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Loaded>(viewModel.vehiclesState.value)
+        assertEquals(2, vehicleRepository.listCalls)
+    }
+
+    @Test
     fun loadContactProfileRequiresAuthenticatedSession() = runTest {
         val profileRepository = FakeProductsProfileRepository(
             profileResult = UserProfileResult.Success(userProfile()),
@@ -301,11 +334,13 @@ private fun productsBookingViewModel(
     profileRepository: UserProfileRepository = FakeProductsProfileRepository(
         profileResult = UserProfileResult.Success(userProfile()),
     ),
+    userVehicleChangeNotifier: MutableUserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
 ): ProductsBookingViewModel = ProductsBookingViewModel(
     bookingRepository = bookingRepository,
     authRepository = authRepository,
     userVehicleRepository = vehicleRepository,
     userProfileRepository = profileRepository,
+    userVehicleChangeNotifier = userVehicleChangeNotifier,
 )
 
 private class FakeBookingRepository(

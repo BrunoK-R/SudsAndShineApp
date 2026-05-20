@@ -59,8 +59,9 @@ fun HistoryScreen(
     val viewModel: ProfileHistoryViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
 
-    LaunchedEffect(sessionState) {
+    LaunchedEffect(sessionState, bookingRevision) {
         viewModel.refreshForSession()
     }
 

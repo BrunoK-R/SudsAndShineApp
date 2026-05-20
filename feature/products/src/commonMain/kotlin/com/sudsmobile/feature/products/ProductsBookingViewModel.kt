@@ -18,9 +18,11 @@ import com.sudsmobile.data.profile.UserProfileError
 import com.sudsmobile.data.profile.UserProfileRepository
 import com.sudsmobile.data.profile.UserProfileResult
 import com.sudsmobile.data.vehicle.UserVehicle
+import com.sudsmobile.data.vehicle.UserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicleError
 import com.sudsmobile.data.vehicle.UserVehicleListResult
 import com.sudsmobile.data.vehicle.UserVehicleRepository
+import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -107,8 +109,10 @@ class ProductsBookingViewModel(
     private val authRepository: AuthRepository,
     private val userVehicleRepository: UserVehicleRepository,
     private val userProfileRepository: UserProfileRepository,
+    private val userVehicleChangeNotifier: UserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
+    val vehicleRevision: StateFlow<Long> = userVehicleChangeNotifier.revision
     private val _availabilityState = MutableStateFlow<BookingAvailabilityUiState>(BookingAvailabilityUiState.Idle)
     val availabilityState: StateFlow<BookingAvailabilityUiState> = _availabilityState.asStateFlow()
 
@@ -118,6 +122,7 @@ class ProductsBookingViewModel(
     private val _vehiclesState = MutableStateFlow<BookingVehiclesUiState>(BookingVehiclesUiState.Idle)
     val vehiclesState: StateFlow<BookingVehiclesUiState> = _vehiclesState.asStateFlow()
     private var loadedVehiclesUid: String? = null
+    private var loadedVehiclesRevision: Long? = null
 
     private val _contactProfileState = MutableStateFlow<BookingContactProfileUiState>(BookingContactProfileUiState.Idle)
     val contactProfileState: StateFlow<BookingContactProfileUiState> = _contactProfileState.asStateFlow()
@@ -173,12 +178,15 @@ class ProductsBookingViewModel(
         val session = sessionState.value as? AuthSessionState.Authenticated
         if (session == null) {
             loadedVehiclesUid = null
+            loadedVehiclesRevision = null
             _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
             return
         }
 
         val uid = session.session.user.uid
+        val revision = vehicleRevision.value
         val alreadyLoadedForUser = loadedVehiclesUid == uid &&
+            loadedVehiclesRevision == revision &&
             (_vehiclesState.value is BookingVehiclesUiState.Loaded || _vehiclesState.value is BookingVehiclesUiState.Empty)
         if (alreadyLoadedForUser) return
         loadVehicles()
@@ -190,11 +198,13 @@ class ProductsBookingViewModel(
         val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
         if (session == null) {
             loadedVehiclesUid = null
+            loadedVehiclesRevision = null
             _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
             return
         }
 
         val requestedUid = session.session.user.uid
+        val requestedRevision = vehicleRevision.value
         viewModelScope.launch {
             _vehiclesState.value = BookingVehiclesUiState.Loading
             val nextState = when (val result = userVehicleRepository.getMyVehicles()) {
@@ -204,9 +214,11 @@ class ProductsBookingViewModel(
             val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid == requestedUid) {
                 loadedVehiclesUid = requestedUid
+                loadedVehiclesRevision = requestedRevision
                 _vehiclesState.value = nextState
             } else {
                 loadedVehiclesUid = null
+                loadedVehiclesRevision = null
                 _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
             }
         }

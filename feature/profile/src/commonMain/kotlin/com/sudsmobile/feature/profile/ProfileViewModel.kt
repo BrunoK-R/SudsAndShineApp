@@ -4,12 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.booking.BookingChangeNotifier
 import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicle
+import com.sudsmobile.data.vehicle.UserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicleError
 import com.sudsmobile.data.vehicle.UserVehicleListResult
 import com.sudsmobile.data.vehicle.UserVehicleRepository
@@ -42,20 +46,32 @@ internal class ProfileViewModel(
     private val authRepository: AuthRepository,
     private val bookingRepository: BookingRepository,
     private val userVehicleRepository: UserVehicleRepository,
+    private val bookingChangeNotifier: BookingChangeNotifier = MutableBookingChangeNotifier(),
+    private val userVehicleChangeNotifier: UserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
+    val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
+    val vehicleRevision: StateFlow<Long> = userVehicleChangeNotifier.revision
     private val _statsState = MutableStateFlow<ProfileStatsUiState>(ProfileStatsUiState.Idle)
     val statsState: StateFlow<ProfileStatsUiState> = _statsState.asStateFlow()
+    private var loadedUid: String? = null
+    private var loadedBookingRevision: Long? = null
+    private var loadedVehicleRevision: Long? = null
 
     fun loadStats() {
         if (_statsState.value is ProfileStatsUiState.Loading) return
 
         val session = sessionState.value as? AuthSessionState.Authenticated
         if (session == null) {
+            loadedUid = null
+            loadedBookingRevision = null
+            loadedVehicleRevision = null
             _statsState.value = ProfileStatsUiState.Unauthenticated
             return
         }
         val requestedUid = session.session.user.uid
+        val requestedBookingRevision = bookingRevision.value
+        val requestedVehicleRevision = vehicleRevision.value
 
         viewModelScope.launch {
             _statsState.value = ProfileStatsUiState.Loading
@@ -69,13 +85,49 @@ internal class ProfileViewModel(
             }
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid == requestedUid) {
+                loadedUid = requestedUid
+                loadedBookingRevision = requestedBookingRevision
+                loadedVehicleRevision = requestedVehicleRevision
                 _statsState.value = nextState
+            } else {
+                loadedUid = null
+                loadedBookingRevision = null
+                loadedVehicleRevision = null
             }
         }
     }
 
+    fun refreshForSession() {
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedUid = null
+            loadedBookingRevision = null
+            loadedVehicleRevision = null
+            _statsState.value = ProfileStatsUiState.Unauthenticated
+            return
+        }
+
+        val uid = session.session.user.uid
+        val currentBookingRevision = bookingRevision.value
+        val currentVehicleRevision = vehicleRevision.value
+        val hasReusableState = _statsState.value is ProfileStatsUiState.Loaded
+        if (
+            loadedUid == uid &&
+            loadedBookingRevision == currentBookingRevision &&
+            loadedVehicleRevision == currentVehicleRevision &&
+            hasReusableState
+        ) {
+            return
+        }
+
+        loadStats()
+    }
+
     fun signOut() {
         authRepository.signOut()
+        loadedUid = null
+        loadedBookingRevision = null
+        loadedVehicleRevision = null
         _statsState.value = ProfileStatsUiState.Unauthenticated
     }
 }

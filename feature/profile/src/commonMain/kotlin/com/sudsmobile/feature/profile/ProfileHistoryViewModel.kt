@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.booking.BookingChangeNotifier
 import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,22 +52,27 @@ internal sealed interface ProfileHistoryUiState {
 internal class ProfileHistoryViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
+    private val bookingChangeNotifier: BookingChangeNotifier = MutableBookingChangeNotifier(),
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
+    val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
     private val _uiState = MutableStateFlow<ProfileHistoryUiState>(ProfileHistoryUiState.Idle)
     val uiState: StateFlow<ProfileHistoryUiState> = _uiState.asStateFlow()
     private var loadedUid: String? = null
+    private var loadedRevision: Long? = null
 
     fun refreshForSession() {
         val session = sessionState.value as? AuthSessionState.Authenticated
         if (session == null) {
             loadedUid = null
+            loadedRevision = null
             _uiState.value = ProfileHistoryUiState.Unauthenticated
             return
         }
 
         val uid = session.session.user.uid
-        if (loadedUid == uid && _uiState.value is ProfileHistoryUiState.Loaded) return
+        val revision = bookingRevision.value
+        if (loadedUid == uid && loadedRevision == revision && _uiState.value is ProfileHistoryUiState.Loaded) return
         loadHistory()
     }
 
@@ -75,10 +82,12 @@ internal class ProfileHistoryViewModel(
         val session = sessionState.value as? AuthSessionState.Authenticated
         if (session == null) {
             loadedUid = null
+            loadedRevision = null
             _uiState.value = ProfileHistoryUiState.Unauthenticated
             return
         }
         val requestedUid = session.session.user.uid
+        val requestedRevision = bookingRevision.value
 
         viewModelScope.launch {
             _uiState.value = ProfileHistoryUiState.Loading
@@ -89,9 +98,11 @@ internal class ProfileHistoryViewModel(
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid == requestedUid) {
                 loadedUid = requestedUid
+                loadedRevision = requestedRevision
                 _uiState.value = nextState
             } else {
                 loadedUid = null
+                loadedRevision = null
                 _uiState.value = ProfileHistoryUiState.Unauthenticated
             }
         }

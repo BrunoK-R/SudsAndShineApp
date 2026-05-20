@@ -29,7 +29,8 @@ class FirebaseUserVehicleRepositoryTest {
     @Test
     fun normalizesCreateRequestAndPassesIdToken() = runTest {
         val api = RecordingVehicleFunctionsApi()
-        val repository = FirebaseUserVehicleRepository(api, FakeAuthRepository(authenticated = true))
+        val changeNotifier = MutableUserVehicleChangeNotifier()
+        val repository = FirebaseUserVehicleRepository(api, FakeAuthRepository(authenticated = true), changeNotifier)
 
         val result = repository.createVehicle(
             UserVehicleSaveRequest(
@@ -46,6 +47,7 @@ class FirebaseUserVehicleRepositoryTest {
         assertEquals("BMW", api.lastSaveRequest?.brand)
         assertEquals("AA-00-BB", api.lastSaveRequest?.plate)
         assertEquals("passenger", api.lastSaveRequest?.type)
+        assertEquals(1L, changeNotifier.revision.value)
     }
 
     @Test
@@ -75,13 +77,27 @@ class FirebaseUserVehicleRepositoryTest {
     @Test
     fun deletesWithAuthenticatedIdToken() = runTest {
         val api = RecordingVehicleFunctionsApi()
-        val repository = FirebaseUserVehicleRepository(api, FakeAuthRepository(authenticated = true))
+        val changeNotifier = MutableUserVehicleChangeNotifier()
+        val repository = FirebaseUserVehicleRepository(api, FakeAuthRepository(authenticated = true), changeNotifier)
 
         val result = repository.deleteVehicle(" vehicle-1 ")
 
         assertIs<UserVehicleDeleteResult.Success>(result)
         assertEquals("vehicle-1", api.lastDeleteVehicleId)
         assertEquals("id-token-1", api.lastIdToken)
+        assertEquals(1L, changeNotifier.revision.value)
+    }
+
+    @Test
+    fun successfulUpdateNotifiesVehicleObservers() = runTest {
+        val api = RecordingVehicleFunctionsApi()
+        val changeNotifier = MutableUserVehicleChangeNotifier()
+        val repository = FirebaseUserVehicleRepository(api, FakeAuthRepository(authenticated = true), changeNotifier)
+
+        val result = repository.updateVehicle(validSaveRequest().copy(color = "Azul"))
+
+        assertIs<UserVehicleMutationResult.Success>(result)
+        assertEquals(1L, changeNotifier.revision.value)
     }
 }
 
