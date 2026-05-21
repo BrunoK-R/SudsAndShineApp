@@ -134,8 +134,10 @@ fun ProductsScreen(
     val submitState by viewModel.submitState.collectAsStateWithLifecycle()
     val vehiclesState by viewModel.vehiclesState.collectAsStateWithLifecycle()
     val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
+    val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     val contactProfileState by viewModel.contactProfileState.collectAsStateWithLifecycle()
     val businessInfoState by viewModel.businessInfoState.collectAsStateWithLifecycle()
+    val rewardsState by viewModel.rewardsState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
@@ -150,8 +152,10 @@ fun ProductsScreen(
         catalogState = catalogState,
         vehiclesState = vehiclesState,
         vehicleRevision = vehicleRevision,
+        bookingRevision = bookingRevision,
         contactProfileState = contactProfileState,
         businessInfoState = businessInfoState,
+        rewardsState = rewardsState,
         sessionState = sessionState,
         availabilityState = availabilityState,
         submitState = submitState,
@@ -161,6 +165,8 @@ fun ProductsScreen(
         onLoadContactProfile = viewModel::loadContactProfile,
         onRefreshContactProfileForSession = viewModel::refreshContactProfileForSession,
         onLoadBusinessInfo = viewModel::loadBusinessInfo,
+        onLoadRewards = viewModel::loadRewards,
+        onRefreshRewardsForSession = viewModel::refreshRewardsForSession,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onClearSubmitError = viewModel::clearSubmitError,
@@ -181,8 +187,10 @@ private fun ProductsScreenContent(
     catalogState: ProductCatalogUiState,
     vehiclesState: BookingVehiclesUiState,
     vehicleRevision: Long,
+    bookingRevision: Long,
     contactProfileState: BookingContactProfileUiState,
     businessInfoState: BookingBusinessInfoUiState,
+    rewardsState: BookingRewardsUiState,
     sessionState: AuthSessionState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
@@ -192,6 +200,8 @@ private fun ProductsScreenContent(
     onLoadContactProfile: () -> Unit,
     onRefreshContactProfileForSession: () -> Unit,
     onLoadBusinessInfo: (Boolean) -> Unit,
+    onLoadRewards: () -> Unit,
+    onRefreshRewardsForSession: () -> Unit,
     onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
@@ -318,6 +328,12 @@ private fun ProductsScreenContent(
             currentStep == BookingStep.Success
         ) {
             onLoadBusinessInfo(false)
+        }
+    }
+
+    LaunchedEffect(currentStep, sessionState, bookingRevision) {
+        if (currentStep == BookingStep.Confirmation) {
+            onRefreshRewardsForSession()
         }
     }
 
@@ -599,6 +615,8 @@ private fun ProductsScreenContent(
                         },
                         businessInfoState = businessInfoState,
                         onRetryBusinessInfo = { onLoadBusinessInfo(true) },
+                        rewardsState = rewardsState,
+                        onRetryRewards = onLoadRewards,
                         sessionState = sessionState,
                         onRequestSignIn = onRequestSignIn,
                         onEditService = {
@@ -825,6 +843,8 @@ private fun BookingConfirmationContent(
     onLoyaltyRewardCodeChange: (String) -> Unit,
     businessInfoState: BookingBusinessInfoUiState,
     onRetryBusinessInfo: () -> Unit,
+    rewardsState: BookingRewardsUiState,
+    onRetryRewards: () -> Unit,
     sessionState: AuthSessionState,
     onRequestSignIn: () -> Unit,
     onEditService: () -> Unit,
@@ -901,8 +921,10 @@ private fun BookingConfirmationContent(
 
         LoyaltyRewardCodeCard(
             rewardCode = loyaltyRewardCode,
+            rewardsState = rewardsState,
             sessionState = sessionState,
             onRewardCodeChange = onLoyaltyRewardCodeChange,
+            onRetryRewards = onRetryRewards,
             onRequestSignIn = onRequestSignIn,
         )
 
@@ -1046,8 +1068,10 @@ private fun BookingBusinessInfoUi.singleLineAddress(): String {
 @Composable
 private fun LoyaltyRewardCodeCard(
     rewardCode: String,
+    rewardsState: BookingRewardsUiState,
     sessionState: AuthSessionState,
     onRewardCodeChange: (String) -> Unit,
+    onRetryRewards: () -> Unit,
     onRequestSignIn: () -> Unit,
 ) {
     val authenticated = sessionState is AuthSessionState.Authenticated
@@ -1095,6 +1119,21 @@ private fun LoyaltyRewardCodeCard(
                 )
 
                 if (authenticated) {
+                    BookingRewardCodesContent(
+                        rewardsState = rewardsState,
+                        selectedCode = rewardCode,
+                        onRewardCodeSelected = { selectedCode ->
+                            onRewardCodeChange(
+                                if (rewardCode.equals(selectedCode, ignoreCase = true)) {
+                                    ""
+                                } else {
+                                    selectedCode
+                                },
+                            )
+                        },
+                        onRetryRewards = onRetryRewards,
+                    )
+
                     OutlinedTextField(
                         value = rewardCode,
                         onValueChange = { input ->
@@ -1103,7 +1142,7 @@ private fun LoyaltyRewardCodeCard(
                         modifier = Modifier.fillMaxWidth(),
                         label = {
                             Text(
-                                text = "Código da recompensa",
+                                text = "Código manual ou selecionado",
                                 style = MaterialTheme.typography.labelLarge,
                             )
                         },
@@ -1288,6 +1327,193 @@ private fun BookingSubmitResolution.actionIcon(): ImageVector {
         BookingSubmitResolution.Retry -> Icons.Filled.Refresh
         BookingSubmitResolution.SignIn -> Icons.Filled.Lock
         BookingSubmitResolution.None -> Icons.Filled.Info
+    }
+}
+
+@Composable
+private fun BookingRewardCodesContent(
+    rewardsState: BookingRewardsUiState,
+    selectedCode: String,
+    onRewardCodeSelected: (String) -> Unit,
+    onRetryRewards: () -> Unit,
+) {
+    when (rewardsState) {
+        BookingRewardsUiState.Idle,
+        BookingRewardsUiState.Loading -> BookingRewardStateRow(
+            title = "A carregar códigos emitidos",
+            body = "Estamos a consultar as recompensas disponíveis na sua conta.",
+            loading = true,
+        )
+
+        BookingRewardsUiState.Unauthenticated -> Unit
+
+        BookingRewardsUiState.Empty -> BookingRewardStateRow(
+            title = "Sem códigos disponíveis",
+            body = "Quando resgatar uma recompensa, o código aparece aqui para aplicar na marcação.",
+        )
+
+        is BookingRewardsUiState.Error -> BookingRewardStateRow(
+            title = "Não foi possível carregar códigos",
+            body = rewardsState.message,
+            actionLabel = if (rewardsState.retryable) "Tentar novamente" else null,
+            onAction = if (rewardsState.retryable) onRetryRewards else null,
+        )
+
+        is BookingRewardsUiState.Loaded -> {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Códigos disponíveis",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                rewardsState.rewardCodes.forEach { reward ->
+                    BookingRewardCodeOption(
+                        reward = reward,
+                        selected = selectedCode.equals(reward.code, ignoreCase = true),
+                        onClick = { onRewardCodeSelected(reward.code) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingRewardCodeOption(
+    reward: BookingRewardCodeUi,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.58f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        border = BorderStroke(
+            1.dp,
+            if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (selected) Icons.Filled.Check else Icons.Filled.CardGiftcard,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = reward.code,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = reward.issuedAt,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.76f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            Text(
+                text = reward.statusLabel,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BookingRewardStateRow(
+    title: String,
+    body: String,
+    loading: Boolean = false,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (actionLabel != null && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.tertiary,
+                    ),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
     }
 }
 

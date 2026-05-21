@@ -10,7 +10,14 @@ import com.sudsmobile.data.booking.BookingCreateError
 import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingReceipt
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingLoyalty
+import com.sudsmobile.data.booking.BookingLoyaltyError
+import com.sudsmobile.data.booking.BookingLoyaltyRedemption
+import com.sudsmobile.data.booking.BookingLoyaltyResult
+import com.sudsmobile.data.booking.BookingLoyaltyStamp
+import com.sudsmobile.data.booking.BookingLoyaltySummary
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.business.BusinessFaq
 import com.sudsmobile.data.business.BusinessInfo
 import com.sudsmobile.data.business.BusinessInfoError
@@ -352,6 +359,118 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun loadRewardsRequiresAuthenticatedSession() = runTest {
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            loyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty()),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProductsAuthRepository(authenticated = false),
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        assertIs<BookingRewardsUiState.Unauthenticated>(viewModel.rewardsState.value)
+        assertEquals(0, repository.loyaltyCalls)
+    }
+
+    @Test
+    fun loadRewardsShowsOnlyIssuedRewardCodes() = runTest {
+        val viewModel = productsBookingViewModel(
+            bookingRepository = FakeBookingRepository(
+                availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+                loyaltyResult = BookingLoyaltyResult.Success(
+                    bookingLoyalty(
+                        redemptions = listOf(
+                            bookingRedemption(
+                                id = "reward-1",
+                                rewardCode = "SS-FREE-UID1-0001",
+                                status = "issued",
+                                createdAtIso = "2026-05-20T10:00:00.000Z",
+                            ),
+                            bookingRedemption(
+                                id = "reward-2",
+                                rewardCode = "SS-FREE-UID1-0002",
+                                status = "redeemed",
+                                createdAtIso = "2026-05-21T10:00:00.000Z",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        val loaded = assertIs<BookingRewardsUiState.Loaded>(viewModel.rewardsState.value)
+        assertEquals(1, loaded.rewardCodes.size)
+        assertEquals("SS-FREE-UID1-0001", loaded.rewardCodes.single().code)
+        assertEquals("Disponível", loaded.rewardCodes.single().statusLabel)
+        assertEquals("Emitida em 20 de maio, 2026", loaded.rewardCodes.single().issuedAt)
+    }
+
+    @Test
+    fun refreshRewardsForSessionReloadsAfterRevisionChangesAndClearsAfterSignOut() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            loyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty(redemptions = listOf(bookingRedemption()))),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshRewardsForSession()
+        runCurrent()
+
+        assertIs<BookingRewardsUiState.Loaded>(viewModel.rewardsState.value)
+        assertEquals(1, repository.loyaltyCalls)
+
+        viewModel.refreshRewardsForSession()
+        runCurrent()
+
+        assertEquals(1, repository.loyaltyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshRewardsForSession()
+        runCurrent()
+
+        assertIs<BookingRewardsUiState.Loaded>(viewModel.rewardsState.value)
+        assertEquals(2, repository.loyaltyCalls)
+
+        authRepository.signOut()
+        viewModel.refreshRewardsForSession()
+        runCurrent()
+
+        assertIs<BookingRewardsUiState.Unauthenticated>(viewModel.rewardsState.value)
+    }
+
+    @Test
+    fun loadRewardsMapsBackendErrorToRetryableState() = runTest {
+        val viewModel = productsBookingViewModel(
+            bookingRepository = FakeBookingRepository(
+                availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+                loyaltyResult = BookingLoyaltyResult.Failure(
+                    BookingLoyaltyError.Unavailable("Não foi possível carregar recompensas."),
+                ),
+            ),
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        val error = assertIs<BookingRewardsUiState.Error>(viewModel.rewardsState.value)
+        assertEquals("Não foi possível carregar recompensas.", error.message)
+        assertEquals(true, error.retryable)
+    }
+
+    @Test
     fun submitBookingMapsConflictToChangeSlotResolution() = runTest {
         val viewModel = productsBookingViewModel(
             bookingRepository = FakeBookingRepository(
@@ -424,6 +543,7 @@ private fun productsBookingViewModel(
         result = BusinessInfoResult.Success(businessInfo()),
     ),
     userVehicleChangeNotifier: MutableUserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
+    bookingChangeNotifier: MutableBookingChangeNotifier = MutableBookingChangeNotifier(),
 ): ProductsBookingViewModel = ProductsBookingViewModel(
     bookingRepository = bookingRepository,
     authRepository = authRepository,
@@ -431,6 +551,7 @@ private fun productsBookingViewModel(
     userProfileRepository = profileRepository,
     businessInfoRepository = businessRepository,
     userVehicleChangeNotifier = userVehicleChangeNotifier,
+    bookingChangeNotifier = bookingChangeNotifier,
 )
 
 private class FakeBookingRepository(
@@ -441,8 +562,11 @@ private class FakeBookingRepository(
             reservationCode = "SS-ABCDEFGH",
         ),
     ),
+    private val loyaltyResult: BookingLoyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty()),
 ) : BookingRepository {
     var lastAvailabilityRequest: BookingAvailabilityRequest? = null
+        private set
+    var loyaltyCalls: Int = 0
         private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
@@ -456,6 +580,11 @@ private class FakeBookingRepository(
 
     override suspend fun getMyBookings(): BookingHistoryResult {
         error("Not used")
+    }
+
+    override suspend fun getMyLoyalty(): BookingLoyaltyResult {
+        loyaltyCalls += 1
+        return loyaltyResult
     }
 }
 
@@ -665,6 +794,37 @@ private fun businessInfo(
     openingHours = openingHours,
     faq = listOf(BusinessFaq(question = "Pergunta?", answer = "Resposta.")),
     stats = listOf(BusinessStat(value = "500+", label = "Carros")),
+)
+
+private fun bookingLoyalty(
+    redemptions: List<BookingLoyaltyRedemption> = emptyList(),
+): BookingLoyalty = BookingLoyalty(
+    summary = BookingLoyaltySummary(
+        totalWashes = 10,
+        currentWashes = 0,
+        targetWashes = 10,
+        remainingWashes = 10,
+        progress = 0f,
+        rewardReady = false,
+        completedRewards = 1,
+        claimedRewards = redemptions.size,
+        availableRewards = 0,
+    ),
+    stampHistory = emptyList<BookingLoyaltyStamp>(),
+    redemptions = redemptions,
+)
+
+private fun bookingRedemption(
+    id: String = "reward-1",
+    rewardCode: String = "SS-FREE-UID1-0001",
+    status: String = "issued",
+    createdAtIso: String = "2026-05-20T10:00:00.000Z",
+): BookingLoyaltyRedemption = BookingLoyaltyRedemption(
+    id = id,
+    rewardCode = rewardCode,
+    rewardNumber = 1,
+    status = status,
+    createdAtIso = createdAtIso,
 )
 
 private fun validDraft(): ProductsBookingDraft = ProductsBookingDraft(

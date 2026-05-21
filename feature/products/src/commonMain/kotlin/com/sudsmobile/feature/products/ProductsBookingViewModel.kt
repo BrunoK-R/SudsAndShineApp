@@ -8,11 +8,17 @@ import com.sudsmobile.data.booking.BookingAvailabilityError
 import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilityRequest
 import com.sudsmobile.data.booking.BookingAvailabilityResult
+import com.sudsmobile.data.booking.BookingChangeNotifier
 import com.sudsmobile.data.booking.BookingCreateError
 import com.sudsmobile.data.booking.BookingCreateRequest
 import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingReceipt
+import com.sudsmobile.data.booking.BookingLoyalty
+import com.sudsmobile.data.booking.BookingLoyaltyError
+import com.sudsmobile.data.booking.BookingLoyaltyRedemption
+import com.sudsmobile.data.booking.BookingLoyaltyResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.business.BusinessInfo
 import com.sudsmobile.data.business.BusinessInfoError
 import com.sudsmobile.data.business.BusinessInfoRepository
@@ -81,6 +87,13 @@ data class BookingOpeningHoursUi(
     val closed: Boolean,
 )
 
+data class BookingRewardCodeUi(
+    val id: String,
+    val code: String,
+    val statusLabel: String,
+    val issuedAt: String,
+)
+
 sealed interface BookingSubmitUiState {
     data object Idle : BookingSubmitUiState
     data object Loading : BookingSubmitUiState
@@ -136,6 +149,15 @@ sealed interface BookingBusinessInfoUiState {
     ) : BookingBusinessInfoUiState
 }
 
+sealed interface BookingRewardsUiState {
+    data object Idle : BookingRewardsUiState
+    data object Loading : BookingRewardsUiState
+    data object Unauthenticated : BookingRewardsUiState
+    data object Empty : BookingRewardsUiState
+    data class Loaded(val rewardCodes: List<BookingRewardCodeUi>) : BookingRewardsUiState
+    data class Error(val message: String, val retryable: Boolean) : BookingRewardsUiState
+}
+
 class ProductsBookingViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
@@ -143,9 +165,11 @@ class ProductsBookingViewModel(
     private val userProfileRepository: UserProfileRepository,
     private val businessInfoRepository: BusinessInfoRepository,
     private val userVehicleChangeNotifier: UserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
+    private val bookingChangeNotifier: BookingChangeNotifier = MutableBookingChangeNotifier(),
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     val vehicleRevision: StateFlow<Long> = userVehicleChangeNotifier.revision
+    val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
     private val _availabilityState = MutableStateFlow<BookingAvailabilityUiState>(BookingAvailabilityUiState.Idle)
     val availabilityState: StateFlow<BookingAvailabilityUiState> = _availabilityState.asStateFlow()
 
@@ -164,6 +188,11 @@ class ProductsBookingViewModel(
     private val _businessInfoState = MutableStateFlow<BookingBusinessInfoUiState>(BookingBusinessInfoUiState.Idle)
     val businessInfoState: StateFlow<BookingBusinessInfoUiState> = _businessInfoState.asStateFlow()
 
+    private val _rewardsState = MutableStateFlow<BookingRewardsUiState>(BookingRewardsUiState.Idle)
+    val rewardsState: StateFlow<BookingRewardsUiState> = _rewardsState.asStateFlow()
+    private var loadedRewardsUid: String? = null
+    private var loadedRewardsRevision: Long? = null
+
     fun loadBusinessInfo(force: Boolean = false) {
         if (_businessInfoState.value is BookingBusinessInfoUiState.Loading) return
         if (!force && _businessInfoState.value is BookingBusinessInfoUiState.Loaded) return
@@ -173,6 +202,56 @@ class ProductsBookingViewModel(
             _businessInfoState.value = when (val result = businessInfoRepository.getBusinessInfo()) {
                 is BusinessInfoResult.Success -> BookingBusinessInfoUiState.Loaded(result.info.toBookingBusinessInfoUi())
                 is BusinessInfoResult.Failure -> result.error.toBookingBusinessInfoState()
+            }
+        }
+    }
+
+    fun refreshRewardsForSession() {
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedRewardsUid = null
+            loadedRewardsRevision = null
+            _rewardsState.value = BookingRewardsUiState.Unauthenticated
+            return
+        }
+
+        val uid = session.session.user.uid
+        val revision = bookingRevision.value
+        val alreadyLoadedForUser = loadedRewardsUid == uid &&
+            loadedRewardsRevision == revision &&
+            (_rewardsState.value is BookingRewardsUiState.Loaded || _rewardsState.value is BookingRewardsUiState.Empty)
+        if (alreadyLoadedForUser) return
+        loadRewards()
+    }
+
+    fun loadRewards() {
+        if (_rewardsState.value is BookingRewardsUiState.Loading) return
+
+        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            loadedRewardsUid = null
+            loadedRewardsRevision = null
+            _rewardsState.value = BookingRewardsUiState.Unauthenticated
+            return
+        }
+
+        val requestedUid = session.session.user.uid
+        val requestedRevision = bookingRevision.value
+        viewModelScope.launch {
+            _rewardsState.value = BookingRewardsUiState.Loading
+            val nextState = when (val result = bookingRepository.getMyLoyalty()) {
+                is BookingLoyaltyResult.Success -> result.loyalty.toBookingRewardsUiState()
+                is BookingLoyaltyResult.Failure -> result.error.toBookingRewardsUiState()
+            }
+            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid == requestedUid) {
+                loadedRewardsUid = requestedUid
+                loadedRewardsRevision = requestedRevision
+                _rewardsState.value = nextState
+            } else {
+                loadedRewardsUid = null
+                loadedRewardsRevision = null
+                _rewardsState.value = BookingRewardsUiState.Unauthenticated
             }
         }
     }
@@ -410,6 +489,72 @@ class ProductsBookingViewModel(
         }
     }
 }
+
+private fun BookingLoyalty.toBookingRewardsUiState(): BookingRewardsUiState {
+    val rewardCodes = redemptions
+        .sortedByDescending { it.createdAtIso }
+        .mapNotNull { it.toBookingRewardCodeUiOrNull() }
+    return if (rewardCodes.isEmpty()) BookingRewardsUiState.Empty else BookingRewardsUiState.Loaded(rewardCodes)
+}
+
+private fun BookingLoyaltyError.toBookingRewardsUiState(): BookingRewardsUiState {
+    return when (this) {
+        is BookingLoyaltyError.Unauthenticated -> BookingRewardsUiState.Unauthenticated
+        is BookingLoyaltyError.Permission -> BookingRewardsUiState.Error(message = message, retryable = false)
+        is BookingLoyaltyError.Unavailable,
+        is BookingLoyaltyError.Backend -> BookingRewardsUiState.Error(message = message, retryable = true)
+    }
+}
+
+private fun BookingLoyaltyRedemption.toBookingRewardCodeUiOrNull(): BookingRewardCodeUi? {
+    if (id.isBlank() || rewardCode.isBlank() || !status.isIssuedRewardStatus()) return null
+    return BookingRewardCodeUi(
+        id = id,
+        code = rewardCode,
+        statusLabel = status.toRewardStatusLabel(),
+        issuedAt = createdAtIso.toIssuedAtLabel(),
+    )
+}
+
+private fun String.isIssuedRewardStatus(): Boolean {
+    return trim().lowercase() in setOf("issued", "emitida", "emitted", "available", "disponivel", "disponível")
+}
+
+private fun String.toRewardStatusLabel(): String {
+    return when (trim().lowercase()) {
+        "issued", "emitida", "emitted", "available", "disponivel", "disponível" -> "Disponível"
+        else -> replaceFirstChar { it.titlecase() }
+    }
+}
+
+private fun String.toIssuedAtLabel(): String {
+    return if (isBlank()) "Emitida" else toDateLabel()
+}
+
+private fun String.toDateLabel(): String {
+    val date = substringBefore("T")
+    val parts = date.split("-")
+    if (parts.size != 3) return date.ifBlank { "Emitida" }
+    val year = parts[0]
+    val month = parts[1].toIntOrNull()?.let { rewardMonthNames.getOrNull(it - 1) } ?: return date
+    val day = parts[2].toIntOrNull()?.toString() ?: parts[2]
+    return "Emitida em $day de $month, $year"
+}
+
+private val rewardMonthNames = listOf(
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+)
 
 internal fun BookingBusinessInfoUiState.infoOrDefault(): BookingBusinessInfoUi {
     return when (this) {
