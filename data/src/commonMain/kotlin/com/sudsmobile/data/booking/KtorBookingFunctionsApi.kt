@@ -197,6 +197,42 @@ class KtorBookingFunctionsApi(
         }
     }
 
+    override suspend fun rescheduleMyReservation(
+        request: BookingRescheduleRequest,
+        idToken: String,
+    ): BookingRescheduleResult {
+        return try {
+            val response = httpClient.post(config.rescheduleMyReservationUrl) {
+                callableHeaders(idToken)
+                setBody(CallableRescheduleRequest(ReschedulePayload.from(request)))
+            }
+            val body = response.body<CallableRescheduleResponse>()
+            val error = body.error
+            when {
+                error != null -> BookingRescheduleResult.Failure(error.toRescheduleError())
+                body.result != null -> BookingRescheduleResult.Success(
+                    BookingRescheduleReceipt(
+                        reservationId = body.result.reservationId,
+                        status = body.result.status,
+                        slotStartIso = body.result.slotStart,
+                        slotEndIso = body.result.slotEnd,
+                    ),
+                )
+                else -> BookingRescheduleResult.Failure(
+                    BookingRescheduleError.Backend("A resposta da remarcação veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingRescheduleResult.Failure(
+                BookingRescheduleError.Unavailable(
+                    "Não foi possível remarcar. Tente novamente.",
+                ),
+            )
+        }
+    }
+
     override suspend fun redeemMyLoyaltyReward(idToken: String): BookingRewardRedemptionResult {
         return try {
             val response = httpClient.post(config.redeemMyLoyaltyRewardUrl) {
@@ -260,6 +296,11 @@ private data class CallableReviewRequest(
 @Serializable
 private data class CallableCancelRequest(
     val data: CancelPayload,
+)
+
+@Serializable
+private data class CallableRescheduleRequest(
+    val data: ReschedulePayload,
 )
 
 @Serializable
@@ -348,6 +389,21 @@ private data class CancelPayload(
 }
 
 @Serializable
+private data class ReschedulePayload(
+    val reservationId: String,
+    val slotStart: String,
+    val slotEnd: String,
+) {
+    companion object {
+        fun from(request: BookingRescheduleRequest): ReschedulePayload = ReschedulePayload(
+            reservationId = request.reservationId,
+            slotStart = request.slotStartIso,
+            slotEnd = request.slotEndIso,
+        )
+    }
+}
+
+@Serializable
 private data class CallableGetAvailabilityResponse(
     val result: GetAvailabilityResult? = null,
     val error: CallableError? = null,
@@ -380,6 +436,12 @@ private data class CallableReviewResponse(
 @Serializable
 private data class CallableCancelResponse(
     val result: CancelResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableRescheduleResponse(
+    val result: RescheduleResult? = null,
     val error: CallableError? = null,
 )
 
@@ -472,6 +534,15 @@ private data class CancelResult(
     val ok: Boolean = false,
     val reservationId: String,
     val status: String = "cancelled",
+)
+
+@Serializable
+private data class RescheduleResult(
+    val ok: Boolean = false,
+    val reservationId: String,
+    val status: String = "pending",
+    val slotStart: String,
+    val slotEnd: String,
 )
 
 @Serializable
@@ -693,6 +764,21 @@ private data class CallableError(
             "FAILED_PRECONDITION" -> BookingCancelError.NotCancelable(fallbackMessage)
             "UNAVAILABLE" -> BookingCancelError.Unavailable("O serviço de cancelamentos está indisponível.")
             else -> BookingCancelError.Backend(fallbackMessage)
+        }
+    }
+
+    fun toRescheduleError(): BookingRescheduleError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível remarcar."
+        return when (normalizedCode) {
+            "INVALID_ARGUMENT" -> BookingRescheduleError.Validation(fallbackMessage)
+            "ALREADY_EXISTS" -> BookingRescheduleError.Conflict("Este horário deixou de estar disponível.")
+            "PERMISSION_DENIED" -> BookingRescheduleError.Permission("Esta marcação não pertence à sessão atual.")
+            "UNAUTHENTICATED" -> BookingRescheduleError.Unauthenticated("Inicie sessão para remarcar esta marcação.")
+            "NOT_FOUND" -> BookingRescheduleError.NotFound("A marcação selecionada já não existe.")
+            "FAILED_PRECONDITION" -> BookingRescheduleError.NotReschedulable(fallbackMessage)
+            "UNAVAILABLE" -> BookingRescheduleError.Unavailable("O serviço de remarcações está indisponível.")
+            else -> BookingRescheduleError.Backend(fallbackMessage)
         }
     }
 

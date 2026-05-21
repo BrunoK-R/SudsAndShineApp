@@ -12,5 +12,6 @@ interface BookingFunctionsApi {
 
     suspend fun submitReservationReview(request: BookingReviewRequest, idToken: String): BookingReviewResult
     suspend fun cancelMyReservation(request: BookingCancelRequest, idToken: String): BookingCancelResult
+    suspend fun rescheduleMyReservation(request: BookingRescheduleRequest, idToken: String): BookingRescheduleResult
     suspend fun redeemMyLoyaltyReward(idToken: String): BookingRewardRedemptionResult
 }

@@ -21,9 +21,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Info
@@ -34,6 +37,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -65,6 +69,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.booking.BookingAvailabilityDay
+import com.sudsmobile.data.booking.BookingAvailabilityMonth
+import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import org.koin.compose.viewmodel.koinViewModel
 
 private enum class BookingsTab(val label: String) {
@@ -96,10 +103,17 @@ fun CartScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val businessInfoState by viewModel.businessInfoState.collectAsStateWithLifecycle()
     val cancellationState by viewModel.cancellationState.collectAsStateWithLifecycle()
+    val rescheduleAvailabilityState by viewModel.rescheduleAvailabilityState.collectAsStateWithLifecycle()
+    val rescheduleState by viewModel.rescheduleState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     var selectedTabName by rememberSaveable { mutableStateOf(BookingsTab.Upcoming.name) }
     var pendingCancellationId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingRescheduleId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedRescheduleDateId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedRescheduleTime by rememberSaveable { mutableStateOf<String?>(null) }
+    var rescheduleAnchorDate by rememberSaveable { mutableStateOf<String?>(null) }
+    var minimumRescheduleMonthAnchor by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedTab = BookingsTab.valueOf(selectedTabName)
 
     LaunchedEffect(Unit) {
@@ -114,6 +128,17 @@ fun CartScreen(
         if (cancellationState is BookingCancellationUiState.Success) {
             pendingCancellationId = null
             viewModel.clearCancellationState()
+        }
+    }
+
+    LaunchedEffect(rescheduleState) {
+        if (rescheduleState is BookingRescheduleUiState.Success) {
+            pendingRescheduleId = null
+            selectedRescheduleDateId = null
+            selectedRescheduleTime = null
+            rescheduleAnchorDate = null
+            minimumRescheduleMonthAnchor = null
+            viewModel.clearRescheduleState()
         }
     }
 
@@ -137,16 +162,88 @@ fun CartScreen(
                 uiState = uiState,
                 businessInfoState = businessInfoState,
                 cancellationState = cancellationState,
+                rescheduleAvailabilityState = rescheduleAvailabilityState,
+                rescheduleState = rescheduleState,
                 selectedTab = selectedTab,
                 pendingCancellationId = pendingCancellationId,
+                pendingRescheduleId = pendingRescheduleId,
+                selectedRescheduleDateId = selectedRescheduleDateId,
+                selectedRescheduleTime = selectedRescheduleTime,
+                rescheduleAnchorDate = rescheduleAnchorDate,
+                minimumRescheduleMonthAnchor = minimumRescheduleMonthAnchor,
                 onTabSelected = { selectedTabName = it.name },
                 onRetry = viewModel::loadBookings,
                 onRetryBusinessInfo = { viewModel.loadBusinessInfo(force = true) },
                 onRequestSignIn = onRequestSignIn,
                 onOpenPayment = onOpenPayment,
                 onRateService = onRateService,
+                onRequestReschedule = { booking ->
+                    viewModel.clearRescheduleState()
+                    pendingCancellationId = null
+                    pendingRescheduleId = booking.id
+                    selectedRescheduleDateId = null
+                    selectedRescheduleTime = null
+                    rescheduleAnchorDate = booking.slotStartIso.substringBefore("T")
+                    minimumRescheduleMonthAnchor = null
+                    viewModel.loadRescheduleAvailability(
+                        serviceDurationMinutes = booking.serviceDurationMinutes,
+                        anchorDate = rescheduleAnchorDate,
+                    )
+                },
+                onDismissReschedule = { reservationId ->
+                    if (pendingRescheduleId == reservationId) {
+                        pendingRescheduleId = null
+                    }
+                    selectedRescheduleDateId = null
+                    selectedRescheduleTime = null
+                    rescheduleAnchorDate = null
+                    minimumRescheduleMonthAnchor = null
+                    viewModel.clearRescheduleState()
+                },
+                onSelectRescheduleDate = { dateId ->
+                    selectedRescheduleDateId = dateId
+                    selectedRescheduleTime = null
+                },
+                onSelectRescheduleTime = { time ->
+                    selectedRescheduleTime = time
+                },
+                onRescheduleMonthChanged = { booking, anchorDate ->
+                    rescheduleAnchorDate = anchorDate
+                    selectedRescheduleDateId = null
+                    selectedRescheduleTime = null
+                    viewModel.clearRescheduleState()
+                    viewModel.loadRescheduleAvailability(
+                        serviceDurationMinutes = booking.serviceDurationMinutes,
+                        anchorDate = anchorDate,
+                    )
+                },
+                onMinimumRescheduleMonthResolved = { anchorDate ->
+                    if (minimumRescheduleMonthAnchor == null) {
+                        minimumRescheduleMonthAnchor = anchorDate
+                    }
+                },
+                onRetryRescheduleAvailability = { booking ->
+                    viewModel.loadRescheduleAvailability(
+                        serviceDurationMinutes = booking.serviceDurationMinutes,
+                        anchorDate = rescheduleAnchorDate,
+                    )
+                },
+                onConfirmReschedule = { booking ->
+                    viewModel.rescheduleBooking(
+                        BookingRescheduleDraft(
+                            reservationId = booking.id,
+                            dateId = selectedRescheduleDateId.orEmpty(),
+                            time = selectedRescheduleTime.orEmpty(),
+                            durationMinutes = booking.serviceDurationMinutes,
+                        ),
+                    )
+                },
                 onRequestCancellation = { reservationId ->
                     viewModel.clearCancellationState()
+                    if (pendingRescheduleId == reservationId) {
+                        pendingRescheduleId = null
+                        viewModel.clearRescheduleState()
+                    }
                     pendingCancellationId = reservationId
                 },
                 onDismissCancellation = { reservationId ->
@@ -249,14 +346,29 @@ private fun BookingsContent(
     uiState: CartBookingsUiState,
     businessInfoState: CartBusinessInfoUiState,
     cancellationState: BookingCancellationUiState,
+    rescheduleAvailabilityState: BookingRescheduleAvailabilityUiState,
+    rescheduleState: BookingRescheduleUiState,
     selectedTab: BookingsTab,
     pendingCancellationId: String?,
+    pendingRescheduleId: String?,
+    selectedRescheduleDateId: String?,
+    selectedRescheduleTime: String?,
+    rescheduleAnchorDate: String?,
+    minimumRescheduleMonthAnchor: String?,
     onTabSelected: (BookingsTab) -> Unit,
     onRetry: () -> Unit,
     onRetryBusinessInfo: () -> Unit,
     onRequestSignIn: () -> Unit,
     onOpenPayment: () -> Unit,
     onRateService: (String) -> Unit,
+    onRequestReschedule: (BookingSummaryUi) -> Unit,
+    onDismissReschedule: (String) -> Unit,
+    onSelectRescheduleDate: (String) -> Unit,
+    onSelectRescheduleTime: (String) -> Unit,
+    onRescheduleMonthChanged: (BookingSummaryUi, String) -> Unit,
+    onMinimumRescheduleMonthResolved: (String?) -> Unit,
+    onRetryRescheduleAvailability: (BookingSummaryUi) -> Unit,
+    onConfirmReschedule: (BookingSummaryUi) -> Unit,
     onRequestCancellation: (String) -> Unit,
     onDismissCancellation: (String) -> Unit,
     onConfirmCancellation: (String) -> Unit,
@@ -326,12 +438,33 @@ private fun BookingsContent(
                                 !booking.reviewed,
                             showCancelAction = selectedTab == BookingsTab.Upcoming &&
                                 booking.cancelable,
+                            showRescheduleAction = selectedTab == BookingsTab.Upcoming &&
+                                booking.cancelable,
                             businessInfoState = businessInfoState,
                             cancellationState = cancellationState.forReservation(booking.id),
                             cancellationConfirmationVisible = pendingCancellationId == booking.id,
+                            rescheduleAvailabilityState = if (pendingRescheduleId == booking.id) {
+                                rescheduleAvailabilityState
+                            } else {
+                                BookingRescheduleAvailabilityUiState.Idle
+                            },
+                            rescheduleState = rescheduleState.forReservation(booking.id),
+                            rescheduleVisible = pendingRescheduleId == booking.id,
+                            selectedRescheduleDateId = selectedRescheduleDateId,
+                            selectedRescheduleTime = selectedRescheduleTime,
+                            rescheduleAnchorDate = rescheduleAnchorDate,
+                            minimumRescheduleMonthAnchor = minimumRescheduleMonthAnchor,
                             onRetryBusinessInfo = onRetryBusinessInfo,
                             onOpenPayment = onOpenPayment,
                             onRateService = { onRateService(booking.id) },
+                            onRequestReschedule = { onRequestReschedule(booking) },
+                            onDismissReschedule = { onDismissReschedule(booking.id) },
+                            onSelectRescheduleDate = onSelectRescheduleDate,
+                            onSelectRescheduleTime = onSelectRescheduleTime,
+                            onRescheduleMonthChanged = { anchorDate -> onRescheduleMonthChanged(booking, anchorDate) },
+                            onMinimumRescheduleMonthResolved = onMinimumRescheduleMonthResolved,
+                            onRetryRescheduleAvailability = { onRetryRescheduleAvailability(booking) },
+                            onConfirmReschedule = { onConfirmReschedule(booking) },
                             onRequestCancellation = { onRequestCancellation(booking.id) },
                             onDismissCancellation = { onDismissCancellation(booking.id) },
                             onConfirmCancellation = { onConfirmCancellation(booking.id) },
@@ -430,12 +563,28 @@ private fun BookingSummaryCard(
     booking: BookingSummaryUi,
     showRatingAction: Boolean,
     showCancelAction: Boolean,
+    showRescheduleAction: Boolean,
     businessInfoState: CartBusinessInfoUiState,
     cancellationState: BookingCancellationUiState,
     cancellationConfirmationVisible: Boolean,
+    rescheduleAvailabilityState: BookingRescheduleAvailabilityUiState,
+    rescheduleState: BookingRescheduleUiState,
+    rescheduleVisible: Boolean,
+    selectedRescheduleDateId: String?,
+    selectedRescheduleTime: String?,
+    rescheduleAnchorDate: String?,
+    minimumRescheduleMonthAnchor: String?,
     onRetryBusinessInfo: () -> Unit,
     onOpenPayment: () -> Unit,
     onRateService: () -> Unit,
+    onRequestReschedule: () -> Unit,
+    onDismissReschedule: () -> Unit,
+    onSelectRescheduleDate: (String) -> Unit,
+    onSelectRescheduleTime: (String) -> Unit,
+    onRescheduleMonthChanged: (String) -> Unit,
+    onMinimumRescheduleMonthResolved: (String?) -> Unit,
+    onRetryRescheduleAvailability: () -> Unit,
+    onConfirmReschedule: () -> Unit,
     onRequestCancellation: () -> Unit,
     onDismissCancellation: () -> Unit,
     onConfirmCancellation: () -> Unit,
@@ -553,6 +702,30 @@ private fun BookingSummaryCard(
                 PendingPaymentAction(
                     paymentLabel = booking.paymentLabel,
                     onOpenPayment = onOpenPayment,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+            }
+
+            if (showRescheduleAction) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                BookingRescheduleAction(
+                    booking = booking,
+                    availabilityState = rescheduleAvailabilityState,
+                    rescheduleState = rescheduleState,
+                    visible = rescheduleVisible,
+                    selectedDateId = selectedRescheduleDateId,
+                    selectedTime = selectedRescheduleTime,
+                    anchorDate = rescheduleAnchorDate,
+                    minimumMonthAnchor = minimumRescheduleMonthAnchor,
+                    onRequestReschedule = onRequestReschedule,
+                    onDismissReschedule = onDismissReschedule,
+                    onDateSelected = onSelectRescheduleDate,
+                    onTimeSelected = onSelectRescheduleTime,
+                    onMonthChanged = onRescheduleMonthChanged,
+                    onMinimumMonthResolved = onMinimumRescheduleMonthResolved,
+                    onRetryAvailability = onRetryRescheduleAvailability,
+                    onConfirmReschedule = onConfirmReschedule,
                     modifier = Modifier.padding(top = 14.dp),
                 )
             }
@@ -835,6 +1008,586 @@ private fun BookingCancellationUiState.forReservation(reservationId: String): Bo
         }
     }
 }
+
+@Composable
+private fun BookingRescheduleAction(
+    booking: BookingSummaryUi,
+    availabilityState: BookingRescheduleAvailabilityUiState,
+    rescheduleState: BookingRescheduleUiState,
+    visible: Boolean,
+    selectedDateId: String?,
+    selectedTime: String?,
+    anchorDate: String?,
+    minimumMonthAnchor: String?,
+    onRequestReschedule: () -> Unit,
+    onDismissReschedule: () -> Unit,
+    onDateSelected: (String) -> Unit,
+    onTimeSelected: (String) -> Unit,
+    onMonthChanged: (String) -> Unit,
+    onMinimumMonthResolved: (String?) -> Unit,
+    onRetryAvailability: () -> Unit,
+    onConfirmReschedule: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val loading = rescheduleState is BookingRescheduleUiState.Loading
+    val errorState = rescheduleState as? BookingRescheduleUiState.Error
+    val month = availabilityState.monthOrNull()
+    val resolvedMonthAnchor = month?.monthAnchorDate()
+
+    LaunchedEffect(resolvedMonthAnchor) {
+        if (minimumMonthAnchor == null && resolvedMonthAnchor != null) {
+            onMinimumMonthResolved(resolvedMonthAnchor)
+        }
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (!visible && errorState == null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onRequestReschedule),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.tertiary,
+                )
+                Text(
+                    text = "Remarcar marcação",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            return
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "Escolher novo horário",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Atual: ${booking.date} às ${booking.time}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        RescheduleMonthControls(
+            monthTitle = month?.monthTitle ?: anchorDate?.toMonthLabel().orEmpty().ifBlank { "Horários" },
+            previousEnabled = !loading && minimumMonthAnchor != null &&
+                resolvedMonthAnchor != null &&
+                resolvedMonthAnchor > minimumMonthAnchor,
+            nextEnabled = !loading,
+            onPrevious = {
+                val nextAnchor = shiftMonthAnchorDate(
+                    anchorDate = resolvedMonthAnchor ?: anchorDate,
+                    offsetMonths = -1,
+                )
+                if (nextAnchor != null) onMonthChanged(nextAnchor)
+            },
+            onNext = {
+                val nextAnchor = shiftMonthAnchorDate(
+                    anchorDate = resolvedMonthAnchor ?: anchorDate,
+                    offsetMonths = 1,
+                )
+                if (nextAnchor != null) onMonthChanged(nextAnchor)
+            },
+        )
+
+        when (availabilityState) {
+            BookingRescheduleAvailabilityUiState.Idle,
+            BookingRescheduleAvailabilityUiState.Loading -> RescheduleStatusRow(
+                message = "A carregar horários disponíveis",
+                loading = true,
+            )
+
+            is BookingRescheduleAvailabilityUiState.Error -> RescheduleStatusRow(
+                message = availabilityState.message,
+                isError = true,
+                actionLabel = if (availabilityState.retryable) "Tentar novamente" else null,
+                onAction = if (availabilityState.retryable) onRetryAvailability else null,
+            )
+
+            is BookingRescheduleAvailabilityUiState.Empty -> RescheduleStatusRow(
+                message = "Sem horários disponíveis neste mês.",
+            )
+
+            is BookingRescheduleAvailabilityUiState.Loaded -> RescheduleAvailabilityPicker(
+                month = availabilityState.month,
+                selectedDateId = selectedDateId,
+                selectedTime = selectedTime,
+                onDateSelected = onDateSelected,
+                onTimeSelected = onTimeSelected,
+            )
+        }
+
+        if (errorState != null) {
+            RescheduleStatusRow(
+                message = errorState.message,
+                isError = true,
+                actionLabel = if (errorState.retryable) "Tentar novamente" else null,
+                onAction = if (errorState.retryable) onConfirmReschedule else null,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            TextButton(
+                onClick = onDismissReschedule,
+                enabled = !loading,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = "Fechar",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Button(
+                onClick = onConfirmReschedule,
+                enabled = !loading && selectedDateId != null && selectedTime != null,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onTertiary,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                }
+                Text(
+                    text = if (loading) "A remarcar" else "Confirmar",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RescheduleMonthControls(
+    monthTitle: String,
+    previousEnabled: Boolean,
+    nextEnabled: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onPrevious,
+            enabled = previousEnabled,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = "Mês anterior",
+                tint = if (previousEnabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
+                },
+            )
+        }
+        Text(
+            text = monthTitle,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        IconButton(
+            onClick = onNext,
+            enabled = nextEnabled,
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Mês seguinte",
+                tint = if (nextEnabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun RescheduleAvailabilityPicker(
+    month: BookingAvailabilityMonth,
+    selectedDateId: String?,
+    selectedTime: String?,
+    onDateSelected: (String) -> Unit,
+    onTimeSelected: (String) -> Unit,
+) {
+    val firstAvailableDay = month.days.firstOrNull { it.available }
+    val selectedDay = month.days.firstOrNull { it.id == selectedDateId }
+        ?: firstAvailableDay
+
+    LaunchedEffect(selectedDateId, firstAvailableDay?.id) {
+        if (selectedDateId == null && firstAvailableDay != null) {
+            onDateSelected(firstAvailableDay.id)
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        RescheduleDaySelector(
+            days = month.days,
+            selectedDateId = selectedDateId ?: firstAvailableDay?.id,
+            onDateSelected = onDateSelected,
+        )
+
+        if (selectedDay == null) {
+            RescheduleStatusRow(message = "Sem dias disponíveis neste mês.")
+        } else {
+            RescheduleSlotSelector(
+                day = selectedDay,
+                selectedTime = selectedTime,
+                onTimeSelected = onTimeSelected,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RescheduleDaySelector(
+    days: List<BookingAvailabilityDay>,
+    selectedDateId: String?,
+    onDateSelected: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Data",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+        )
+        days.chunked(4).forEach { rowDays ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowDays.forEach { day ->
+                    RescheduleDayChip(
+                        day = day,
+                        selected = day.id == selectedDateId,
+                        onClick = { onDateSelected(day.id) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                repeat(4 - rowDays.size) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RescheduleDayChip(
+    day: BookingAvailabilityDay,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val enabled = day.available
+    val containerColor = when {
+        selected -> MaterialTheme.colorScheme.tertiary
+        enabled -> MaterialTheme.colorScheme.surfaceContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerLow
+    }
+    val contentColor = when {
+        selected -> MaterialTheme.colorScheme.onTertiary
+        enabled -> MaterialTheme.colorScheme.onSurface
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.54f)
+    }
+
+    Surface(
+        modifier = modifier
+            .height(58.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        contentColor = contentColor,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = day.dayOfMonth.toString(),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = day.summaryLabel.ifBlank { day.dateLabel },
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RescheduleSlotSelector(
+    day: BookingAvailabilityDay,
+    selectedTime: String?,
+    onTimeSelected: (String) -> Unit,
+) {
+    val availableSlots = day.slots.filter { it.available }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Hora",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+        )
+        if (availableSlots.isEmpty()) {
+            RescheduleStatusRow(message = "Sem horários disponíveis neste dia.")
+        } else {
+            availableSlots.chunked(3).forEach { rowSlots ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    rowSlots.forEach { slot ->
+                        RescheduleSlotChip(
+                            slot = slot,
+                            selected = slot.time == selectedTime,
+                            onClick = { onTimeSelected(slot.time) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    repeat(3 - rowSlots.size) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RescheduleSlotChip(
+    slot: BookingAvailabilitySlot,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.tertiary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onTertiary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = slot.time,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RescheduleStatusRow(
+    message: String,
+    loading: Boolean = false,
+    isError: Boolean = false,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = MaterialTheme.colorScheme.tertiary,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = if (isError) Icons.Filled.Info else Icons.Filled.CalendarMonth,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = if (isError) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.tertiary
+                },
+            )
+        }
+        Text(
+            text = message,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isError) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        if (actionLabel != null && onAction != null) {
+            TextButton(onClick = onAction) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+private fun BookingRescheduleUiState.forReservation(reservationId: String): BookingRescheduleUiState {
+    return when (this) {
+        BookingRescheduleUiState.Idle -> BookingRescheduleUiState.Idle
+        is BookingRescheduleUiState.Loading -> if (this.reservationId == reservationId) {
+            this
+        } else {
+            BookingRescheduleUiState.Idle
+        }
+        is BookingRescheduleUiState.Success -> if (this.reservationId == reservationId) {
+            this
+        } else {
+            BookingRescheduleUiState.Idle
+        }
+        is BookingRescheduleUiState.Error -> if (this.reservationId == reservationId) {
+            this
+        } else {
+            BookingRescheduleUiState.Idle
+        }
+    }
+}
+
+private fun BookingRescheduleAvailabilityUiState.monthOrNull(): BookingAvailabilityMonth? {
+    return when (this) {
+        BookingRescheduleAvailabilityUiState.Idle,
+        BookingRescheduleAvailabilityUiState.Loading -> null
+        is BookingRescheduleAvailabilityUiState.Loaded -> month
+        is BookingRescheduleAvailabilityUiState.Empty -> month
+        is BookingRescheduleAvailabilityUiState.Error -> null
+    }
+}
+
+private fun BookingAvailabilityMonth.monthAnchorDate(): String? {
+    return days.firstOrNull()?.id?.toMonthAnchorDateOrNull()
+}
+
+private fun String.toMonthAnchorDateOrNull(): String? {
+    if (length < 7) return null
+    val year = substring(0, 4).toIntOrNull() ?: return null
+    val month = substring(5, 7).toIntOrNull() ?: return null
+    if (year <= 0 || month !in 1..12) return null
+    return year.toString().padStart(4, '0') + "-" + month.toString().padStart(2, '0') + "-01"
+}
+
+private fun String.toMonthLabel(): String? {
+    val anchor = toMonthAnchorDateOrNull() ?: return null
+    val year = anchor.substring(0, 4)
+    val month = anchor.substring(5, 7).toIntOrNull()
+        ?.let { rescheduleMonthNames.getOrNull(it - 1) }
+        ?: return null
+    return "$month $year"
+}
+
+private fun shiftMonthAnchorDate(anchorDate: String?, offsetMonths: Int): String? {
+    val anchor = anchorDate?.toMonthAnchorDateOrNull() ?: return null
+    val year = anchor.substring(0, 4).toIntOrNull() ?: return null
+    val month = anchor.substring(5, 7).toIntOrNull() ?: return null
+    val monthIndex = year * 12 + (month - 1) + offsetMonths
+    if (monthIndex < 0) return null
+    val nextYear = monthIndex / 12
+    val nextMonth = monthIndex % 12 + 1
+    return nextYear.toString().padStart(4, '0') + "-" + nextMonth.toString().padStart(2, '0') + "-01"
+}
+
+private val rescheduleMonthNames = listOf(
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+)
 
 @Composable
 private fun ReviewedBookingRow(

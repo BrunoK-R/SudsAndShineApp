@@ -134,6 +134,19 @@ data class BookingCancelReceipt(
     val status: String,
 )
 
+data class BookingRescheduleRequest(
+    val reservationId: String,
+    val slotStartIso: String,
+    val slotEndIso: String,
+)
+
+data class BookingRescheduleReceipt(
+    val reservationId: String,
+    val status: String,
+    val slotStartIso: String,
+    val slotEndIso: String,
+)
+
 data class BookingRewardRedemptionReceipt(
     val redemptionId: String,
     val rewardCode: String,
@@ -197,6 +210,11 @@ sealed interface BookingReviewResult {
 sealed interface BookingCancelResult {
     data class Success(val receipt: BookingCancelReceipt) : BookingCancelResult
     data class Failure(val error: BookingCancelError) : BookingCancelResult
+}
+
+sealed interface BookingRescheduleResult {
+    data class Success(val receipt: BookingRescheduleReceipt) : BookingRescheduleResult
+    data class Failure(val error: BookingRescheduleError) : BookingRescheduleResult
 }
 
 sealed interface BookingRewardRedemptionResult {
@@ -267,6 +285,19 @@ sealed interface BookingCancelError {
     data class Backend(override val message: String) : BookingCancelError
 }
 
+sealed interface BookingRescheduleError {
+    val message: String
+
+    data class Validation(override val message: String) : BookingRescheduleError
+    data class Conflict(override val message: String) : BookingRescheduleError
+    data class Permission(override val message: String) : BookingRescheduleError
+    data class Unauthenticated(override val message: String) : BookingRescheduleError
+    data class NotFound(override val message: String) : BookingRescheduleError
+    data class NotReschedulable(override val message: String) : BookingRescheduleError
+    data class Unavailable(override val message: String) : BookingRescheduleError
+    data class Backend(override val message: String) : BookingRescheduleError
+}
+
 sealed interface BookingRewardRedemptionError {
     val message: String
 
@@ -297,6 +328,12 @@ interface BookingRepository {
     suspend fun cancelBooking(request: BookingCancelRequest): BookingCancelResult {
         return BookingCancelResult.Failure(
             BookingCancelError.Unavailable("O cancelamento de marcações ainda não está disponível."),
+        )
+    }
+
+    suspend fun rescheduleBooking(request: BookingRescheduleRequest): BookingRescheduleResult {
+        return BookingRescheduleResult.Failure(
+            BookingRescheduleError.Unavailable("A remarcação ainda não está disponível."),
         )
     }
 

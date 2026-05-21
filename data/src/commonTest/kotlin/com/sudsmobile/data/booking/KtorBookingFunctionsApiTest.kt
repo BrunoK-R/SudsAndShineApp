@@ -441,6 +441,64 @@ class KtorBookingFunctionsApiTest {
     }
 
     @Test
+    fun reschedulesReservationWithAuthorizationHeader() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "reservationId": "reservation-1",
+                    "status": "pending",
+                    "slotStart": "2026-05-22T11:00:00.000Z",
+                    "slotEnd": "2026-05-22T11:45:00.000Z"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.rescheduleMyReservation(validRescheduleRequest(), idToken = "id-token-1")
+
+        val success = assertIs<BookingRescheduleResult.Success>(result)
+        assertEquals("/test-project/europe-west1/rescheduleMyReservation", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("reservation-1", success.receipt.reservationId)
+        assertEquals("pending", success.receipt.status)
+        assertEquals("2026-05-22T11:00:00.000Z", success.receipt.slotStartIso)
+        assertEquals("2026-05-22T11:45:00.000Z", success.receipt.slotEndIso)
+    }
+
+    @Test
+    fun mapsRescheduleConflictError() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "ALREADY_EXISTS",
+                    "message": "Selected time slot is unavailable"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.rescheduleMyReservation(validRescheduleRequest(), idToken = "id-token-1")
+
+        val failure = assertIs<BookingRescheduleResult.Failure>(result)
+        assertIs<BookingRescheduleError.Conflict>(failure.error)
+        assertEquals("Este horário deixou de estar disponível.", failure.error.message)
+    }
+
+    @Test
     fun redeemsLoyaltyRewardWithAuthorizationHeader() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null
@@ -566,4 +624,10 @@ private fun validReviewRequest(): BookingReviewRequest = BookingReviewRequest(
 
 private fun validCancelRequest(): BookingCancelRequest = BookingCancelRequest(
     reservationId = "reservation-1",
+)
+
+private fun validRescheduleRequest(): BookingRescheduleRequest = BookingRescheduleRequest(
+    reservationId = "reservation-1",
+    slotStartIso = "2026-05-22T11:00:00.000Z",
+    slotEndIso = "2026-05-22T11:45:00.000Z",
 )

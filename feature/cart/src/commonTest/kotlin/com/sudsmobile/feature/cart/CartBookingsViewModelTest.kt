@@ -15,7 +15,10 @@ import com.sudsmobile.data.business.BusinessOpeningHours
 import com.sudsmobile.data.business.BusinessStat
 import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.booking.BookingAvailabilityRequest
+import com.sudsmobile.data.booking.BookingAvailabilityDay
+import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilityResult
+import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import com.sudsmobile.data.booking.BookingCancelError
 import com.sudsmobile.data.booking.BookingCancelReceipt
 import com.sudsmobile.data.booking.BookingCancelRequest
@@ -27,6 +30,10 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.BookingRescheduleError
+import com.sudsmobile.data.booking.BookingRescheduleReceipt
+import com.sudsmobile.data.booking.BookingRescheduleRequest
+import com.sudsmobile.data.booking.BookingRescheduleResult
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -329,6 +336,136 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun loadRescheduleAvailabilityRequestsBackendDurationAndAnchor() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+            availabilityResult = BookingAvailabilityResult.Success(availabilityMonth()),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.loadRescheduleAvailability(
+            serviceDurationMinutes = 45,
+            anchorDate = "2026-05-01",
+        )
+        runCurrent()
+
+        val loaded = assertIs<BookingRescheduleAvailabilityUiState.Loaded>(
+            viewModel.rescheduleAvailabilityState.value,
+        )
+        assertEquals("maio 2026", loaded.month.monthTitle)
+        assertEquals(1, repository.availabilityCalls)
+        assertEquals(
+            BookingAvailabilityRequest(
+                anchorDate = "2026-05-01",
+                serviceDurationMinutes = 45,
+            ),
+            repository.lastAvailabilityRequest,
+        )
+    }
+
+    @Test
+    fun rescheduleBookingBuildsRequestAndPublishesSuccessState() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+            rescheduleResult = BookingRescheduleResult.Success(
+                BookingRescheduleReceipt(
+                    reservationId = "reservation-1",
+                    status = "pending",
+                    slotStartIso = "2026-05-22T11:00:00.000Z",
+                    slotEndIso = "2026-05-22T11:45:00.000Z",
+                ),
+            ),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.rescheduleBooking(
+            BookingRescheduleDraft(
+                reservationId = "reservation-1",
+                dateId = "2026-05-22",
+                time = "11:00",
+                durationMinutes = 45,
+            ),
+        )
+        runCurrent()
+
+        val success = assertIs<BookingRescheduleUiState.Success>(viewModel.rescheduleState.value)
+        assertEquals("reservation-1", success.reservationId)
+        assertEquals(1, repository.rescheduleCalls)
+        assertEquals(
+            BookingRescheduleRequest(
+                reservationId = "reservation-1",
+                slotStartIso = "2026-05-22T11:00:00.000Z",
+                slotEndIso = "2026-05-22T11:45:00.000Z",
+            ),
+            repository.lastRescheduleRequest,
+        )
+    }
+
+    @Test
+    fun rescheduleBookingMapsConflictToChangeSlotError() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+            rescheduleResult = BookingRescheduleResult.Failure(
+                BookingRescheduleError.Conflict("Este horário deixou de estar disponível."),
+            ),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.rescheduleBooking(
+            BookingRescheduleDraft(
+                reservationId = "reservation-1",
+                dateId = "2026-05-22",
+                time = "11:00",
+                durationMinutes = 45,
+            ),
+        )
+        runCurrent()
+
+        val error = assertIs<BookingRescheduleUiState.Error>(viewModel.rescheduleState.value)
+        assertEquals("reservation-1", error.reservationId)
+        assertEquals("Este horário deixou de estar disponível.", error.message)
+        assertEquals(false, error.retryable)
+        assertEquals(true, error.changeSlot)
+    }
+
+    @Test
+    fun rescheduleBookingRejectsIncompleteDraftBeforeRepositoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.rescheduleBooking(
+            BookingRescheduleDraft(
+                reservationId = "reservation-1",
+                dateId = "2026-05-22",
+                time = "",
+                durationMinutes = 45,
+            ),
+        )
+
+        val error = assertIs<BookingRescheduleUiState.Error>(viewModel.rescheduleState.value)
+        assertEquals("Escolha uma nova data e hora para remarcar.", error.message)
+        assertEquals(0, repository.rescheduleCalls)
+    }
+
+    @Test
     fun loadBusinessInfoMapsBackendAddressAndSkipsCachedReload() = runTest {
         val businessRepository = FakeBusinessInfoRepository(
             BusinessInfoResult.Success(
@@ -380,22 +517,41 @@ class CartBookingsViewModelTest {
 
 private class FakeBookingRepository(
     private val historyResult: BookingHistoryResult,
+    private val availabilityResult: BookingAvailabilityResult = BookingAvailabilityResult.Success(availabilityMonth()),
     private val cancelResult: BookingCancelResult = BookingCancelResult.Success(
         BookingCancelReceipt(
             reservationId = "reservation-1",
             status = "cancelled",
         ),
     ),
+    private val rescheduleResult: BookingRescheduleResult = BookingRescheduleResult.Success(
+        BookingRescheduleReceipt(
+            reservationId = "reservation-1",
+            status = "pending",
+            slotStartIso = "2026-05-22T11:00:00.000Z",
+            slotEndIso = "2026-05-22T11:45:00.000Z",
+        ),
+    ),
 ) : BookingRepository {
     var historyCalls: Int = 0
+        private set
+    var availabilityCalls: Int = 0
+        private set
+    var lastAvailabilityRequest: BookingAvailabilityRequest? = null
         private set
     var cancelCalls: Int = 0
         private set
     var lastCancelRequest: BookingCancelRequest? = null
         private set
+    var rescheduleCalls: Int = 0
+        private set
+    var lastRescheduleRequest: BookingRescheduleRequest? = null
+        private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
-        error("Not used")
+        availabilityCalls += 1
+        lastAvailabilityRequest = request
+        return availabilityResult
     }
 
     override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
@@ -411,6 +567,12 @@ private class FakeBookingRepository(
         cancelCalls += 1
         lastCancelRequest = request
         return cancelResult
+    }
+
+    override suspend fun rescheduleBooking(request: BookingRescheduleRequest): BookingRescheduleResult {
+        rescheduleCalls += 1
+        lastRescheduleRequest = request
+        return rescheduleResult
     }
 }
 
@@ -530,5 +692,26 @@ private fun businessInfo(
     ),
     stats = listOf(
         BusinessStat(value = "500+", label = "Carros"),
+    ),
+)
+
+private fun availabilityMonth(): BookingAvailabilityMonth = BookingAvailabilityMonth(
+    monthTitle = "maio 2026",
+    leadingEmptyCells = 4,
+    days = listOf(
+        BookingAvailabilityDay(
+            id = "2026-05-22",
+            dayOfMonth = 22,
+            dateLabel = "Sexta, 22 maio",
+            summaryLabel = "Sex",
+            available = true,
+            slots = listOf(
+                BookingAvailabilitySlot(
+                    time = "11:00",
+                    available = true,
+                    remainingCapacity = 2,
+                ),
+            ),
+        ),
     ),
 )

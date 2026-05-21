@@ -94,6 +94,26 @@ class FirebaseBookingRepository(
             }
     }
 
+    override suspend fun rescheduleBooking(request: BookingRescheduleRequest): BookingRescheduleResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) {
+            return BookingRescheduleResult.Failure(validationError)
+        }
+
+        val session = authRepository.currentSession()
+            ?: return BookingRescheduleResult.Failure(
+                BookingRescheduleError.Unauthenticated("Inicie sessão para remarcar esta marcação."),
+            )
+
+        return api.rescheduleMyReservation(normalizedRequest, session.idToken)
+            .also { result ->
+                if (result is BookingRescheduleResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
+    }
+
     override suspend fun redeemLoyaltyReward(): BookingRewardRedemptionResult {
         val session = authRepository.currentSession()
             ?: return BookingRewardRedemptionResult.Failure(
@@ -166,6 +186,20 @@ class FirebaseBookingRepository(
         }
     }
 
+    private fun validate(request: BookingRescheduleRequest): BookingRescheduleError? {
+        return when {
+            request.reservationId.isBlank() || request.reservationId.contains("/") ->
+                BookingRescheduleError.Validation("A marcação selecionada é inválida.")
+            request.reservationId.length > 160 ->
+                BookingRescheduleError.Validation("A marcação selecionada é inválida.")
+            !isValidSlotIso(request.slotStartIso) || !isValidSlotIso(request.slotEndIso) ->
+                BookingRescheduleError.Validation("Escolha uma data e hora válidas.")
+            request.slotEndIso <= request.slotStartIso ->
+                BookingRescheduleError.Validation("Escolha uma hora de fim válida.")
+            else -> null
+        }
+    }
+
     private fun BookingCreateRequest.normalized(): BookingCreateRequest = copy(
         customerName = customerName.trim(),
         customerEmail = customerEmail.trim().lowercase(),
@@ -201,6 +235,11 @@ class FirebaseBookingRepository(
         reservationId = reservationId.trim(),
     )
 
+    private fun BookingRescheduleRequest.normalized(): BookingRescheduleRequest = copy(
+        reservationId = reservationId.trim(),
+        slotStartIso = slotStartIso.trim(),
+        slotEndIso = slotEndIso.trim(),
+    )
 }
 
 private fun isValidDateId(dateId: String): Boolean {
@@ -209,3 +248,15 @@ private fun isValidDateId(dateId: String): Boolean {
 }
 
 private fun Int?.orZero(): Int = this ?: 0
+
+private fun isValidSlotIso(value: String): Boolean {
+    val trimmed = value.trim()
+    if (trimmed.length < 20) return false
+    if (!trimmed.contains("T")) return false
+    val date = trimmed.substringBefore("T")
+    val time = trimmed.substringAfter("T").take(5)
+    if (time.length != 5 || time[2] != ':') return false
+    val hour = time.substring(0, 2).toIntOrNull() ?: return false
+    val minute = time.substring(3, 5).toIntOrNull() ?: return false
+    return isValidDateId(date) && hour in 0..23 && minute in 0..59
+}

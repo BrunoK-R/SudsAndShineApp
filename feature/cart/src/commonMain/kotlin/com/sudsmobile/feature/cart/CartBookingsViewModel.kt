@@ -8,6 +8,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.booking.BookingAvailabilityError
+import com.sudsmobile.data.booking.BookingAvailabilityMonth
+import com.sudsmobile.data.booking.BookingAvailabilityRequest
+import com.sudsmobile.data.booking.BookingAvailabilityResult
 import com.sudsmobile.data.business.BusinessInfo
 import com.sudsmobile.data.business.BusinessInfoError
 import com.sudsmobile.data.business.BusinessInfoRepository
@@ -22,6 +26,9 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingPaymentStatus
+import com.sudsmobile.data.booking.BookingRescheduleError
+import com.sudsmobile.data.booking.BookingRescheduleRequest
+import com.sudsmobile.data.booking.BookingRescheduleResult
 import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
@@ -49,6 +56,9 @@ internal data class BookingSummaryUi(
     val service: String,
     val date: String,
     val time: String,
+    val slotStartIso: String,
+    val slotEndIso: String,
+    val serviceDurationMinutes: Int,
     val vehicle: String,
     val price: String,
     val status: BookingStatusUi,
@@ -101,6 +111,33 @@ internal sealed interface BookingCancellationUiState {
     ) : BookingCancellationUiState
 }
 
+internal data class BookingRescheduleDraft(
+    val reservationId: String,
+    val dateId: String,
+    val time: String,
+    val durationMinutes: Int,
+)
+
+internal sealed interface BookingRescheduleAvailabilityUiState {
+    data object Idle : BookingRescheduleAvailabilityUiState
+    data object Loading : BookingRescheduleAvailabilityUiState
+    data class Loaded(val month: BookingAvailabilityMonth) : BookingRescheduleAvailabilityUiState
+    data class Empty(val month: BookingAvailabilityMonth) : BookingRescheduleAvailabilityUiState
+    data class Error(val message: String, val retryable: Boolean) : BookingRescheduleAvailabilityUiState
+}
+
+internal sealed interface BookingRescheduleUiState {
+    data object Idle : BookingRescheduleUiState
+    data class Loading(val reservationId: String) : BookingRescheduleUiState
+    data class Success(val reservationId: String) : BookingRescheduleUiState
+    data class Error(
+        val reservationId: String,
+        val message: String,
+        val retryable: Boolean,
+        val changeSlot: Boolean,
+    ) : BookingRescheduleUiState
+}
+
 internal class CartBookingsViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
@@ -115,6 +152,12 @@ internal class CartBookingsViewModel(
     val businessInfoState: StateFlow<CartBusinessInfoUiState> = _businessInfoState.asStateFlow()
     private val _cancellationState = MutableStateFlow<BookingCancellationUiState>(BookingCancellationUiState.Idle)
     val cancellationState: StateFlow<BookingCancellationUiState> = _cancellationState.asStateFlow()
+    private val _rescheduleAvailabilityState =
+        MutableStateFlow<BookingRescheduleAvailabilityUiState>(BookingRescheduleAvailabilityUiState.Idle)
+    val rescheduleAvailabilityState: StateFlow<BookingRescheduleAvailabilityUiState> =
+        _rescheduleAvailabilityState.asStateFlow()
+    private val _rescheduleState = MutableStateFlow<BookingRescheduleUiState>(BookingRescheduleUiState.Idle)
+    val rescheduleState: StateFlow<BookingRescheduleUiState> = _rescheduleState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
 
@@ -137,6 +180,7 @@ internal class CartBookingsViewModel(
             loadedUid = null
             loadedRevision = null
             clearCancellationState()
+            clearRescheduleState()
             _uiState.value = CartBookingsUiState.Unauthenticated
             return
         }
@@ -157,6 +201,7 @@ internal class CartBookingsViewModel(
             loadedUid = null
             loadedRevision = null
             clearCancellationState()
+            clearRescheduleState()
             _uiState.value = CartBookingsUiState.Unauthenticated
             return
         }
@@ -202,6 +247,63 @@ internal class CartBookingsViewModel(
         }
     }
 
+    fun loadRescheduleAvailability(serviceDurationMinutes: Int, anchorDate: String? = null) {
+        if (_rescheduleAvailabilityState.value is BookingRescheduleAvailabilityUiState.Loading) return
+
+        viewModelScope.launch {
+            _rescheduleAvailabilityState.value = BookingRescheduleAvailabilityUiState.Loading
+            _rescheduleAvailabilityState.value = when (
+                val result = bookingRepository.getAvailability(
+                    BookingAvailabilityRequest(
+                        anchorDate = anchorDate,
+                        serviceDurationMinutes = serviceDurationMinutes,
+                    ),
+                )
+            ) {
+                is BookingAvailabilityResult.Success -> {
+                    if (result.month.days.any { it.available }) {
+                        BookingRescheduleAvailabilityUiState.Loaded(result.month)
+                    } else {
+                        BookingRescheduleAvailabilityUiState.Empty(result.month)
+                    }
+                }
+                is BookingAvailabilityResult.Failure -> result.error.toRescheduleAvailabilityState()
+            }
+        }
+    }
+
+    fun rescheduleBooking(draft: BookingRescheduleDraft?) {
+        if (_rescheduleState.value is BookingRescheduleUiState.Loading) return
+
+        val request = draft?.toRescheduleRequest()
+        if (request == null) {
+            _rescheduleState.value = BookingRescheduleUiState.Error(
+                reservationId = draft?.reservationId.orEmpty(),
+                message = "Escolha uma nova data e hora para remarcar.",
+                retryable = false,
+                changeSlot = true,
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _rescheduleState.value = BookingRescheduleUiState.Loading(request.reservationId)
+            _rescheduleState.value = when (val result = bookingRepository.rescheduleBooking(request)) {
+                is BookingRescheduleResult.Success -> BookingRescheduleUiState.Success(result.receipt.reservationId)
+                is BookingRescheduleResult.Failure -> result.error.toRescheduleState(request.reservationId)
+            }
+        }
+    }
+
+    fun clearRescheduleState() {
+        if (_rescheduleState.value !is BookingRescheduleUiState.Loading) {
+            _rescheduleState.value = BookingRescheduleUiState.Idle
+        }
+        if (_rescheduleAvailabilityState.value !is BookingRescheduleAvailabilityUiState.Loading) {
+            _rescheduleAvailabilityState.value = BookingRescheduleAvailabilityUiState.Idle
+        }
+    }
+
     private fun BookingHistory.toUiState(): CartBookingsUiState {
         val mapped = reservations.mapNotNull { it.toUiModelOrNull() }
         if (mapped.isEmpty()) return CartBookingsUiState.Empty
@@ -228,6 +330,24 @@ internal class CartBookingsViewModel(
             reservationId = reservationId,
             message = message,
             retryable = retryable,
+        )
+    }
+
+    private fun BookingAvailabilityError.toRescheduleAvailabilityState(): BookingRescheduleAvailabilityUiState.Error {
+        val retryable = this is BookingAvailabilityError.Unavailable ||
+            this is BookingAvailabilityError.Backend
+        return BookingRescheduleAvailabilityUiState.Error(message = message, retryable = retryable)
+    }
+
+    private fun BookingRescheduleError.toRescheduleState(reservationId: String): BookingRescheduleUiState.Error {
+        val retryable = this is BookingRescheduleError.Unavailable ||
+            this is BookingRescheduleError.Backend
+        val changeSlot = this is BookingRescheduleError.Conflict
+        return BookingRescheduleUiState.Error(
+            reservationId = reservationId,
+            message = message,
+            retryable = retryable,
+            changeSlot = changeSlot,
         )
     }
 }
@@ -263,6 +383,9 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         service = serviceLabelWithExtras(),
         date = slotStartIso.toDateLabel(),
         time = slotStartIso.toTimeLabel(),
+        slotStartIso = slotStartIso,
+        slotEndIso = slotEndIso,
+        serviceDurationMinutes = serviceDurationMinutes(),
         vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         status = status.toStatusUi(),
@@ -335,6 +458,22 @@ private fun String.toTimeLabel(): String {
     return time.takeIf { it.length >= 5 }?.take(5) ?: "Hora a confirmar"
 }
 
+private fun BookingHistoryReservation.serviceDurationMinutes(): Int {
+    val start = slotStartIso.utcMinuteOfDayOrNull() ?: return 30
+    val end = slotEndIso.utcMinuteOfDayOrNull() ?: return 30
+    val duration = end - start
+    return duration.takeIf { it in 5..480 } ?: 30
+}
+
+private fun String.utcMinuteOfDayOrNull(): Int? {
+    val time = substringAfter("T", missingDelimiterValue = "").take(5)
+    if (time.length != 5 || time[2] != ':') return null
+    val hour = time.substring(0, 2).toIntOrNull() ?: return null
+    val minute = time.substring(3, 5).toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return hour * 60 + minute
+}
+
 private fun Int.toEuroLabel(): String {
     val euros = this / 100
     val remainder = this % 100
@@ -355,3 +494,52 @@ private val monthNames = listOf(
     "novembro",
     "dezembro",
 )
+
+internal fun BookingRescheduleDraft.toRescheduleRequest(): BookingRescheduleRequest? {
+    val slotStartIso = buildSlotIso(dateId = dateId, time = time) ?: return null
+    val slotEndIso = buildSlotEndIso(dateId = dateId, time = time, durationMinutes = durationMinutes) ?: return null
+    return BookingRescheduleRequest(
+        reservationId = reservationId,
+        slotStartIso = slotStartIso,
+        slotEndIso = slotEndIso,
+    )
+}
+
+private fun buildSlotIso(dateId: String, time: String): String? {
+    val (hour, minute) = parseTime(time) ?: return null
+    if (!isValidDateId(dateId)) return null
+    return "$dateId" + "T" + hour.twoDigits() + ":" + minute.twoDigits() + ":00.000Z"
+}
+
+private fun buildSlotEndIso(dateId: String, time: String, durationMinutes: Int): String? {
+    val (hour, minute) = parseTime(time) ?: return null
+    if (!isValidDateId(dateId) || durationMinutes <= 0) return null
+
+    val endTotalMinutes = hour * 60 + minute + durationMinutes
+    if (endTotalMinutes >= 24 * 60) return null
+
+    val endHour = endTotalMinutes / 60
+    val endMinute = endTotalMinutes % 60
+    return "$dateId" + "T" + endHour.twoDigits() + ":" + endMinute.twoDigits() + ":00.000Z"
+}
+
+private fun parseTime(time: String): Pair<Int, Int>? {
+    val parts = time.split(":")
+    if (parts.size != 2) return null
+    val hour = parts[0].toIntOrNull() ?: return null
+    val minute = parts[1].toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return hour to minute
+}
+
+private fun isValidDateId(dateId: String): Boolean {
+    if (dateId.length != 10) return false
+    if (dateId[4] != '-' || dateId[7] != '-') return false
+
+    val year = dateId.substring(0, 4).toIntOrNull() ?: return false
+    val month = dateId.substring(5, 7).toIntOrNull() ?: return false
+    val day = dateId.substring(8, 10).toIntOrNull() ?: return false
+    return year > 0 && month in 1..12 && day in 1..31
+}
+
+private fun Int.twoDigits(): String = toString().padStart(length = 2, padChar = '0')

@@ -283,6 +283,69 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun rejectsRescheduleWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.rescheduleBooking(validRescheduleRequest())
+
+        assertIs<BookingRescheduleResult.Failure>(result)
+        assertIs<BookingRescheduleError.Unauthenticated>(result.error)
+        assertEquals(0, api.rescheduleCalls)
+    }
+
+    @Test
+    fun normalizesRescheduleBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.rescheduleBooking(
+            BookingRescheduleRequest(
+                reservationId = " reservation-1 ",
+                slotStartIso = " 2026-05-22T11:00:00.000Z ",
+                slotEndIso = " 2026-05-22T11:45:00.000Z ",
+            ),
+        )
+
+        assertIs<BookingRescheduleResult.Success>(result)
+        assertEquals(1, api.rescheduleCalls)
+        assertEquals("reservation-1", api.lastRescheduleRequest?.reservationId)
+        assertEquals("2026-05-22T11:00:00.000Z", api.lastRescheduleRequest?.slotStartIso)
+        assertEquals("2026-05-22T11:45:00.000Z", api.lastRescheduleRequest?.slotEndIso)
+        assertEquals("id-token-1", api.lastRescheduleIdToken)
+    }
+
+    @Test
+    fun rejectsInvalidRescheduleSlotBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.rescheduleBooking(
+            validRescheduleRequest().copy(slotEndIso = "2026-05-22T10:00:00.000Z"),
+        )
+
+        assertIs<BookingRescheduleResult.Failure>(result)
+        assertIs<BookingRescheduleError.Validation>(result.error)
+        assertEquals(0, api.rescheduleCalls)
+    }
+
+    @Test
+    fun successfulRescheduleNotifiesBookingHistoryObservers() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val changeNotifier = MutableBookingChangeNotifier()
+        val repository = FirebaseBookingRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+            bookingChangeNotifier = changeNotifier,
+        )
+
+        val result = repository.rescheduleBooking(validRescheduleRequest())
+
+        assertIs<BookingRescheduleResult.Success>(result)
+        assertEquals(1L, changeNotifier.revision.value)
+    }
+
+    @Test
     fun rejectsRewardRedemptionWhenUnauthenticatedBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api, FakeAuthRepository())
@@ -364,6 +427,12 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         private set
     var lastCancelIdToken: String? = null
         private set
+    var rescheduleCalls: Int = 0
+        private set
+    var lastRescheduleRequest: BookingRescheduleRequest? = null
+        private set
+    var lastRescheduleIdToken: String? = null
+        private set
     var rewardRedemptionCalls: Int = 0
         private set
     var lastRewardRedemptionIdToken: String? = null
@@ -429,6 +498,23 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
             BookingCancelReceipt(
                 reservationId = request.reservationId,
                 status = "cancelled",
+            ),
+        )
+    }
+
+    override suspend fun rescheduleMyReservation(
+        request: BookingRescheduleRequest,
+        idToken: String,
+    ): BookingRescheduleResult {
+        rescheduleCalls += 1
+        lastRescheduleRequest = request
+        lastRescheduleIdToken = idToken
+        return BookingRescheduleResult.Success(
+            BookingRescheduleReceipt(
+                reservationId = request.reservationId,
+                status = "pending",
+                slotStartIso = request.slotStartIso,
+                slotEndIso = request.slotEndIso,
             ),
         )
     }
@@ -527,4 +613,10 @@ private fun validReviewRequest(): BookingReviewRequest = BookingReviewRequest(
 
 private fun validCancelRequest(): BookingCancelRequest = BookingCancelRequest(
     reservationId = "reservation-1",
+)
+
+private fun validRescheduleRequest(): BookingRescheduleRequest = BookingRescheduleRequest(
+    reservationId = "reservation-1",
+    slotStartIso = "2026-05-22T11:00:00.000Z",
+    slotEndIso = "2026-05-22T11:45:00.000Z",
 )
