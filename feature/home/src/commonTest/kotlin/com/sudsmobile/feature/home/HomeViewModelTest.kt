@@ -16,6 +16,14 @@ import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.business.BusinessFaq
+import com.sudsmobile.data.business.BusinessInfo
+import com.sudsmobile.data.business.BusinessInfoError
+import com.sudsmobile.data.business.BusinessInfoRepository
+import com.sudsmobile.data.business.BusinessInfoResult
+import com.sudsmobile.data.business.BusinessOpeningHours
+import com.sudsmobile.data.business.BusinessStat
+import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.catalog.ServiceCatalog
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
 import com.sudsmobile.data.catalog.ServiceCatalogResult
@@ -54,9 +62,20 @@ class HomeViewModelTest {
         val bookingRepository = FakeHomeBookingRepository(
             historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
         )
+        val businessInfoRepository = FakeHomeBusinessInfoRepository(
+            BusinessInfoResult.Success(
+                businessInfo(
+                    stats = listOf(
+                        BusinessStat(value = "900+", label = "Carros Tratados"),
+                        BusinessStat(value = "4.8", label = "Avaliação Média"),
+                    ),
+                ),
+            ),
+        )
         val viewModel = homeViewModel(
             authRepository = FakeHomeAuthRepository(authenticated = false),
             bookingRepository = bookingRepository,
+            businessInfoRepository = businessInfoRepository,
             catalogRepository = FakeHomeCatalogRepository(
                 ServiceCatalogResult.Success(ServiceCatalog(listOf(service("premium", popular = true)))),
             ),
@@ -68,7 +87,10 @@ class HomeViewModelTest {
         val unauthenticated = assertIs<HomeUiState.Unauthenticated>(viewModel.uiState.value)
         assertEquals("Olá!", unauthenticated.identity.greeting)
         assertEquals("Lavagem Premium", unauthenticated.featuredServices.single().name)
+        assertEquals("900+", unauthenticated.stats.first().value)
+        assertEquals("Carros Tratados", unauthenticated.stats.first().label)
         assertEquals(0, bookingRepository.historyCalls)
+        assertEquals(1, businessInfoRepository.calls)
     }
 
     @Test
@@ -139,6 +161,24 @@ class HomeViewModelTest {
         assertEquals(7, loaded.loyalty.remainingWashes)
         assertEquals(false, loaded.loyalty.rewardReady)
         assertEquals("Lavagem Premium", loaded.featuredServices.first().name)
+        assertEquals(DefaultBusinessInfo.stats.first().value, loaded.stats.first().value)
+    }
+
+    @Test
+    fun homeKeepsFallbackStatsWhenBusinessInfoFails() = runTest {
+        val viewModel = homeViewModel(
+            businessInfoRepository = FakeHomeBusinessInfoRepository(
+                BusinessInfoResult.Failure(BusinessInfoError.Unavailable("Dados institucionais indisponíveis.")),
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val empty = assertIs<HomeUiState.Empty>(viewModel.uiState.value)
+        assertEquals(DefaultBusinessInfo.stats.map { it.value }, empty.stats.map { it.value })
+        assertEquals("Dados institucionais indisponíveis.", empty.statsWarningMessage)
+        assertEquals(true, empty.statsWarningRetryable)
     }
 
     @Test
@@ -271,11 +311,15 @@ private fun homeViewModel(
     catalogRepository: ServiceCatalogRepository = FakeHomeCatalogRepository(
         ServiceCatalogResult.Success(ServiceCatalog(listOf(service("premium", popular = true)))),
     ),
+    businessInfoRepository: BusinessInfoRepository = FakeHomeBusinessInfoRepository(
+        BusinessInfoResult.Success(businessInfo()),
+    ),
     bookingChangeNotifier: MutableBookingChangeNotifier = MutableBookingChangeNotifier(),
 ): HomeViewModel = HomeViewModel(
     authRepository = authRepository,
     bookingRepository = bookingRepository,
     serviceCatalogRepository = catalogRepository,
+    businessInfoRepository = businessInfoRepository,
     bookingChangeNotifier = bookingChangeNotifier,
 )
 
@@ -306,6 +350,18 @@ private class FakeHomeCatalogRepository(
         private set
 
     override suspend fun getServiceCatalog(): ServiceCatalogResult {
+        calls += 1
+        return result
+    }
+}
+
+private class FakeHomeBusinessInfoRepository(
+    private val result: BusinessInfoResult,
+) : BusinessInfoRepository {
+    var calls: Int = 0
+        private set
+
+    override suspend fun getBusinessInfo(): BusinessInfoResult {
         calls += 1
         return result
     }
@@ -380,6 +436,26 @@ private fun service(
     suvPriceCents = 3400,
     iconKey = "sparkles",
     popular = popular,
+)
+
+private fun businessInfo(
+    stats: List<BusinessStat> = DefaultBusinessInfo.stats,
+): BusinessInfo = BusinessInfo(
+    phone = DefaultBusinessInfo.phone,
+    phoneUri = DefaultBusinessInfo.phoneUri,
+    email = DefaultBusinessInfo.email,
+    emailUri = DefaultBusinessInfo.emailUri,
+    addressLine1 = DefaultBusinessInfo.addressLine1,
+    addressLine2 = DefaultBusinessInfo.addressLine2,
+    mapsUri = DefaultBusinessInfo.mapsUri,
+    whatsappUri = DefaultBusinessInfo.whatsappUri,
+    openingHours = listOf(
+        BusinessOpeningHours(dayLabel = "Segunda", hoursLabel = "09:00 - 19:00", closed = false),
+    ),
+    faq = listOf(
+        BusinessFaq(question = "Onde?", answer = "No centro."),
+    ),
+    stats = stats,
 )
 
 private fun homeReservation(

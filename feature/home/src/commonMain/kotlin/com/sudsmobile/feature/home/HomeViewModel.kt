@@ -3,6 +3,9 @@ package com.sudsmobile.feature.home
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -23,6 +26,12 @@ import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
 import com.sudsmobile.data.booking.isCancelledReservation
 import com.sudsmobile.data.booking.isCompletedReservation
 import com.sudsmobile.data.booking.toBookingReservationStatus
+import com.sudsmobile.data.business.BusinessInfo
+import com.sudsmobile.data.business.BusinessInfoError
+import com.sudsmobile.data.business.BusinessInfoRepository
+import com.sudsmobile.data.business.BusinessInfoResult
+import com.sudsmobile.data.business.BusinessStat
+import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.catalog.ServiceCatalog
 import com.sudsmobile.data.catalog.ServiceCatalogError
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
@@ -65,6 +74,12 @@ internal data class HomeFeaturedServiceUi(
     val popular: Boolean,
 )
 
+internal data class HomeStatUi(
+    val value: String,
+    val label: String,
+    val icon: ImageVector,
+)
+
 internal sealed interface HomeUiState {
     data object Idle : HomeUiState
     data object Loading : HomeUiState
@@ -72,16 +87,22 @@ internal sealed interface HomeUiState {
     data class Unauthenticated(
         val identity: HomeIdentityUi,
         val featuredServices: List<HomeFeaturedServiceUi>,
+        val stats: List<HomeStatUi>,
         val warningMessage: String? = null,
         val warningRetryable: Boolean = false,
+        val statsWarningMessage: String? = null,
+        val statsWarningRetryable: Boolean = false,
     ) : HomeUiState
 
     data class Empty(
         val identity: HomeIdentityUi,
         val loyalty: HomeLoyaltyUi,
         val featuredServices: List<HomeFeaturedServiceUi>,
+        val stats: List<HomeStatUi>,
         val warningMessage: String? = null,
         val warningRetryable: Boolean = false,
+        val statsWarningMessage: String? = null,
+        val statsWarningRetryable: Boolean = false,
     ) : HomeUiState
 
     data class Loaded(
@@ -89,8 +110,11 @@ internal sealed interface HomeUiState {
         val nextBooking: HomeBookingUi?,
         val loyalty: HomeLoyaltyUi,
         val featuredServices: List<HomeFeaturedServiceUi>,
+        val stats: List<HomeStatUi>,
         val warningMessage: String? = null,
         val warningRetryable: Boolean = false,
+        val statsWarningMessage: String? = null,
+        val statsWarningRetryable: Boolean = false,
     ) : HomeUiState
 
     data class Error(
@@ -98,8 +122,11 @@ internal sealed interface HomeUiState {
         val message: String,
         val retryable: Boolean,
         val featuredServices: List<HomeFeaturedServiceUi>,
+        val stats: List<HomeStatUi>,
         val warningMessage: String? = null,
         val warningRetryable: Boolean = false,
+        val statsWarningMessage: String? = null,
+        val statsWarningRetryable: Boolean = false,
     ) : HomeUiState
 }
 
@@ -107,6 +134,7 @@ internal class HomeViewModel(
     private val authRepository: AuthRepository,
     private val bookingRepository: BookingRepository,
     private val serviceCatalogRepository: ServiceCatalogRepository,
+    private val businessInfoRepository: BusinessInfoRepository,
     private val bookingChangeNotifier: BookingChangeNotifier,
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
@@ -134,6 +162,7 @@ internal class HomeViewModel(
                     message = sessionState.error.message,
                     retryable = sessionState.error.isRetryable(),
                     featuredServices = emptyList(),
+                    stats = DefaultHomeStats,
                 )
             }
 
@@ -172,13 +201,17 @@ internal class HomeViewModel(
         viewModelScope.launch {
             _uiState.value = HomeUiState.Loading
             val catalog = serviceCatalogRepository.getServiceCatalog().toFeaturedServices()
+            val businessStats = businessInfoRepository.getBusinessInfo().toHomeStats()
             if (authRepository.sessionState.value == AuthSessionState.Unauthenticated) {
                 loadedSessionKey = GuestSessionKey
                 _uiState.value = HomeUiState.Unauthenticated(
                     identity = GuestIdentity,
                     featuredServices = catalog.services,
+                    stats = businessStats.stats,
                     warningMessage = catalog.warningMessage,
                     warningRetryable = catalog.warningRetryable,
+                    statsWarningMessage = businessStats.warningMessage,
+                    statsWarningRetryable = businessStats.warningRetryable,
                 )
             }
         }
@@ -194,10 +227,12 @@ internal class HomeViewModel(
             val nextState = coroutineScope {
                 val catalogDeferred = async { serviceCatalogRepository.getServiceCatalog().toFeaturedServices() }
                 val historyDeferred = async { bookingRepository.getMyBookings() }
+                val businessStatsDeferred = async { businessInfoRepository.getBusinessInfo().toHomeStats() }
                 buildAuthenticatedState(
                     identity = user.toHomeIdentity(),
                     catalog = catalogDeferred.await(),
                     historyResult = historyDeferred.await(),
+                    businessStats = businessStatsDeferred.await(),
                 )
             }
 
@@ -215,6 +250,7 @@ internal class HomeViewModel(
                 _uiState.value = HomeUiState.Unauthenticated(
                     identity = GuestIdentity,
                     featuredServices = emptyList(),
+                    stats = DefaultHomeStats,
                 )
             }
         }
@@ -243,6 +279,17 @@ internal fun HomeUiState.featuredServicesOrEmpty(): List<HomeFeaturedServiceUi> 
     }
 }
 
+internal fun HomeUiState.statsOrDefault(): List<HomeStatUi> {
+    return when (this) {
+        HomeUiState.Idle,
+        HomeUiState.Loading -> DefaultHomeStats
+        is HomeUiState.Unauthenticated -> stats
+        is HomeUiState.Empty -> stats
+        is HomeUiState.Loaded -> stats
+        is HomeUiState.Error -> stats
+    }
+}
+
 internal fun HomeUiState.warningMessageOrNull(): String? {
     return when (this) {
         HomeUiState.Idle,
@@ -265,8 +312,36 @@ internal fun HomeUiState.warningRetryableOrFalse(): Boolean {
     }
 }
 
+internal fun HomeUiState.statsWarningMessageOrNull(): String? {
+    return when (this) {
+        HomeUiState.Idle,
+        HomeUiState.Loading -> null
+        is HomeUiState.Unauthenticated -> statsWarningMessage
+        is HomeUiState.Empty -> statsWarningMessage
+        is HomeUiState.Loaded -> statsWarningMessage
+        is HomeUiState.Error -> statsWarningMessage
+    }
+}
+
+internal fun HomeUiState.statsWarningRetryableOrFalse(): Boolean {
+    return when (this) {
+        HomeUiState.Idle,
+        HomeUiState.Loading -> false
+        is HomeUiState.Unauthenticated -> statsWarningRetryable
+        is HomeUiState.Empty -> statsWarningRetryable
+        is HomeUiState.Loaded -> statsWarningRetryable
+        is HomeUiState.Error -> statsWarningRetryable
+    }
+}
+
 private data class FeaturedServicesResult(
     val services: List<HomeFeaturedServiceUi>,
+    val warningMessage: String? = null,
+    val warningRetryable: Boolean = false,
+)
+
+private data class HomeStatsResult(
+    val stats: List<HomeStatUi>,
     val warningMessage: String? = null,
     val warningRetryable: Boolean = false,
 )
@@ -275,15 +350,18 @@ private fun buildAuthenticatedState(
     identity: HomeIdentityUi,
     catalog: FeaturedServicesResult,
     historyResult: BookingHistoryResult,
+    businessStats: HomeStatsResult,
 ): HomeUiState {
     return when (historyResult) {
         is BookingHistoryResult.Success -> historyResult.history.toHomeState(
             identity = identity,
             catalog = catalog,
+            businessStats = businessStats,
         )
         is BookingHistoryResult.Failure -> historyResult.error.toHomeErrorState(
             identity = identity,
             catalog = catalog,
+            businessStats = businessStats,
         )
     }
 }
@@ -291,6 +369,7 @@ private fun buildAuthenticatedState(
 private fun BookingHistory.toHomeState(
     identity: HomeIdentityUi,
     catalog: FeaturedServicesResult,
+    businessStats: HomeStatsResult,
 ): HomeUiState {
     val validReservations = reservations.filter { it.id.isNotBlank() && it.slotStartIso.isNotBlank() }
     val completedWashCount = validReservations.count { it.isCompletedReservation() }
@@ -305,8 +384,11 @@ private fun BookingHistory.toHomeState(
             identity = identity,
             loyalty = loyaltyProgress,
             featuredServices = catalog.services,
+            stats = businessStats.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
+            statsWarningMessage = businessStats.warningMessage,
+            statsWarningRetryable = businessStats.warningRetryable,
         )
     } else {
         HomeUiState.Loaded(
@@ -314,8 +396,11 @@ private fun BookingHistory.toHomeState(
             nextBooking = nextBooking,
             loyalty = loyaltyProgress,
             featuredServices = catalog.services,
+            stats = businessStats.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
+            statsWarningMessage = businessStats.warningMessage,
+            statsWarningRetryable = businessStats.warningRetryable,
         )
     }
 }
@@ -323,21 +408,28 @@ private fun BookingHistory.toHomeState(
 private fun BookingHistoryError.toHomeErrorState(
     identity: HomeIdentityUi,
     catalog: FeaturedServicesResult,
+    businessStats: HomeStatsResult,
 ): HomeUiState {
     return when (this) {
         is BookingHistoryError.Unauthenticated -> HomeUiState.Unauthenticated(
             identity = GuestIdentity,
             featuredServices = catalog.services,
+            stats = businessStats.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
+            statsWarningMessage = businessStats.warningMessage,
+            statsWarningRetryable = businessStats.warningRetryable,
         )
         is BookingHistoryError.Permission -> HomeUiState.Error(
             identity = identity,
             message = message,
             retryable = false,
             featuredServices = catalog.services,
+            stats = businessStats.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
+            statsWarningMessage = businessStats.warningMessage,
+            statsWarningRetryable = businessStats.warningRetryable,
         )
         is BookingHistoryError.Unavailable,
         is BookingHistoryError.Backend -> HomeUiState.Error(
@@ -345,8 +437,11 @@ private fun BookingHistoryError.toHomeErrorState(
             message = message,
             retryable = true,
             featuredServices = catalog.services,
+            stats = businessStats.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
+            statsWarningMessage = businessStats.warningMessage,
+            statsWarningRetryable = businessStats.warningRetryable,
         )
     }
 }
@@ -410,6 +505,10 @@ private fun AuthError.isRetryable(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
 }
 
+private fun BusinessInfoError.isRetryable(): Boolean {
+    return this is BusinessInfoError.Unavailable || this is BusinessInfoError.Backend
+}
+
 private fun ServiceCatalogError.isRetryable(): Boolean {
     return this is ServiceCatalogError.Unavailable || this is ServiceCatalogError.Backend
 }
@@ -428,6 +527,47 @@ private fun String.toServiceIcon(): ImageVector = when (lowercase()) {
     "water", "water_drop", "droplets", "exterior" -> Icons.Filled.WaterDrop
     "sofa", "weekend", "interior" -> Icons.Filled.Weekend
     else -> Icons.Filled.DirectionsCar
+}
+
+private fun BusinessInfoResult.toHomeStats(): HomeStatsResult {
+    return when (this) {
+        is BusinessInfoResult.Success -> HomeStatsResult(stats = info.toHomeStats())
+        is BusinessInfoResult.Failure -> HomeStatsResult(
+            stats = DefaultHomeStats,
+            warningMessage = error.message,
+            warningRetryable = error.isRetryable(),
+        )
+    }
+}
+
+private fun BusinessInfo.toHomeStats(): List<HomeStatUi> {
+    return stats
+        .mapIndexedNotNull { index, stat -> stat.toHomeStatOrNull(index) }
+        .ifEmpty { DefaultHomeStats }
+        .take(MaxHomeStats)
+}
+
+private fun BusinessStat.toHomeStatOrNull(index: Int): HomeStatUi? {
+    val statValue = value.trim()
+    val statLabel = label.trim()
+    if (statValue.isBlank() || statLabel.isBlank()) return null
+
+    return HomeStatUi(
+        value = statValue,
+        label = statLabel,
+        icon = statLabel.toStatIcon(index),
+    )
+}
+
+private fun String.toStatIcon(index: Int): ImageVector {
+    val normalized = lowercase()
+    return when {
+        "avalia" in normalized || "rating" in normalized -> Icons.Filled.Star
+        "ano" in normalized || "exper" in normalized -> Icons.Filled.EmojiEvents
+        "carro" in normalized || "vehicle" in normalized -> Icons.Filled.DirectionsCar
+        "premium" in normalized || "qualidade" in normalized -> Icons.Filled.Shield
+        else -> DefaultStatIcons[index % DefaultStatIcons.size]
+    }
 }
 
 private fun String.toStatusLabel(): String {
@@ -496,7 +636,16 @@ private val LoadingIdentity = HomeIdentityUi(
     initials = "SS",
 )
 
+private const val MaxHomeStats = 3
 private const val GuestSessionKey = "guest"
+private val DefaultStatIcons = listOf(
+    Icons.Filled.DirectionsCar,
+    Icons.Filled.Star,
+    Icons.Filled.EmojiEvents,
+)
+private val DefaultHomeStats = DefaultBusinessInfo.stats
+    .mapIndexedNotNull { index, stat -> stat.toHomeStatOrNull(index) }
+    .take(MaxHomeStats)
 private val monthNames = listOf(
     "janeiro",
     "fevereiro",

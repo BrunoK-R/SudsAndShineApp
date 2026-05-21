@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -147,16 +146,12 @@ private fun HomeScreenContent(
                 onViewServices = onViewServices,
                 onRetry = onRetry,
             )
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                maxItemsInEachRow = 3,
-            ) {
-                StatCard(Icons.AutoMirrored.Filled.TrendingUp, "500+", "Carros", Modifier.weight(1f))
-                StatCard(Icons.Filled.Star, "4.9", "Avaliação", Modifier.weight(1f))
-                StatCard(Icons.Filled.EmojiEvents, "3+", "Anos", Modifier.weight(1f))
-            }
+            HomeStatsSection(
+                stats = uiState.statsOrDefault(),
+                warningMessage = uiState.statsWarningMessageOrNull(),
+                warningRetryable = uiState.statsWarningRetryableOrFalse(),
+                onRetry = onRetry,
+            )
             BenefitsCard()
         }
     }
@@ -754,6 +749,52 @@ private fun StatCard(icon: ImageVector, value: String, label: String, modifier: 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HomeStatsSection(
+    stats: List<HomeStatUi>,
+    warningMessage: String?,
+    warningRetryable: Boolean,
+    onRetry: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            maxItemsInEachRow = 3,
+        ) {
+            stats.forEach { stat ->
+                StatCard(
+                    icon = stat.icon,
+                    value = stat.value,
+                    label = stat.label,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        if (warningMessage != null) {
+            Text(
+                text = warningMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (warningRetryable) {
+                OutlinedButton(
+                    onClick = onRetry,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Text("Atualizar dados")
+                }
+            }
         }
     }
 }
