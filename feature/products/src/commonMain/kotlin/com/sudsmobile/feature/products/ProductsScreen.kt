@@ -135,6 +135,7 @@ fun ProductsScreen(
     val vehiclesState by viewModel.vehiclesState.collectAsStateWithLifecycle()
     val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
     val contactProfileState by viewModel.contactProfileState.collectAsStateWithLifecycle()
+    val businessInfoState by viewModel.businessInfoState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
@@ -150,6 +151,7 @@ fun ProductsScreen(
         vehiclesState = vehiclesState,
         vehicleRevision = vehicleRevision,
         contactProfileState = contactProfileState,
+        businessInfoState = businessInfoState,
         sessionState = sessionState,
         availabilityState = availabilityState,
         submitState = submitState,
@@ -158,6 +160,7 @@ fun ProductsScreen(
         onRefreshVehiclesForSession = viewModel::refreshVehiclesForSession,
         onLoadContactProfile = viewModel::loadContactProfile,
         onRefreshContactProfileForSession = viewModel::refreshContactProfileForSession,
+        onLoadBusinessInfo = viewModel::loadBusinessInfo,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onClearSubmitError = viewModel::clearSubmitError,
@@ -179,6 +182,7 @@ private fun ProductsScreenContent(
     vehiclesState: BookingVehiclesUiState,
     vehicleRevision: Long,
     contactProfileState: BookingContactProfileUiState,
+    businessInfoState: BookingBusinessInfoUiState,
     sessionState: AuthSessionState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
@@ -187,6 +191,7 @@ private fun ProductsScreenContent(
     onRefreshVehiclesForSession: () -> Unit,
     onLoadContactProfile: () -> Unit,
     onRefreshContactProfileForSession: () -> Unit,
+    onLoadBusinessInfo: (Boolean) -> Unit,
     onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onClearSubmitError: () -> Unit,
@@ -303,6 +308,12 @@ private fun ProductsScreenContent(
     LaunchedEffect(currentStep, sessionState) {
         if (currentStep == BookingStep.Contact) {
             onRefreshContactProfileForSession()
+        }
+    }
+
+    LaunchedEffect(currentStep) {
+        if (currentStep == BookingStep.Confirmation || currentStep == BookingStep.Success) {
+            onLoadBusinessInfo(false)
         }
     }
 
@@ -580,6 +591,8 @@ private fun ProductsScreenContent(
                             loyaltyRewardCode = it
                             onClearSubmitError()
                         },
+                        businessInfoState = businessInfoState,
+                        onRetryBusinessInfo = { onLoadBusinessInfo(true) },
                         sessionState = sessionState,
                         onRequestSignIn = onRequestSignIn,
                         onEditService = {
@@ -619,7 +632,7 @@ private fun ProductsScreenContent(
                         selectedExtras = selectedExtras,
                         date = selectedDate,
                         time = selectedTime,
-                        phone = contactPhone,
+                        businessInfoState = businessInfoState,
                         reservationCode = reservationCode,
                         loyaltyRewardApplied = successLoyaltyRewardApplied,
                         loyaltyRewardCode = successLoyaltyRewardCode,
@@ -804,6 +817,8 @@ private fun BookingConfirmationContent(
     notes: String,
     loyaltyRewardCode: String,
     onLoyaltyRewardCodeChange: (String) -> Unit,
+    businessInfoState: BookingBusinessInfoUiState,
+    onRetryBusinessInfo: () -> Unit,
     sessionState: AuthSessionState,
     onRequestSignIn: () -> Unit,
     onEditService: () -> Unit,
@@ -873,13 +888,10 @@ private fun BookingConfirmationContent(
             }
         }
 
-        ConfirmationCard(title = "Localização") {
-            ConfirmationIconRow(
-                icon = Icons.Filled.LocationOn,
-                title = "Suds & Shine Solutions",
-                body = "Shopping Norte Sul, Piso -1\nLeiria, Portugal",
-            )
-        }
+        BookingLocationCard(
+            state = businessInfoState,
+            onRetry = onRetryBusinessInfo,
+        )
 
         LoyaltyRewardCodeCard(
             rewardCode = loyaltyRewardCode,
@@ -906,6 +918,123 @@ private fun BookingConfirmationContent(
             onAction = onSubmitErrorAction,
         )
     }
+}
+
+@Composable
+private fun BookingLocationCard(
+    state: BookingBusinessInfoUiState,
+    onRetry: () -> Unit,
+) {
+    val info = state.infoOrDefault()
+
+    ConfirmationCard(title = "Localização") {
+        when (state) {
+            BookingBusinessInfoUiState.Idle,
+            BookingBusinessInfoUiState.Loading -> BookingLocationStatusRow(
+                title = "A carregar localização",
+                body = "Estamos a consultar os dados públicos do espaço.",
+                loading = true,
+            )
+
+            is BookingBusinessInfoUiState.Error -> {
+                BookingLocationStatusRow(
+                    title = "Localização de reserva",
+                    body = state.message,
+                    loading = false,
+                )
+                BookingLocationDetails(info = info)
+                if (state.retryable) {
+                    OutlinedButton(
+                        onClick = onRetry,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.tertiary,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Tentar novamente", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+
+            is BookingBusinessInfoUiState.Loaded -> BookingLocationDetails(info = info)
+        }
+    }
+}
+
+@Composable
+private fun BookingLocationStatusRow(
+    title: String,
+    body: String,
+    loading: Boolean,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Surface(
+            modifier = Modifier.size(42.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f),
+            contentColor = MaterialTheme.colorScheme.tertiary,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BookingLocationDetails(info: BookingBusinessInfoUi) {
+    ConfirmationIconRow(
+        icon = Icons.Filled.LocationOn,
+        title = "Suds & Shine Solutions",
+        body = listOf(info.addressLine1, info.addressLine2)
+            .filter { it.isNotBlank() }
+            .joinToString(separator = "\n"),
+    )
+}
+
+private fun BookingBusinessInfoUi.singleLineAddress(): String {
+    return listOf(addressLine1, addressLine2)
+        .filter { it.isNotBlank() }
+        .joinToString(separator = ", ")
 }
 
 @Composable
@@ -1418,7 +1547,7 @@ private fun BookingSuccessContent(
     selectedExtras: List<ProductExtraUi>,
     date: BookingAvailabilityDay?,
     time: String?,
-    phone: String,
+    businessInfoState: BookingBusinessInfoUiState,
     reservationCode: String?,
     loyaltyRewardApplied: Boolean,
     loyaltyRewardCode: String?,
@@ -1505,7 +1634,7 @@ private fun BookingSuccessContent(
             selectedExtras = selectedExtras,
             date = date,
             time = time,
-            phone = phone,
+            businessInfo = businessInfoState.infoOrDefault(),
         )
 
         Spacer(Modifier.height(16.dp))
@@ -1629,7 +1758,7 @@ private fun SuccessSummaryCard(
     selectedExtras: List<ProductExtraUi>,
     date: BookingAvailabilityDay?,
     time: String?,
-    phone: String,
+    businessInfo: BookingBusinessInfoUi,
 ) {
     ConfirmationCard(title = "Resumo da Marcação") {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1645,11 +1774,11 @@ private fun SuccessSummaryCard(
             ConfirmationIconRow(
                 icon = Icons.Filled.LocationOn,
                 title = "Suds & Shine Solutions",
-                body = "Shopping Norte Sul, Piso -1, Leiria",
+                body = businessInfo.singleLineAddress(),
             )
             ConfirmationIconRow(
                 icon = Icons.Filled.Phone,
-                title = phone.ifBlank { "913 005 855" },
+                title = businessInfo.phone,
                 body = "Entre em contacto se necessário",
             )
         }

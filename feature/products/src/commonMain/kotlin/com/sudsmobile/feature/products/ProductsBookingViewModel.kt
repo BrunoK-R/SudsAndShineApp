@@ -13,6 +13,11 @@ import com.sudsmobile.data.booking.BookingCreateRequest
 import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingReceipt
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.business.BusinessInfo
+import com.sudsmobile.data.business.BusinessInfoError
+import com.sudsmobile.data.business.BusinessInfoRepository
+import com.sudsmobile.data.business.BusinessInfoResult
+import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileError
 import com.sudsmobile.data.profile.UserProfileRepository
@@ -62,6 +67,12 @@ data class BookingContactProfileUi(
     val phoneNumber: String,
 )
 
+data class BookingBusinessInfoUi(
+    val phone: String,
+    val addressLine1: String,
+    val addressLine2: String,
+)
+
 sealed interface BookingSubmitUiState {
     data object Idle : BookingSubmitUiState
     data object Loading : BookingSubmitUiState
@@ -106,11 +117,23 @@ sealed interface BookingVehiclesUiState {
     data class Error(val message: String, val retryable: Boolean) : BookingVehiclesUiState
 }
 
+sealed interface BookingBusinessInfoUiState {
+    data object Idle : BookingBusinessInfoUiState
+    data object Loading : BookingBusinessInfoUiState
+    data class Loaded(val info: BookingBusinessInfoUi) : BookingBusinessInfoUiState
+    data class Error(
+        val fallbackInfo: BookingBusinessInfoUi,
+        val message: String,
+        val retryable: Boolean,
+    ) : BookingBusinessInfoUiState
+}
+
 class ProductsBookingViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
     private val userVehicleRepository: UserVehicleRepository,
     private val userProfileRepository: UserProfileRepository,
+    private val businessInfoRepository: BusinessInfoRepository,
     private val userVehicleChangeNotifier: UserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
@@ -129,6 +152,22 @@ class ProductsBookingViewModel(
     private val _contactProfileState = MutableStateFlow<BookingContactProfileUiState>(BookingContactProfileUiState.Idle)
     val contactProfileState: StateFlow<BookingContactProfileUiState> = _contactProfileState.asStateFlow()
     private var loadedContactProfileUid: String? = null
+
+    private val _businessInfoState = MutableStateFlow<BookingBusinessInfoUiState>(BookingBusinessInfoUiState.Idle)
+    val businessInfoState: StateFlow<BookingBusinessInfoUiState> = _businessInfoState.asStateFlow()
+
+    fun loadBusinessInfo(force: Boolean = false) {
+        if (_businessInfoState.value is BookingBusinessInfoUiState.Loading) return
+        if (!force && _businessInfoState.value is BookingBusinessInfoUiState.Loaded) return
+
+        viewModelScope.launch {
+            _businessInfoState.value = BookingBusinessInfoUiState.Loading
+            _businessInfoState.value = when (val result = businessInfoRepository.getBusinessInfo()) {
+                is BusinessInfoResult.Success -> BookingBusinessInfoUiState.Loaded(result.info.toBookingBusinessInfoUi())
+                is BusinessInfoResult.Failure -> result.error.toBookingBusinessInfoState()
+            }
+        }
+    }
 
     fun refreshContactProfileForSession() {
         val session = sessionState.value as? AuthSessionState.Authenticated
@@ -363,6 +402,30 @@ class ProductsBookingViewModel(
         }
     }
 }
+
+internal fun BookingBusinessInfoUiState.infoOrDefault(): BookingBusinessInfoUi {
+    return when (this) {
+        BookingBusinessInfoUiState.Idle,
+        BookingBusinessInfoUiState.Loading -> DefaultBusinessInfo.toBookingBusinessInfoUi()
+        is BookingBusinessInfoUiState.Loaded -> info
+        is BookingBusinessInfoUiState.Error -> fallbackInfo
+    }
+}
+
+private fun BusinessInfoError.toBookingBusinessInfoState(): BookingBusinessInfoUiState.Error {
+    val retryable = this is BusinessInfoError.Unavailable || this is BusinessInfoError.Backend
+    return BookingBusinessInfoUiState.Error(
+        fallbackInfo = DefaultBusinessInfo.toBookingBusinessInfoUi(),
+        message = message,
+        retryable = retryable,
+    )
+}
+
+private fun BusinessInfo.toBookingBusinessInfoUi(): BookingBusinessInfoUi = BookingBusinessInfoUi(
+    phone = phone.trim().ifBlank { DefaultBusinessInfo.phone },
+    addressLine1 = addressLine1.trim().ifBlank { DefaultBusinessInfo.addressLine1 },
+    addressLine2 = addressLine2.trim().ifBlank { DefaultBusinessInfo.addressLine2 },
+)
 
 private fun UserVehicle.toBookingVehicleUiOrNull(): BookingVehicleUi? {
     if (id.isBlank() || brand.isBlank() || model.isBlank() || plate.isBlank()) return null

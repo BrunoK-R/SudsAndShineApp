@@ -11,6 +11,14 @@ import com.sudsmobile.data.booking.BookingCreateResult
 import com.sudsmobile.data.booking.BookingReceipt
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.business.BusinessFaq
+import com.sudsmobile.data.business.BusinessInfo
+import com.sudsmobile.data.business.BusinessInfoError
+import com.sudsmobile.data.business.BusinessInfoRepository
+import com.sudsmobile.data.business.BusinessInfoResult
+import com.sudsmobile.data.business.BusinessOpeningHours
+import com.sudsmobile.data.business.BusinessStat
+import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileError
 import com.sudsmobile.data.profile.UserProfileMutationResult
@@ -285,6 +293,49 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun loadBusinessInfoMapsBackendContactDetailsForBookingSummary() = runTest {
+        val businessRepository = FakeProductsBusinessInfoRepository(
+            result = BusinessInfoResult.Success(
+                businessInfo(
+                    phone = "244 000 111",
+                    addressLine1 = "Rua Nova 10",
+                    addressLine2 = "Leiria",
+                ),
+            ),
+        )
+        val viewModel = productsBookingViewModel(businessRepository = businessRepository)
+
+        viewModel.loadBusinessInfo()
+        runCurrent()
+
+        val loaded = assertIs<BookingBusinessInfoUiState.Loaded>(viewModel.businessInfoState.value)
+        assertEquals("244 000 111", loaded.info.phone)
+        assertEquals("Rua Nova 10", loaded.info.addressLine1)
+        assertEquals("Leiria", loaded.info.addressLine2)
+        assertEquals(1, businessRepository.calls)
+    }
+
+    @Test
+    fun loadBusinessInfoUsesDefaultFallbackOnRetryableBackendError() = runTest {
+        val viewModel = productsBookingViewModel(
+            businessRepository = FakeProductsBusinessInfoRepository(
+                result = BusinessInfoResult.Failure(
+                    BusinessInfoError.Unavailable("O serviço de contactos está indisponível."),
+                ),
+            ),
+        )
+
+        viewModel.loadBusinessInfo()
+        runCurrent()
+
+        val error = assertIs<BookingBusinessInfoUiState.Error>(viewModel.businessInfoState.value)
+        assertEquals("O serviço de contactos está indisponível.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(DefaultBusinessInfo.phone, error.fallbackInfo.phone)
+        assertEquals(DefaultBusinessInfo.addressLine1, error.fallbackInfo.addressLine1)
+    }
+
+    @Test
     fun submitBookingMapsConflictToChangeSlotResolution() = runTest {
         val viewModel = productsBookingViewModel(
             bookingRepository = FakeBookingRepository(
@@ -353,12 +404,16 @@ private fun productsBookingViewModel(
     profileRepository: UserProfileRepository = FakeProductsProfileRepository(
         profileResult = UserProfileResult.Success(userProfile()),
     ),
+    businessRepository: BusinessInfoRepository = FakeProductsBusinessInfoRepository(
+        result = BusinessInfoResult.Success(businessInfo()),
+    ),
     userVehicleChangeNotifier: MutableUserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
 ): ProductsBookingViewModel = ProductsBookingViewModel(
     bookingRepository = bookingRepository,
     authRepository = authRepository,
     userVehicleRepository = vehicleRepository,
     userProfileRepository = profileRepository,
+    businessInfoRepository = businessRepository,
     userVehicleChangeNotifier = userVehicleChangeNotifier,
 )
 
@@ -425,6 +480,18 @@ private class FakeProductsProfileRepository(
 
     override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
         error("Not used")
+    }
+}
+
+private class FakeProductsBusinessInfoRepository(
+    var result: BusinessInfoResult,
+) : BusinessInfoRepository {
+    var calls: Int = 0
+        private set
+
+    override suspend fun getBusinessInfo(): BusinessInfoResult {
+        calls += 1
+        return result
     }
 }
 
@@ -561,6 +628,26 @@ private fun userProfile(
     displayName = displayName,
     phoneNumber = phoneNumber,
     marketingOptIn = false,
+)
+
+private fun businessInfo(
+    phone: String = "913 005 855",
+    addressLine1: String = "Shopping Norte Sul, Piso -1",
+    addressLine2: String = "Leiria, Portugal",
+): BusinessInfo = BusinessInfo(
+    phone = phone,
+    phoneUri = "tel:${phone.filter { it.isDigit() }}",
+    email = "info@sudsshine.pt",
+    emailUri = "mailto:info@sudsshine.pt",
+    addressLine1 = addressLine1,
+    addressLine2 = addressLine2,
+    mapsUri = "https://maps.example.test",
+    whatsappUri = "https://wa.me/351913005855",
+    openingHours = listOf(
+        BusinessOpeningHours(dayLabel = "Segunda a Sexta", hoursLabel = "09:00 - 19:00", closed = false),
+    ),
+    faq = listOf(BusinessFaq(question = "Pergunta?", answer = "Resposta.")),
+    stats = listOf(BusinessStat(value = "500+", label = "Carros")),
 )
 
 private fun validDraft(): ProductsBookingDraft = ProductsBookingDraft(
