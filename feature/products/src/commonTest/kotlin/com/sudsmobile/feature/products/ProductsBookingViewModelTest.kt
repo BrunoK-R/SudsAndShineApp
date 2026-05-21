@@ -300,6 +300,18 @@ class ProductsBookingViewModelTest {
                     phone = "244 000 111",
                     addressLine1 = "Rua Nova 10",
                     addressLine2 = "Leiria",
+                    openingHours = listOf(
+                        BusinessOpeningHours(
+                            dayLabel = "Dias úteis",
+                            hoursLabel = "10:00 - 18:00",
+                            closed = false,
+                        ),
+                        BusinessOpeningHours(
+                            dayLabel = "Domingo",
+                            hoursLabel = "Encerrado",
+                            closed = true,
+                        ),
+                    ),
                 ),
             ),
         )
@@ -312,6 +324,9 @@ class ProductsBookingViewModelTest {
         assertEquals("244 000 111", loaded.info.phone)
         assertEquals("Rua Nova 10", loaded.info.addressLine1)
         assertEquals("Leiria", loaded.info.addressLine2)
+        assertEquals("Dias úteis", loaded.info.openingHours.first().dayLabel)
+        assertEquals("10:00 - 18:00", loaded.info.openingHours.first().hoursLabel)
+        assertEquals(true, loaded.info.openingHours.last().closed)
         assertEquals(1, businessRepository.calls)
     }
 
@@ -333,6 +348,7 @@ class ProductsBookingViewModelTest {
         assertEquals(true, error.retryable)
         assertEquals(DefaultBusinessInfo.phone, error.fallbackInfo.phone)
         assertEquals(DefaultBusinessInfo.addressLine1, error.fallbackInfo.addressLine1)
+        assertEquals(DefaultBusinessInfo.openingHours.first().dayLabel, error.fallbackInfo.openingHours.first().dayLabel)
     }
 
     @Test
@@ -634,6 +650,9 @@ private fun businessInfo(
     phone: String = "913 005 855",
     addressLine1: String = "Shopping Norte Sul, Piso -1",
     addressLine2: String = "Leiria, Portugal",
+    openingHours: List<BusinessOpeningHours> = listOf(
+        BusinessOpeningHours(dayLabel = "Segunda a Sexta", hoursLabel = "09:00 - 19:00", closed = false),
+    ),
 ): BusinessInfo = BusinessInfo(
     phone = phone,
     phoneUri = "tel:${phone.filter { it.isDigit() }}",
@@ -643,9 +662,7 @@ private fun businessInfo(
     addressLine2 = addressLine2,
     mapsUri = "https://maps.example.test",
     whatsappUri = "https://wa.me/351913005855",
-    openingHours = listOf(
-        BusinessOpeningHours(dayLabel = "Segunda a Sexta", hoursLabel = "09:00 - 19:00", closed = false),
-    ),
+    openingHours = openingHours,
     faq = listOf(BusinessFaq(question = "Pergunta?", answer = "Resposta.")),
     stats = listOf(BusinessStat(value = "500+", label = "Carros")),
 )

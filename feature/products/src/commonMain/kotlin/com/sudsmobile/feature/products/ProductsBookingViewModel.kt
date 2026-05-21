@@ -17,6 +17,7 @@ import com.sudsmobile.data.business.BusinessInfo
 import com.sudsmobile.data.business.BusinessInfoError
 import com.sudsmobile.data.business.BusinessInfoRepository
 import com.sudsmobile.data.business.BusinessInfoResult
+import com.sudsmobile.data.business.BusinessOpeningHours
 import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileError
@@ -71,6 +72,13 @@ data class BookingBusinessInfoUi(
     val phone: String,
     val addressLine1: String,
     val addressLine2: String,
+    val openingHours: List<BookingOpeningHoursUi>,
+)
+
+data class BookingOpeningHoursUi(
+    val dayLabel: String,
+    val hoursLabel: String,
+    val closed: Boolean,
 )
 
 sealed interface BookingSubmitUiState {
@@ -425,7 +433,21 @@ private fun BusinessInfo.toBookingBusinessInfoUi(): BookingBusinessInfoUi = Book
     phone = phone.trim().ifBlank { DefaultBusinessInfo.phone },
     addressLine1 = addressLine1.trim().ifBlank { DefaultBusinessInfo.addressLine1 },
     addressLine2 = addressLine2.trim().ifBlank { DefaultBusinessInfo.addressLine2 },
+    openingHours = openingHours.mapNotNull { it.toBookingOpeningHoursUiOrNull() }.ifEmpty {
+        DefaultBusinessInfo.openingHours.mapNotNull { it.toBookingOpeningHoursUiOrNull() }
+    },
 )
+
+private fun BusinessOpeningHours.toBookingOpeningHoursUiOrNull(): BookingOpeningHoursUi? {
+    val day = dayLabel.trim()
+    val hours = hoursLabel.trim()
+    if (day.isBlank() || hours.isBlank()) return null
+    return BookingOpeningHoursUi(
+        dayLabel = day,
+        hoursLabel = hours,
+        closed = closed,
+    )
+}
 
 private fun UserVehicle.toBookingVehicleUiOrNull(): BookingVehicleUi? {
     if (id.isBlank() || brand.isBlank() || model.isBlank() || plate.isBlank()) return null
