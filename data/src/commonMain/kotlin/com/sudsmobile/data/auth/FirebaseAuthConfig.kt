@@ -22,7 +22,11 @@ data class FirebaseAuthConfig(
     companion object {
         private const val PublicWebApiKey = "AIzaSyDULIWnAxdusCJn_NYyfmfqooelIrC4B6I"
 
-        fun default(isDebugBuild: Boolean, platformName: String): FirebaseAuthConfig {
+        fun default(
+            isDebugBuild: Boolean,
+            platformName: String,
+            useFirebaseEmulators: Boolean = false,
+        ): FirebaseAuthConfig {
             val normalizedPlatform = platformName.lowercase()
             val emulatorHost = when {
                 normalizedPlatform.contains("android") -> "10.0.2.2"
@@ -31,7 +35,7 @@ data class FirebaseAuthConfig(
 
             return FirebaseAuthConfig(
                 apiKey = PublicWebApiKey,
-                useEmulator = isDebugBuild,
+                useEmulator = isDebugBuild && useFirebaseEmulators,
                 emulatorHost = emulatorHost,
             )
         }

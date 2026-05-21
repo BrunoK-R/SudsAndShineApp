@@ -7,6 +7,7 @@ import org.koin.core.module.Module
 
 fun initializeKoin(
     isDebugBuild: Boolean,
+    useFirebaseEmulators: Boolean = false,
     additionalModules: List<Module> = emptyList(),
 ) {
     val modules = listOf(
@@ -20,6 +21,7 @@ fun initializeKoin(
         properties(
             mapOf(
                 "isDebugBuild" to isDebugBuild,
+                "useFirebaseEmulators" to useFirebaseEmulators,
             ),
         )
         modules(modules)

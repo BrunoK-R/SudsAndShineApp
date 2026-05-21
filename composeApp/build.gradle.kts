@@ -1,5 +1,10 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+val useFirebaseEmulators = providers
+    .gradleProperty("suds.useFirebaseEmulators")
+    .map(String::toBoolean)
+    .orElse(false)
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)
@@ -75,6 +80,7 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("boolean", "USE_FIREBASE_EMULATORS", useFirebaseEmulators.get().toString())
     }
 
     packaging {

@@ -73,7 +73,11 @@ data class FirebaseFunctionsConfig(
     }
 
     companion object {
-        fun default(isDebugBuild: Boolean, platformName: String): FirebaseFunctionsConfig {
+        fun default(
+            isDebugBuild: Boolean,
+            platformName: String,
+            useFirebaseEmulators: Boolean = false,
+        ): FirebaseFunctionsConfig {
             val normalizedPlatform = platformName.lowercase()
             val emulatorHost = when {
                 normalizedPlatform.contains("android") -> "10.0.2.2"
@@ -83,7 +87,7 @@ data class FirebaseFunctionsConfig(
             return FirebaseFunctionsConfig(
                 projectId = "sudsandshine-bd3e2",
                 region = "europe-west1",
-                useEmulator = isDebugBuild,
+                useEmulator = isDebugBuild && useFirebaseEmulators,
                 emulatorHost = emulatorHost,
             )
         }

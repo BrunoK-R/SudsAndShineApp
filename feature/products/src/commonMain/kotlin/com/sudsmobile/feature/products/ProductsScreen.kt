@@ -857,12 +857,13 @@ private fun BookingConfirmationContent(
         )
 
         val basePriceCents = service?.priceCentsForVehicle(vehicle?.type) ?: 0
-        val rewardApplied = loyaltyRewardCode.isNotBlank() && sessionState is AuthSessionState.Authenticated
+        val rewardPendingValidation = loyaltyRewardCode.isNotBlank() && sessionState is AuthSessionState.Authenticated
         PriceSummaryCard(
             serviceName = service?.name ?: "Serviço",
             basePrice = basePriceCents.toEuroLabel(),
-            discount = if (rewardApplied) basePriceCents.toEuroLabel() else null,
-            total = if (rewardApplied) 0.toEuroLabel() else basePriceCents.toEuroLabel(),
+            discount = null,
+            pendingRewardValidation = rewardPendingValidation,
+            total = basePriceCents.toEuroLabel(),
         )
 
         BookingSubmitStatusCard(
@@ -1246,6 +1247,7 @@ private fun PriceSummaryCard(
     serviceName: String,
     basePrice: String,
     discount: String?,
+    pendingRewardValidation: Boolean = false,
     total: String,
 ) {
     Card(
@@ -1306,6 +1308,26 @@ private fun PriceSummaryCard(
                     Text(
                         text = "-$discount",
                         style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
+            if (pendingRewardValidation) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Recompensa fidelização",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
+                    )
+                    Text(
+                        text = "Valida ao confirmar",
+                        style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                         fontWeight = FontWeight.Bold,
                     )

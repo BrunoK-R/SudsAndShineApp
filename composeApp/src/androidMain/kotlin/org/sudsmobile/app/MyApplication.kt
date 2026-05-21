@@ -7,6 +7,9 @@ class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         configureAndroidPlatform(this)
-        initializeAndroidApp(isDebugBuild = BuildConfig.DEBUG)
+        initializeAndroidApp(
+            isDebugBuild = BuildConfig.DEBUG,
+            useFirebaseEmulators = BuildConfig.USE_FIREBASE_EMULATORS,
+        )
     }
 }

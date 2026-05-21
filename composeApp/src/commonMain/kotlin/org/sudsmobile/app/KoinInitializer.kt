@@ -11,16 +11,36 @@ import com.sudsmobile.feature.profile.profileModule
 import com.sudsmobile.feature.products.productsModule
 
 fun initializeAndroidApp(isDebugBuild: Boolean) {
-    initializeApp(isDebugBuild)
+    initializeAndroidApp(
+        isDebugBuild = isDebugBuild,
+        useFirebaseEmulators = false,
+    )
+}
+
+fun initializeAndroidApp(
+    isDebugBuild: Boolean,
+    useFirebaseEmulators: Boolean,
+) {
+    initializeApp(
+        isDebugBuild = isDebugBuild,
+        useFirebaseEmulators = useFirebaseEmulators,
+    )
 }
 
 fun initializeIosApp(isDebugBuild: Boolean) {
-    initializeApp(isDebugBuild)
+    initializeApp(
+        isDebugBuild = isDebugBuild,
+        useFirebaseEmulators = false,
+    )
 }
 
-private fun initializeApp(isDebugBuild: Boolean) {
+private fun initializeApp(
+    isDebugBuild: Boolean,
+    useFirebaseEmulators: Boolean,
+) {
     initializeKoin(
         isDebugBuild = isDebugBuild,
+        useFirebaseEmulators = useFirebaseEmulators,
         additionalModules = listOf(
             authFeatureModule,
             homeModule,

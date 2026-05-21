@@ -39,12 +39,14 @@ val dataModule = module {
         FirebaseAuthConfig.default(
             isDebugBuild = getKoin().getProperty<Boolean>("isDebugBuild") ?: false,
             platformName = get(),
+            useFirebaseEmulators = getKoin().getProperty<Boolean>("useFirebaseEmulators") ?: false,
         )
     }
     single {
         FirebaseFunctionsConfig.default(
             isDebugBuild = getKoin().getProperty<Boolean>("isDebugBuild") ?: false,
             platformName = get(),
+            useFirebaseEmulators = getKoin().getProperty<Boolean>("useFirebaseEmulators") ?: false,
         )
     }
     single<AuthApi> { KtorIdentityToolkitAuthApi(get(), get()) }
