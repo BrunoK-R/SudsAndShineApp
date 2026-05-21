@@ -146,6 +146,7 @@ private data class SaveVehiclePayload(
     val plate: String,
     val color: String,
     val type: String,
+    val isDefault: Boolean = false,
 ) {
     companion object {
         fun from(request: UserVehicleSaveRequest): SaveVehiclePayload = SaveVehiclePayload(
@@ -155,6 +156,7 @@ private data class SaveVehiclePayload(
             plate = request.plate,
             color = request.color,
             type = request.type,
+            isDefault = request.isDefault,
         )
     }
 }
@@ -206,6 +208,7 @@ private data class VehicleItem(
     val plate: String,
     val color: String = "",
     val type: String = "passenger",
+    val isDefault: Boolean = false,
 ) {
     fun toUserVehicle(): UserVehicle = UserVehicle(
         id = id,
@@ -214,6 +217,7 @@ private data class VehicleItem(
         plate = plate,
         color = color,
         type = type,
+        isDefault = isDefault,
     )
 }
 

@@ -35,12 +35,15 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -107,6 +110,7 @@ fun VehiclesScreen(
             showEditor = true
         },
         onDeleteVehicle = viewModel::deleteVehicle,
+        onSetDefaultVehicle = viewModel::setDefaultVehicle,
         onDismissMutation = viewModel::clearMutationState,
     )
 
@@ -135,6 +139,7 @@ private fun VehiclesScreenContent(
     onAddVehicle: () -> Unit,
     onEditVehicle: (VehicleUi) -> Unit,
     onDeleteVehicle: (String) -> Unit,
+    onSetDefaultVehicle: (VehicleUi) -> Unit,
     onDismissMutation: () -> Unit,
 ) {
     Column(
@@ -193,6 +198,7 @@ private fun VehiclesScreenContent(
                         actionsEnabled = mutationState !is VehicleMutationUiState.Loading,
                         onEdit = { onEditVehicle(vehicle) },
                         onDelete = { onDeleteVehicle(vehicle.id) },
+                        onSetDefault = { onSetDefaultVehicle(vehicle) },
                     )
                 }
             }
@@ -359,6 +365,7 @@ private fun VehicleCard(
     actionsEnabled: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onSetDefault: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -397,7 +404,15 @@ private fun VehicleCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    VehicleTypeBadge(type = vehicle.type)
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        VehicleTypeBadge(type = vehicle.type)
+                        if (vehicle.isDefault) {
+                            DefaultVehicleBadge()
+                        }
+                    }
                 }
 
                 if (vehicle.color.isNotBlank()) {
@@ -408,25 +423,66 @@ private fun VehicleCard(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedVehicleAction(
-                        icon = Icons.Filled.Edit,
-                        label = "Editar",
-                        enabled = actionsEnabled,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        borderColor = MaterialTheme.colorScheme.outline,
-                        onClick = onEdit,
-                    )
-                    OutlinedVehicleAction(
-                        icon = Icons.Filled.Delete,
-                        label = "Remover",
-                        enabled = actionsEnabled,
-                        contentColor = MaterialTheme.colorScheme.error,
-                        borderColor = MaterialTheme.colorScheme.error,
-                        onClick = onDelete,
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!vehicle.isDefault) {
+                        OutlinedVehicleAction(
+                            icon = Icons.Filled.CheckCircle,
+                            label = "Usar por defeito",
+                            enabled = actionsEnabled,
+                            contentColor = MaterialTheme.colorScheme.tertiary,
+                            borderColor = MaterialTheme.colorScheme.tertiary,
+                            onClick = onSetDefault,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedVehicleAction(
+                            icon = Icons.Filled.Edit,
+                            label = "Editar",
+                            enabled = actionsEnabled,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            borderColor = MaterialTheme.colorScheme.outline,
+                            onClick = onEdit,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedVehicleAction(
+                            icon = Icons.Filled.Delete,
+                            label = "Remover",
+                            enabled = actionsEnabled,
+                            contentColor = MaterialTheme.colorScheme.error,
+                            borderColor = MaterialTheme.colorScheme.error,
+                            onClick = onDelete,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DefaultVehicleBadge() {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(13.dp),
+            )
+            Text(
+                text = "Predefinido",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
@@ -481,11 +537,13 @@ private fun OutlinedVehicleAction(
     enabled: Boolean,
     contentColor: androidx.compose.ui.graphics.Color,
     borderColor: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
+        modifier = modifier,
         shape = RoundedCornerShape(10.dp),
         border = BorderStroke(1.dp, borderColor),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = contentColor),
@@ -699,6 +757,12 @@ private fun AddVehicleDialog(
                     selected = draft.type,
                     onSelect = { onDraftChange(draft.copy(type = it)) },
                 )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                DefaultVehicleSwitch(
+                    checked = draft.isDefault,
+                    enabled = !isSaving,
+                    onCheckedChange = { onDraftChange(draft.copy(isDefault = it)) },
+                )
             }
         },
         confirmButton = {
@@ -739,6 +803,51 @@ private fun AddVehicleDialog(
         },
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
     )
+}
+
+@Composable
+private fun DefaultVehicleSwitch(
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onCheckedChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "Veículo predefinido",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Usar primeiro nas próximas marcações.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onTertiary,
+                checkedTrackColor = MaterialTheme.colorScheme.tertiary,
+                checkedBorderColor = MaterialTheme.colorScheme.tertiary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+            ),
+        )
+    }
 }
 
 @Composable

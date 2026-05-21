@@ -65,6 +65,7 @@ data class BookingVehicleUi(
     val type: String,
     val userVehicleId: String?,
     val vehicleLabel: String?,
+    val isDefault: Boolean = false,
 )
 
 data class BookingContactProfileUi(
@@ -474,7 +475,11 @@ class ProductsBookingViewModel(
 
     private fun List<UserVehicle>.toVehiclesUiState(): BookingVehiclesUiState {
         val vehicles = mapNotNull { it.toBookingVehicleUiOrNull() }
-            .sortedWith(compareBy<BookingVehicleUi> { it.name.lowercase() }.thenBy { it.description.lowercase() })
+            .sortedWith(
+                compareByDescending<BookingVehicleUi> { it.isDefault }
+                    .thenBy { it.name.lowercase() }
+                    .thenBy { it.description.lowercase() },
+            )
         return if (vehicles.isEmpty()) BookingVehiclesUiState.Empty else BookingVehiclesUiState.Loaded(vehicles)
     }
 
@@ -607,6 +612,7 @@ private fun UserVehicle.toBookingVehicleUiOrNull(): BookingVehicleUi? {
         type = normalizedType,
         userVehicleId = id,
         vehicleLabel = label,
+        isDefault = isDefault,
     )
 }
 

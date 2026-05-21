@@ -31,6 +31,7 @@ internal data class VehicleUi(
     val plate: String,
     val color: String,
     val type: VehicleTypeUi,
+    val isDefault: Boolean,
 )
 
 internal data class VehicleDraftUi(
@@ -40,6 +41,7 @@ internal data class VehicleDraftUi(
     val plate: String = "",
     val color: String = "",
     val type: VehicleTypeUi = VehicleTypeUi.Passenger,
+    val isDefault: Boolean = false,
 ) {
     val canSubmit: Boolean
         get() = brand.isNotBlank() && model.isNotBlank() && plate.trim().length >= 2
@@ -162,6 +164,27 @@ internal class VehiclesViewModel(
         }
     }
 
+    fun setDefaultVehicle(vehicle: VehicleUi) {
+        if (_mutationState.value is VehicleMutationUiState.Loading || vehicle.isDefault) return
+
+        val request = vehicle.toDraft().copy(isDefault = true).toSaveRequestOrNull()
+        if (request == null) {
+            _mutationState.value = VehicleMutationUiState.ValidationError("Escolha um veículo válido.")
+            return
+        }
+
+        viewModelScope.launch {
+            _mutationState.value = VehicleMutationUiState.Loading
+            _mutationState.value = when (val result = vehicleRepository.updateVehicle(request)) {
+                is UserVehicleMutationResult.Success -> {
+                    publishSavedVehicle(result.vehicle.toUiModel())
+                    VehicleMutationUiState.Success("Veículo predefinido atualizado.")
+                }
+                is UserVehicleMutationResult.Failure -> result.error.toMutationUiState()
+            }
+        }
+    }
+
     fun clearMutationState() {
         _mutationState.value = VehicleMutationUiState.Idle
     }
@@ -170,21 +193,40 @@ internal class VehiclesViewModel(
         loadedUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
         val currentVehicles = (_uiState.value as? VehiclesUiState.Loaded)?.vehicles.orEmpty()
         val nextVehicles = if (currentVehicles.any { it.id == vehicle.id }) {
-            currentVehicles.map { if (it.id == vehicle.id) vehicle else it }
+            currentVehicles.map { currentVehicle ->
+                when {
+                    currentVehicle.id == vehicle.id -> vehicle
+                    vehicle.isDefault -> currentVehicle.copy(isDefault = false)
+                    else -> currentVehicle
+                }
+            }
         } else {
-            currentVehicles + vehicle
+            val existingVehicles = if (vehicle.isDefault) {
+                currentVehicles.map { it.copy(isDefault = false) }
+            } else {
+                currentVehicles
+            }
+            existingVehicles + vehicle
         }
         _uiState.value = VehiclesUiState.Loaded(nextVehicles.sortedWith(vehicleComparator))
     }
 
     private fun publishDeletedVehicle(vehicleId: String) {
         val currentVehicles = (_uiState.value as? VehiclesUiState.Loaded)?.vehicles.orEmpty()
-        val nextVehicles = currentVehicles.filterNot { it.id == vehicleId }
+        val removedVehicle = currentVehicles.firstOrNull { it.id == vehicleId }
+        val remainingVehicles = currentVehicles.filterNot { it.id == vehicleId }
+        val nextVehicles = if (removedVehicle?.isDefault == true && remainingVehicles.none { it.isDefault }) {
+            remainingVehicles.mapIndexed { index, vehicle ->
+                if (index == 0) vehicle.copy(isDefault = true) else vehicle
+            }
+        } else {
+            remainingVehicles
+        }
         loadedUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
         _uiState.value = if (nextVehicles.isEmpty()) {
             VehiclesUiState.Empty
         } else {
-            VehiclesUiState.Loaded(nextVehicles)
+            VehiclesUiState.Loaded(nextVehicles.sortedWith(vehicleComparator))
         }
     }
 
@@ -216,7 +258,8 @@ internal class VehiclesViewModel(
     }
 }
 
-private val vehicleComparator = compareBy<VehicleUi> { it.brand.lowercase() }
+private val vehicleComparator = compareByDescending<VehicleUi> { it.isDefault }
+    .thenBy { it.brand.lowercase() }
     .thenBy { it.model.lowercase() }
     .thenBy { it.plate.lowercase() }
 
@@ -229,6 +272,7 @@ private fun VehicleDraftUi.toSaveRequestOrNull(): UserVehicleSaveRequest? {
         plate = plate,
         color = color,
         type = type.id,
+        isDefault = isDefault,
     )
 }
 
@@ -244,6 +288,7 @@ private fun UserVehicle.toUiModel(): VehicleUi = VehicleUi(
     plate = plate,
     color = color,
     type = type.toVehicleTypeUi(),
+    isDefault = isDefault,
 )
 
 private fun String.toVehicleTypeUi(): VehicleTypeUi = when (lowercase()) {
@@ -258,4 +303,5 @@ internal fun VehicleUi.toDraft(): VehicleDraftUi = VehicleDraftUi(
     plate = plate,
     color = color,
     type = type,
+    isDefault = isDefault,
 )

@@ -7,6 +7,7 @@ data class UserVehicle(
     val plate: String,
     val color: String,
     val type: String,
+    val isDefault: Boolean = false,
 )
 
 data class UserVehicleSaveRequest(
@@ -16,6 +17,7 @@ data class UserVehicleSaveRequest(
     val plate: String,
     val color: String,
     val type: String,
+    val isDefault: Boolean = false,
 )
 
 sealed interface UserVehicleListResult {

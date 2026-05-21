@@ -64,7 +64,7 @@ class VehiclesViewModelTest {
             authRepository = FakeVehiclesAuthRepository(authenticated = true),
             vehicleRepository = FakeUserVehicleRepository(
                 listResult = UserVehicleListResult.Success(
-                    listOf(userVehicle(id = "vehicle-1", brand = "BMW")),
+                    listOf(userVehicle(id = "vehicle-1", brand = "BMW", isDefault = true)),
                 ),
             ),
         )
@@ -75,6 +75,7 @@ class VehiclesViewModelTest {
         val loaded = assertIs<VehiclesUiState.Loaded>(viewModel.uiState.value)
         assertEquals("vehicle-1", loaded.vehicles.single().id)
         assertEquals(VehicleTypeUi.Passenger, loaded.vehicles.single().type)
+        assertEquals(true, loaded.vehicles.single().isDefault)
     }
 
     @Test
@@ -145,6 +146,38 @@ class VehiclesViewModelTest {
 
         assertIs<VehicleMutationUiState.Success>(viewModel.mutationState.value)
         assertIs<VehiclesUiState.Empty>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun setDefaultVehiclePromotesSelectedVehicleAndClearsPreviousDefault() = runTest {
+        val repository = FakeUserVehicleRepository(
+            listResult = UserVehicleListResult.Success(
+                listOf(
+                    userVehicle(id = "vehicle-1", brand = "Audi", isDefault = true),
+                    userVehicle(id = "vehicle-2", brand = "BMW"),
+                ),
+            ),
+            mutationResult = UserVehicleMutationResult.Success(
+                userVehicle(id = "vehicle-2", brand = "BMW", isDefault = true),
+            ),
+        )
+        val viewModel = VehiclesViewModel(
+            authRepository = FakeVehiclesAuthRepository(authenticated = true),
+            vehicleRepository = repository,
+        )
+
+        viewModel.loadVehicles()
+        runCurrent()
+        val loaded = assertIs<VehiclesUiState.Loaded>(viewModel.uiState.value)
+
+        viewModel.setDefaultVehicle(loaded.vehicles.first { it.id == "vehicle-2" })
+        runCurrent()
+
+        val updated = assertIs<VehiclesUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("vehicle-2", updated.vehicles.first().id)
+        assertEquals(true, updated.vehicles.first().isDefault)
+        assertEquals(false, updated.vehicles.first { it.id == "vehicle-1" }.isDefault)
+        assertIs<VehicleMutationUiState.Success>(viewModel.mutationState.value)
     }
 
     @Test
@@ -274,6 +307,7 @@ private fun userVehicle(
     model: String = "320d",
     plate: String = "AA-00-BB",
     type: String = "passenger",
+    isDefault: Boolean = false,
 ): UserVehicle = UserVehicle(
     id = id,
     brand = brand,
@@ -281,4 +315,5 @@ private fun userVehicle(
     plate = plate,
     color = "Preto",
     type = type,
+    isDefault = isDefault,
 )

@@ -108,6 +108,7 @@ private val bookingVehicleCategories = listOf(
         type = "passenger",
         userVehicleId = null,
         vehicleLabel = null,
+        isDefault = false,
     ),
     BookingVehicleUi(
         id = "suv",
@@ -116,6 +117,7 @@ private val bookingVehicleCategories = listOf(
         type = "suv",
         userVehicleId = null,
         vehicleLabel = null,
+        isDefault = false,
     ),
 )
 
@@ -409,8 +411,11 @@ private fun ProductsScreenContent(
     }
 
     LaunchedEffect(vehiclesState) {
+        val defaultVehicleId = savedVehicles.firstOrNull { it.isDefault }?.id
         if (selectedVehicleId != null && vehicleOptions.none { it.id == selectedVehicleId }) {
-            selectedVehicleId = null
+            selectedVehicleId = defaultVehicleId
+        } else if (selectedVehicleId == null) {
+            selectedVehicleId = defaultVehicleId
         }
     }
 
@@ -3636,6 +3641,9 @@ private fun BookingVehicleCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                if (vehicle.isDefault) {
+                    DefaultBookingVehicleChip()
+                }
                 Text(
                     text = vehicle.name,
                     style = MaterialTheme.typography.titleLarge,
@@ -3664,6 +3672,22 @@ private fun BookingVehicleCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DefaultBookingVehicleChip() {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Text(
+            text = "Predefinido",
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

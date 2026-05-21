@@ -39,6 +39,7 @@ class FirebaseUserVehicleRepositoryTest {
                 plate = " aa-00-bb ",
                 color = " Preto ",
                 type = "passageiros",
+                isDefault = true,
             ),
         )
 
@@ -47,6 +48,7 @@ class FirebaseUserVehicleRepositoryTest {
         assertEquals("BMW", api.lastSaveRequest?.brand)
         assertEquals("AA-00-BB", api.lastSaveRequest?.plate)
         assertEquals("passenger", api.lastSaveRequest?.type)
+        assertEquals(true, api.lastSaveRequest?.isDefault)
         assertEquals(1L, changeNotifier.revision.value)
     }
 
@@ -202,6 +204,7 @@ private fun validSaveRequest(): UserVehicleSaveRequest = UserVehicleSaveRequest(
     plate = "AA-00-BB",
     color = "Preto",
     type = "passenger",
+    isDefault = true,
 )
 
 private fun UserVehicleSaveRequest.toVehicle(id: String): UserVehicle = UserVehicle(
@@ -211,4 +214,5 @@ private fun UserVehicleSaveRequest.toVehicle(id: String): UserVehicle = UserVehi
     plate = plate,
     color = color,
     type = type,
+    isDefault = isDefault,
 )

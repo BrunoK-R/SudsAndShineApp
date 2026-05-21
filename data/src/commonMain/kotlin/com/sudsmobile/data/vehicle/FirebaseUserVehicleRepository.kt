@@ -86,6 +86,7 @@ class FirebaseUserVehicleRepository(
         plate = plate.trim().uppercase(),
         color = color.trim(),
         type = type.normalizedVehicleType(),
+        isDefault = isDefault,
     )
 }
 

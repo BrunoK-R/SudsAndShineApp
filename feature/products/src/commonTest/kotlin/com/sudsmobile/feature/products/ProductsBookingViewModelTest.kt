@@ -135,7 +135,7 @@ class ProductsBookingViewModelTest {
     fun loadVehiclesMapsSavedVehiclesToBookingOptions() = runTest {
         val vehicleRepository = FakeProductsVehicleRepository(
             listResult = UserVehicleListResult.Success(
-                listOf(userVehicle(id = "vehicle-1", brand = "BMW", type = "suv")),
+                listOf(userVehicle(id = "vehicle-1", brand = "BMW", type = "suv", isDefault = true)),
             ),
         )
         val viewModel = productsBookingViewModel(vehicleRepository = vehicleRepository)
@@ -148,6 +148,27 @@ class ProductsBookingViewModelTest {
         assertEquals("BMW 320d", loaded.vehicles.single().name)
         assertEquals("suv", loaded.vehicles.single().type)
         assertEquals("vehicle-1", loaded.vehicles.single().userVehicleId)
+        assertEquals(true, loaded.vehicles.single().isDefault)
+    }
+
+    @Test
+    fun loadVehiclesSortsDefaultVehicleFirst() = runTest {
+        val vehicleRepository = FakeProductsVehicleRepository(
+            listResult = UserVehicleListResult.Success(
+                listOf(
+                    userVehicle(id = "vehicle-1", brand = "Audi"),
+                    userVehicle(id = "vehicle-2", brand = "BMW", isDefault = true),
+                ),
+            ),
+        )
+        val viewModel = productsBookingViewModel(vehicleRepository = vehicleRepository)
+
+        viewModel.loadVehicles()
+        runCurrent()
+
+        val loaded = assertIs<BookingVehiclesUiState.Loaded>(viewModel.vehiclesState.value)
+        assertEquals("saved:vehicle-2", loaded.vehicles.first().id)
+        assertEquals(true, loaded.vehicles.first().isDefault)
     }
 
     @Test
@@ -753,6 +774,7 @@ private fun userVehicle(
     id: String = "vehicle-1",
     brand: String = "BMW",
     type: String = "passenger",
+    isDefault: Boolean = false,
 ): UserVehicle = UserVehicle(
     id = id,
     brand = brand,
@@ -760,6 +782,7 @@ private fun userVehicle(
     plate = "AA-00-BB",
     color = "Preto",
     type = type,
+    isDefault = isDefault,
 )
 
 private fun userProfile(

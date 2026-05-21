@@ -34,7 +34,8 @@ class KtorVehicleFunctionsApiTest {
                         "model": "320d",
                         "plate": "AA-00-BB",
                         "color": "Preto",
-                        "type": "passenger"
+                        "type": "passenger",
+                        "isDefault": true
                       }
                     ]
                   }
@@ -52,6 +53,7 @@ class KtorVehicleFunctionsApiTest {
         assertEquals("/test-project/europe-west1/getMyVehicles", requestedPath)
         assertEquals("vehicle-1", success.vehicles.first().id)
         assertEquals("BMW", success.vehicles.first().brand)
+        assertEquals(true, success.vehicles.first().isDefault)
     }
 
     @Test
@@ -68,7 +70,8 @@ class KtorVehicleFunctionsApiTest {
                       "model": "320d",
                       "plate": "AA-00-BB",
                       "color": "Preto",
-                      "type": "passenger"
+                      "type": "passenger",
+                      "isDefault": true
                     }
                   }
                 }
@@ -83,6 +86,8 @@ class KtorVehicleFunctionsApiTest {
 
         assertIs<UserVehicleMutationResult.Success>(result)
         assertEquals("Bearer id-token-1", authorizationHeader)
+        val success = assertIs<UserVehicleMutationResult.Success>(result)
+        assertEquals(true, success.vehicle.isDefault)
     }
 
     @Test
@@ -169,4 +174,5 @@ private fun validSaveRequest(): UserVehicleSaveRequest = UserVehicleSaveRequest(
     plate = "AA-00-BB",
     color = "Preto",
     type = "passenger",
+    isDefault = true,
 )
