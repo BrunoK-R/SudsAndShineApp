@@ -52,6 +52,29 @@ data class BookingLoyaltySummary(
     val availableRewards: Int,
 )
 
+data class BookingLoyalty(
+    val summary: BookingLoyaltySummary,
+    val stampHistory: List<BookingLoyaltyStamp>,
+    val redemptions: List<BookingLoyaltyRedemption>,
+)
+
+data class BookingLoyaltyStamp(
+    val id: String,
+    val serviceId: String,
+    val serviceName: String,
+    val slotStartIso: String,
+    val slotEndIso: String,
+    val points: Int,
+)
+
+data class BookingLoyaltyRedemption(
+    val id: String,
+    val rewardCode: String,
+    val rewardNumber: Int?,
+    val status: String,
+    val createdAtIso: String,
+)
+
 data class BookingHistoryReservation(
     val id: String,
     val reservationCode: String,
@@ -141,6 +164,11 @@ sealed interface BookingHistoryResult {
     data class Failure(val error: BookingHistoryError) : BookingHistoryResult
 }
 
+sealed interface BookingLoyaltyResult {
+    data class Success(val loyalty: BookingLoyalty) : BookingLoyaltyResult
+    data class Failure(val error: BookingLoyaltyError) : BookingLoyaltyResult
+}
+
 sealed interface BookingReviewResult {
     data class Success(val receipt: BookingReviewReceipt) : BookingReviewResult
     data class Failure(val error: BookingReviewError) : BookingReviewResult
@@ -186,6 +214,15 @@ sealed interface BookingHistoryError {
     data class Backend(override val message: String) : BookingHistoryError
 }
 
+sealed interface BookingLoyaltyError {
+    val message: String
+
+    data class Permission(override val message: String) : BookingLoyaltyError
+    data class Unauthenticated(override val message: String) : BookingLoyaltyError
+    data class Unavailable(override val message: String) : BookingLoyaltyError
+    data class Backend(override val message: String) : BookingLoyaltyError
+}
+
 sealed interface BookingReviewError {
     val message: String
 
@@ -225,6 +262,12 @@ interface BookingRepository {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult
     suspend fun getMyBookings(): BookingHistoryResult
+    suspend fun getMyLoyalty(): BookingLoyaltyResult {
+        return BookingLoyaltyResult.Failure(
+            BookingLoyaltyError.Unavailable("O programa de recompensas ainda não está disponível."),
+        )
+    }
+
     suspend fun submitReview(request: BookingReviewRequest): BookingReviewResult {
         return BookingReviewResult.Failure(
             BookingReviewError.Unavailable("O envio de avaliações ainda não está disponível."),

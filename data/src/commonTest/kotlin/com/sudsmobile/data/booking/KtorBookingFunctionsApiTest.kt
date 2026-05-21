@@ -269,6 +269,66 @@ class KtorBookingFunctionsApiTest {
     }
 
     @Test
+    fun mapsMyLoyaltyResponseToRewardsAndStampHistory() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "totalWashes": 10,
+                    "currentWashes": 0,
+                    "targetWashes": 10,
+                    "remainingWashes": 10,
+                    "progress": 0.0,
+                    "rewardReady": false,
+                    "completedRewards": 1,
+                    "claimedRewards": 1,
+                    "availableRewards": 0,
+                    "stampHistory": [
+                      {
+                        "id": "reservation-1",
+                        "serviceId": "premium",
+                        "serviceName": "Lavagem Premium",
+                        "slotStart": "2026-05-18T10:00:00.000Z",
+                        "slotEnd": "2026-05-18T10:45:00.000Z",
+                        "points": 1
+                      }
+                    ],
+                    "redemptions": [
+                      {
+                        "id": "reward-0001",
+                        "rewardCode": "SS-FREE-UID1-0001",
+                        "rewardNumber": 1,
+                        "status": "issued",
+                        "createdAt": "2026-05-20T12:00:00.000Z"
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getMyLoyalty("id-token-1")
+
+        val success = assertIs<BookingLoyaltyResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getMyLoyalty", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals(10, success.loyalty.summary.totalWashes)
+        assertEquals("reservation-1", success.loyalty.stampHistory.single().id)
+        assertEquals("Lavagem Premium", success.loyalty.stampHistory.single().serviceName)
+        assertEquals("reward-0001", success.loyalty.redemptions.single().id)
+        assertEquals("SS-FREE-UID1-0001", success.loyalty.redemptions.single().rewardCode)
+        assertEquals(1, success.loyalty.redemptions.single().rewardNumber)
+    }
+
+    @Test
     fun submitsReviewWithAuthorizationHeader() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

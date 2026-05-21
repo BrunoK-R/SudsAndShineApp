@@ -170,6 +170,30 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun rejectsLoyaltyWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.getMyLoyalty()
+
+        assertIs<BookingLoyaltyResult.Failure>(result)
+        assertIs<BookingLoyaltyError.Unauthenticated>(result.error)
+        assertEquals(0, api.loyaltyCalls)
+    }
+
+    @Test
+    fun loadsLoyaltyWithAuthenticatedIdToken() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.getMyLoyalty()
+
+        assertIs<BookingLoyaltyResult.Success>(result)
+        assertEquals(1, api.loyaltyCalls)
+        assertEquals("id-token-1", api.lastLoyaltyIdToken)
+    }
+
+    @Test
     fun rejectsReviewWhenUnauthenticatedBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api, FakeAuthRepository())
@@ -324,6 +348,10 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         private set
     var lastHistoryIdToken: String? = null
         private set
+    var loyaltyCalls: Int = 0
+        private set
+    var lastLoyaltyIdToken: String? = null
+        private set
     var reviewCalls: Int = 0
         private set
     var lastReviewRequest: BookingReviewRequest? = null
@@ -357,6 +385,28 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         historyCalls += 1
         lastHistoryIdToken = idToken
         return BookingHistoryResult.Success(BookingHistory(reservations = emptyList()))
+    }
+
+    override suspend fun getMyLoyalty(idToken: String): BookingLoyaltyResult {
+        loyaltyCalls += 1
+        lastLoyaltyIdToken = idToken
+        return BookingLoyaltyResult.Success(
+            BookingLoyalty(
+                summary = BookingLoyaltySummary(
+                    totalWashes = 0,
+                    currentWashes = 0,
+                    targetWashes = 10,
+                    remainingWashes = 10,
+                    progress = 0f,
+                    rewardReady = false,
+                    completedRewards = 0,
+                    claimedRewards = 0,
+                    availableRewards = 0,
+                ),
+                stampHistory = emptyList(),
+                redemptions = emptyList(),
+            ),
+        )
     }
 
     override suspend fun submitReservationReview(request: BookingReviewRequest, idToken: String): BookingReviewResult {

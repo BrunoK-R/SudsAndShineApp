@@ -14,12 +14,18 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingLoyalty
+import com.sudsmobile.data.booking.BookingLoyaltyError
+import com.sudsmobile.data.booking.BookingLoyaltyRedemption
+import com.sudsmobile.data.booking.BookingLoyaltyResult
+import com.sudsmobile.data.booking.BookingLoyaltyStamp
 import com.sudsmobile.data.booking.BookingLoyaltySummary
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.BookingRewardRedemptionError
 import com.sudsmobile.data.booking.BookingRewardRedemptionReceipt
 import com.sudsmobile.data.booking.BookingRewardRedemptionResult
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.shared.loyalty.toLoyaltyProgress
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -190,6 +196,51 @@ class LoyaltyViewModelTest {
     }
 
     @Test
+    fun loadRewardsExposesIssuedRewardCodesFromBackendLoyalty() = runTest {
+        val viewModel = loyaltyViewModel(
+            bookingRepository = FakeLoyaltyBookingRepository(
+                historyResult = BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = (1..10).map {
+                            loyaltyReservation(
+                                id = "stamp-$it",
+                                slotStartIso = "2026-05-${it.twoDigits()}T09:00:00.000Z",
+                            )
+                        },
+                        loyalty = loyaltySummary(
+                            totalWashes = 10,
+                            currentWashes = 0,
+                            remainingWashes = 10,
+                            progress = 0f,
+                            rewardReady = false,
+                            completedRewards = 1,
+                            claimedRewards = 1,
+                            availableRewards = 0,
+                        ),
+                    ),
+                ),
+                redemptions = listOf(
+                    BookingLoyaltyRedemption(
+                        id = "reward-0001",
+                        rewardCode = "SS-FREE-UID1-0001",
+                        rewardNumber = 1,
+                        status = "issued",
+                        createdAtIso = "2026-05-20T12:00:00.000Z",
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        val loaded = assertIs<LoyaltyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("SS-FREE-UID1-0001", loaded.rewardCodes.single().code)
+        assertEquals("Disponível", loaded.rewardCodes.single().statusLabel)
+        assertEquals("20 de maio, 2026", loaded.rewardCodes.single().issuedAt)
+    }
+
+    @Test
     fun loadRewardsMapsNoCompletedReservationsToEmptyProgress() = runTest {
         val viewModel = loyaltyViewModel(
             bookingRepository = FakeLoyaltyBookingRepository(
@@ -318,6 +369,8 @@ class LoyaltyViewModelTest {
         assertEquals(0, loaded.progress.currentWashes)
         assertEquals(0, loaded.availableRewards)
         assertEquals(1, loaded.claimedRewards)
+        assertEquals("SS-FREE-UID1-0001", loaded.rewardCodes.single().code)
+        assertEquals("Emitida agora", loaded.rewardCodes.single().issuedAt)
         val success = assertIs<LoyaltyRedemptionUiState.Success>(loaded.redemptionState)
         assertEquals(true, success.message.contains("SS-FREE-UID1-0001"))
     }
@@ -377,6 +430,7 @@ private fun loyaltyViewModel(
 
 private class FakeLoyaltyBookingRepository(
     private val historyResult: BookingHistoryResult,
+    private val redemptions: List<BookingLoyaltyRedemption> = emptyList(),
     private val redemptionResult: BookingRewardRedemptionResult = BookingRewardRedemptionResult.Failure(
         BookingRewardRedemptionError.NotAvailable("Ainda não tem uma recompensa disponível."),
     ),
@@ -395,8 +449,12 @@ private class FakeLoyaltyBookingRepository(
     }
 
     override suspend fun getMyBookings(): BookingHistoryResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyLoyalty(): BookingLoyaltyResult {
         historyCalls += 1
-        return historyResult
+        return historyResult.toLoyaltyResult(redemptions)
     }
 
     override suspend fun redeemLoyaltyReward(): BookingRewardRedemptionResult {
@@ -454,6 +512,65 @@ private fun authenticatedSession(uid: String = "uid-1"): AuthSessionState.Authen
             refreshToken = "refresh-token-$uid",
             expiresInSeconds = 3600,
         ),
+    )
+}
+
+private fun BookingHistoryResult.toLoyaltyResult(
+    redemptions: List<BookingLoyaltyRedemption>,
+): BookingLoyaltyResult {
+    return when (this) {
+        is BookingHistoryResult.Success -> BookingLoyaltyResult.Success(history.toLoyalty(redemptions))
+        is BookingHistoryResult.Failure -> BookingLoyaltyResult.Failure(error.toLoyaltyError())
+    }
+}
+
+private fun BookingHistory.toLoyalty(redemptions: List<BookingLoyaltyRedemption>): BookingLoyalty {
+    val stamps = reservations
+        .filter { !it.upcoming && !it.isCancelled() }
+        .map {
+            BookingLoyaltyStamp(
+                id = it.id,
+                serviceId = it.serviceId,
+                serviceName = it.serviceName,
+                slotStartIso = it.slotStartIso,
+                slotEndIso = it.slotEndIso,
+                points = 1,
+            )
+        }
+    val summary = loyalty ?: stamps.size.toTestLoyaltySummary()
+    return BookingLoyalty(
+        summary = summary,
+        stampHistory = stamps,
+        redemptions = redemptions,
+    )
+}
+
+private fun BookingHistoryReservation.isCancelled(): Boolean {
+    val normalized = status.lowercase()
+    return normalized in setOf("cancelled", "canceled", "cancelado")
+}
+
+private fun BookingHistoryError.toLoyaltyError(): BookingLoyaltyError {
+    return when (this) {
+        is BookingHistoryError.Unauthenticated -> BookingLoyaltyError.Unauthenticated(message)
+        is BookingHistoryError.Permission -> BookingLoyaltyError.Permission(message)
+        is BookingHistoryError.Unavailable -> BookingLoyaltyError.Unavailable(message)
+        is BookingHistoryError.Backend -> BookingLoyaltyError.Backend(message)
+    }
+}
+
+private fun Int.toTestLoyaltySummary(): BookingLoyaltySummary {
+    val progress = toLoyaltyProgress()
+    return BookingLoyaltySummary(
+        totalWashes = progress.totalWashes,
+        currentWashes = progress.currentWashes,
+        targetWashes = progress.targetWashes,
+        remainingWashes = progress.remainingWashes,
+        progress = progress.progress,
+        rewardReady = progress.rewardReady,
+        completedRewards = progress.completedRewards,
+        claimedRewards = progress.claimedRewards,
+        availableRewards = progress.availableRewards,
     )
 }
 

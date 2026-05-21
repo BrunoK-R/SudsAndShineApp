@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.viewmodel.koinViewModel
@@ -174,6 +175,7 @@ private fun LoyaltyContent(
                 redemptionState = uiState.redemptionState,
                 onRedeemReward = onRedeemReward,
             )
+            IssuedRewardCodesCard(rewardCodes = uiState.rewardCodes)
             StampGridCard(progress = uiState.progress)
             HowItWorksCard()
             StampHistoryCard(history = emptyList())
@@ -188,6 +190,7 @@ private fun LoyaltyContent(
                 redemptionState = uiState.redemptionState,
                 onRedeemReward = onRedeemReward,
             )
+            IssuedRewardCodesCard(rewardCodes = uiState.rewardCodes)
             StampGridCard(progress = uiState.progress)
             HowItWorksCard()
             StampHistoryCard(history = uiState.history)
@@ -334,6 +337,88 @@ private fun RewardClaimCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun IssuedRewardCodesCard(rewardCodes: List<LoyaltyRewardCodeUi>) {
+    if (rewardCodes.isEmpty()) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            SectionTitle(
+                icon = Icons.Filled.CardGiftcard,
+                title = "Códigos Emitidos",
+            )
+            rewardCodes.forEachIndexed { index, rewardCode ->
+                RewardCodeRow(rewardCode = rewardCode)
+                if (index != rewardCodes.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RewardCodeRow(rewardCode: LoyaltyRewardCodeUi) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            modifier = Modifier.size(42.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.46f),
+            contentColor = MaterialTheme.colorScheme.tertiary,
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = rewardCode.code,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = rewardCode.issuedAt,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Surface(
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f),
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            shape = CircleShape,
+        ) {
+            Text(
+                text = rewardCode.statusLabel,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

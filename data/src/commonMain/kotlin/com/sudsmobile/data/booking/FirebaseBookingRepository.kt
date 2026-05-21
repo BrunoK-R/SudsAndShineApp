@@ -47,6 +47,15 @@ class FirebaseBookingRepository(
         return api.getMyReservations(session.idToken)
     }
 
+    override suspend fun getMyLoyalty(): BookingLoyaltyResult {
+        val session = authRepository.currentSession()
+            ?: return BookingLoyaltyResult.Failure(
+                BookingLoyaltyError.Unauthenticated("Inicie sessão para ver as suas recompensas."),
+            )
+
+        return api.getMyLoyalty(session.idToken)
+    }
+
     override suspend fun submitReview(request: BookingReviewRequest): BookingReviewResult {
         val validationError = validate(request)
         if (validationError != null) {
