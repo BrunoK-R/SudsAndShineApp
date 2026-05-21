@@ -142,6 +142,7 @@ fun MainNavigation(
                             restoreState = true
                         }
                     },
+                    onOpenPayment = { navController.navigate(Routes.Payment) },
                     onRequestSignIn = onRequestSignIn,
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
                 )
@@ -151,6 +152,7 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onRateService = { reservationId -> navController.navigate(Routes.rating(reservationId)) },
                     onRequestSignIn = onRequestSignIn,
+                    onOpenPayment = { navController.navigate(Routes.Payment) },
                 )
             }
             composable(Routes.Rating) { backStackEntry ->
@@ -223,7 +225,12 @@ fun MainNavigation(
                 )
             }
             composable(Routes.Payment) {
-                PaymentScreen(contentPadding = paddingValues)
+                PaymentScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
+                    onBookWash = { navigateToBookingFromLeaf() },
+                )
             }
         }
     }

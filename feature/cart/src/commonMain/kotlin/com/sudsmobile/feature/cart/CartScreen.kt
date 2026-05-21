@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Recommend
@@ -89,6 +90,7 @@ fun CartScreen(
     contentPadding: PaddingValues,
     onRateService: (String) -> Unit = {},
     onRequestSignIn: () -> Unit = {},
+    onOpenPayment: () -> Unit = {},
 ) {
     val viewModel: CartBookingsViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -141,6 +143,7 @@ fun CartScreen(
                 onRetry = viewModel::loadBookings,
                 onRetryBusinessInfo = { viewModel.loadBusinessInfo(force = true) },
                 onRequestSignIn = onRequestSignIn,
+                onOpenPayment = onOpenPayment,
                 onRateService = onRateService,
                 onRequestCancellation = { reservationId ->
                     viewModel.clearCancellationState()
@@ -252,6 +255,7 @@ private fun BookingsContent(
     onRetry: () -> Unit,
     onRetryBusinessInfo: () -> Unit,
     onRequestSignIn: () -> Unit,
+    onOpenPayment: () -> Unit,
     onRateService: (String) -> Unit,
     onRequestCancellation: (String) -> Unit,
     onDismissCancellation: (String) -> Unit,
@@ -326,6 +330,7 @@ private fun BookingsContent(
                             cancellationState = cancellationState.forReservation(booking.id),
                             cancellationConfirmationVisible = pendingCancellationId == booking.id,
                             onRetryBusinessInfo = onRetryBusinessInfo,
+                            onOpenPayment = onOpenPayment,
                             onRateService = { onRateService(booking.id) },
                             onRequestCancellation = { onRequestCancellation(booking.id) },
                             onDismissCancellation = { onDismissCancellation(booking.id) },
@@ -429,6 +434,7 @@ private fun BookingSummaryCard(
     cancellationState: BookingCancellationUiState,
     cancellationConfirmationVisible: Boolean,
     onRetryBusinessInfo: () -> Unit,
+    onOpenPayment: () -> Unit,
     onRateService: () -> Unit,
     onRequestCancellation: () -> Unit,
     onDismissCancellation: () -> Unit,
@@ -541,6 +547,16 @@ private fun BookingSummaryCard(
                 )
             }
 
+            if (booking.requiresPayment) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                PendingPaymentAction(
+                    paymentLabel = booking.paymentLabel,
+                    onOpenPayment = onOpenPayment,
+                    modifier = Modifier.padding(top = 14.dp),
+                )
+            }
+
             if (showCancelAction) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -553,6 +569,60 @@ private fun BookingSummaryCard(
                     modifier = Modifier.padding(top = 14.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PendingPaymentAction(
+    paymentLabel: String,
+    onOpenPayment: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Euro,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = paymentLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Consulte o valor em aberto e as opções disponíveis.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        OutlinedButton(
+            onClick = onOpenPayment,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiary,
+            ),
+        ) {
+            Text(
+                text = "Ver pagamento",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

@@ -95,6 +95,7 @@ class KtorBookingFunctionsApiTest {
                     "loyaltyRewardCode": "SS-FREE-UID1-0001",
                     "priceCents": 0,
                     "discountCents": 3200,
+                    "paymentStatus": "covered_by_loyalty",
                     "extras": [
                       {
                         "id": "wax",
@@ -118,6 +119,7 @@ class KtorBookingFunctionsApiTest {
         assertEquals("SS-FREE-UID1-0001", success.receipt.loyaltyRewardCode)
         assertEquals(0, success.receipt.priceCents)
         assertEquals(3200, success.receipt.discountCents)
+        assertEquals("covered_by_loyalty", success.receipt.paymentStatus)
         assertEquals("wax", success.receipt.extras.single().id)
         assertEquals("Enceramento", success.receipt.extras.single().name)
         assertEquals(1500, success.receipt.extras.single().priceCents)
@@ -226,6 +228,7 @@ class KtorBookingFunctionsApiTest {
                         "slotStart": "2026-05-20T09:30:00.000Z",
                         "slotEnd": "2026-05-20T10:15:00.000Z",
                         "status": "pending",
+                        "paymentStatus": "pending",
                         "vehicleType": "suv",
                         "vehicleLabel": "BMW 320d",
                         "priceCents": 3400,
@@ -258,6 +261,7 @@ class KtorBookingFunctionsApiTest {
         assertEquals("reservation-1", success.history.reservations.first().id)
         assertEquals("BMW 320d", success.history.reservations.first().vehicleLabel)
         assertEquals(3400, success.history.reservations.first().priceCents)
+        assertEquals("pending", success.history.reservations.first().paymentStatus)
         assertEquals("wax", success.history.reservations.first().extras.single().id)
         assertEquals("Enceramento", success.history.reservations.first().extras.single().name)
         assertEquals(true, success.history.reservations.first().upcoming)

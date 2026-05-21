@@ -87,6 +87,8 @@ import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingAvailabilityDay
 import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
+import com.sudsmobile.data.booking.BookingPaymentStatus
+import com.sudsmobile.data.booking.toBookingPaymentStatus
 import org.koin.compose.viewmodel.koinViewModel
 
 private enum class BookingStep {
@@ -125,6 +127,7 @@ fun ProductsScreen(
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
+    onOpenPayment: () -> Unit = {},
     onRequestSignIn: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
 ) {
@@ -174,6 +177,7 @@ fun ProductsScreen(
         onBack = onBack,
         onViewBooking = onViewBooking,
         onHome = onHome,
+        onOpenPayment = onOpenPayment,
         onRequestSignIn = onRequestSignIn,
         onManageVehicles = onManageVehicles,
     )
@@ -209,6 +213,7 @@ private fun ProductsScreenContent(
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
+    onOpenPayment: () -> Unit = {},
     onRequestSignIn: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
 ) {
@@ -233,6 +238,7 @@ private fun ProductsScreenContent(
     var reservationCode by rememberSaveable { mutableStateOf<String?>(null) }
     var successLoyaltyRewardApplied by rememberSaveable { mutableStateOf(false) }
     var successLoyaltyRewardCode by rememberSaveable { mutableStateOf<String?>(null) }
+    var successPaymentStatus by rememberSaveable { mutableStateOf("") }
     var appliedInitialServiceRequestKey by rememberSaveable { mutableStateOf<Long?>(null) }
     var unavailableInitialServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     val currentStep = BookingStep.valueOf(currentStepName)
@@ -298,6 +304,7 @@ private fun ProductsScreenContent(
             reservationCode = state.receipt.reservationCode
             successLoyaltyRewardApplied = state.receipt.loyaltyRewardApplied
             successLoyaltyRewardCode = state.receipt.loyaltyRewardCode
+            successPaymentStatus = state.receipt.paymentStatus
             currentStepName = BookingStep.Success.name
             onSubmitSuccessConsumed()
         }
@@ -660,9 +667,11 @@ private fun ProductsScreenContent(
                         reservationCode = reservationCode,
                         loyaltyRewardApplied = successLoyaltyRewardApplied,
                         loyaltyRewardCode = successLoyaltyRewardCode,
+                        paymentStatus = successPaymentStatus,
                         onAddToCalendar = {},
                         onViewBooking = onViewBooking,
                         onHome = onHome,
+                        onOpenPayment = onOpenPayment,
                     )
                 }
             }
@@ -1783,9 +1792,11 @@ private fun BookingSuccessContent(
     reservationCode: String?,
     loyaltyRewardApplied: Boolean,
     loyaltyRewardCode: String?,
+    paymentStatus: String,
     onAddToCalendar: () -> Unit,
     onViewBooking: () -> Unit,
     onHome: () -> Unit,
+    onOpenPayment: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1874,6 +1885,9 @@ private fun BookingSuccessContent(
         if (loyaltyRewardApplied) {
             LoyaltyRewardAppliedCard(rewardCode = loyaltyRewardCode)
             Spacer(Modifier.height(16.dp))
+        } else if (paymentStatus.requiresPaymentAction()) {
+            PaymentPendingCard(onOpenPayment = onOpenPayment)
+            Spacer(Modifier.height(16.dp))
         }
 
         ConfirmationSentCard()
@@ -1938,6 +1952,71 @@ private fun BookingSuccessContent(
                 Text(
                     text = "Voltar ao Início",
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+private fun String.requiresPaymentAction(): Boolean {
+    return toBookingPaymentStatus() in setOf(
+        BookingPaymentStatus.Pending,
+        BookingPaymentStatus.Failed,
+    )
+}
+
+@Composable
+private fun PaymentPendingCard(onOpenPayment: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Euro,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "Pagamento pendente",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Consulte o valor em aberto e apresente a referência no balcão.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = onOpenPayment,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.secondary,
+                ),
+            ) {
+                Text(
+                    text = "Ver pagamento",
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
             }

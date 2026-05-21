@@ -17,6 +17,17 @@ class BookingReservationStatusTest {
     }
 
     @Test
+    fun mapsWebsiteCompatiblePaymentStatuses() {
+        assertEquals(BookingPaymentStatus.Pending, "waiting_for_payment".toBookingPaymentStatus())
+        assertEquals(BookingPaymentStatus.Pending, "awaiting-payment".toBookingPaymentStatus())
+        assertEquals(BookingPaymentStatus.Paid, "pago".toBookingPaymentStatus())
+        assertEquals(BookingPaymentStatus.CoveredByLoyalty, "covered_by_loyalty".toBookingPaymentStatus())
+        assertEquals(BookingPaymentStatus.Failed, "declined".toBookingPaymentStatus())
+        assertEquals(BookingPaymentStatus.Refunded, "refunded".toBookingPaymentStatus())
+        assertEquals(BookingPaymentStatus.Unknown, "manual_review".toBookingPaymentStatus())
+    }
+
+    @Test
     fun exposesCancelableAndReviewableReservationPredicates() {
         assertTrue(reservation(status = "novo", upcoming = true).isCancelableReservation())
         assertTrue(reservation(status = "confirmado", upcoming = true).isCancelableReservation())
@@ -28,11 +39,41 @@ class BookingReservationStatusTest {
         assertFalse(reservation(status = "cancelado", upcoming = false).isReviewableReservation())
         assertFalse(reservation(status = "pending", upcoming = true).isReviewableReservation())
     }
+
+    @Test
+    fun exposesPendingPaymentPredicateForUpcomingPayableReservations() {
+        assertTrue(
+            reservation(status = "pending", upcoming = true, paymentStatus = "pending", priceCents = 3200)
+                .requiresPayment(),
+        )
+        assertTrue(
+            reservation(status = "pending", upcoming = true, paymentStatus = "failed", priceCents = 3200)
+                .requiresPayment(),
+        )
+        assertFalse(
+            reservation(status = "pending", upcoming = true, paymentStatus = "paid", priceCents = 3200)
+                .requiresPayment(),
+        )
+        assertFalse(
+            reservation(status = "pending", upcoming = true, paymentStatus = "covered_by_loyalty", priceCents = 0)
+                .requiresPayment(),
+        )
+        assertFalse(
+            reservation(status = "cancelled", upcoming = true, paymentStatus = "pending", priceCents = 3200)
+                .requiresPayment(),
+        )
+        assertFalse(
+            reservation(status = "pending", upcoming = false, paymentStatus = "pending", priceCents = 3200)
+                .requiresPayment(),
+        )
+    }
 }
 
 private fun reservation(
     status: String,
     upcoming: Boolean,
+    paymentStatus: String = "",
+    priceCents: Int? = 3200,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = "reservation-$status",
     reservationCode = "SS-$status",
@@ -41,7 +82,8 @@ private fun reservation(
     slotStartIso = "2026-05-22T10:00:00.000Z",
     slotEndIso = "2026-05-22T10:45:00.000Z",
     status = status,
+    paymentStatus = paymentStatus,
     vehicleType = "passageiros",
-    priceCents = 3200,
+    priceCents = priceCents,
     upcoming = upcoming,
 )

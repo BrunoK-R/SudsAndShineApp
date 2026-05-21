@@ -21,11 +21,14 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingPaymentStatus
 import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.booking.bookingPaymentStatus
 import com.sudsmobile.data.booking.isCancelableReservation
 import com.sudsmobile.data.booking.isReviewableReservation
+import com.sudsmobile.data.booking.requiresPayment
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +58,8 @@ internal data class BookingSummaryUi(
     val reviewRating: Int?,
     val reviewable: Boolean,
     val cancelable: Boolean,
+    val paymentLabel: String,
+    val requiresPayment: Boolean,
 )
 
 internal data class CartBusinessInfoUi(
@@ -267,7 +272,18 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         reviewRating = reviewRating?.takeIf { it in 1..5 },
         reviewable = isReviewableReservation(),
         cancelable = isCancelableReservation(),
+        paymentLabel = bookingPaymentStatus().toPaymentLabel(),
+        requiresPayment = requiresPayment(),
     )
+}
+
+private fun BookingPaymentStatus.toPaymentLabel(): String = when (this) {
+    BookingPaymentStatus.Pending -> "Pagamento pendente"
+    BookingPaymentStatus.Paid -> "Pago"
+    BookingPaymentStatus.CoveredByLoyalty -> "Coberto por recompensa"
+    BookingPaymentStatus.Refunded -> "Reembolsado"
+    BookingPaymentStatus.Failed -> "Pagamento falhou"
+    BookingPaymentStatus.Unknown -> "Pagamento a confirmar"
 }
 
 private fun BookingHistoryReservation.serviceLabelWithExtras(): String {

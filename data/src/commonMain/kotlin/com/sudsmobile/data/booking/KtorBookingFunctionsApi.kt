@@ -59,6 +59,7 @@ class KtorBookingFunctionsApi(
                         priceCents = body.result.priceCents,
                         discountCents = body.result.discountCents,
                         extras = body.result.extras.map { it.toReservationExtra() },
+                        paymentStatus = body.result.paymentStatus,
                     ),
                 )
                 else -> BookingCreateResult.Failure(
@@ -443,6 +444,7 @@ private data class CreateReservationResult(
     val priceCents: Int? = null,
     val discountCents: Int? = null,
     val extras: List<ReservationExtraPayload> = emptyList(),
+    val paymentStatus: String = "",
 )
 
 @Serializable
@@ -581,6 +583,7 @@ private data class MyReservationItem(
     val slotStart: String,
     val slotEnd: String,
     val status: String = "pending",
+    val paymentStatus: String = "",
     val vehicleType: String = "passageiros",
     val vehicleLabel: String? = null,
     val priceCents: Int? = null,
@@ -598,6 +601,7 @@ private data class MyReservationItem(
         slotStartIso = slotStart,
         slotEndIso = slotEnd,
         status = status,
+        paymentStatus = paymentStatus,
         vehicleType = vehicleType,
         vehicleLabel = vehicleLabel,
         priceCents = priceCents,
