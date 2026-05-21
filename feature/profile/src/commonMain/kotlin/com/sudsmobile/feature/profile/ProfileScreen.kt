@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -124,15 +125,21 @@ fun ProfileScreen(
     onOpenRewards: () -> Unit = {},
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
+    val contactViewModel: ContactViewModel = koinViewModel()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
     val profileRevision by viewModel.profileRevision.collectAsStateWithLifecycle()
     val statsState by viewModel.statsState.collectAsStateWithLifecycle()
     val preferencesState by viewModel.preferencesState.collectAsStateWithLifecycle()
+    val businessInfoState by contactViewModel.businessInfoState.collectAsStateWithLifecycle()
 
     LaunchedEffect(sessionState, bookingRevision, vehicleRevision, profileRevision) {
         viewModel.refreshForSession()
+    }
+
+    LaunchedEffect(Unit) {
+        contactViewModel.loadBusinessInfo()
     }
 
     ProfileScreenContent(
@@ -140,10 +147,12 @@ fun ProfileScreen(
         sessionState = sessionState,
         statsState = statsState,
         preferencesState = preferencesState,
+        businessInfoState = businessInfoState,
         onRequestSignIn = onRequestSignIn,
         onSignOut = viewModel::signOut,
         onRetryStats = viewModel::loadStats,
         onRetryPreferences = viewModel::loadPreferences,
+        onRetryBusinessInfo = { contactViewModel.loadBusinessInfo(force = true) },
         onMarketingOptInChange = viewModel::updateMarketingOptIn,
         onOpenPersonalData = onOpenPersonalData,
         onManageVehicles = onManageVehicles,
@@ -159,10 +168,12 @@ private fun ProfileScreenContent(
     sessionState: AuthSessionState,
     statsState: ProfileStatsUiState,
     preferencesState: ProfilePreferencesUiState,
+    businessInfoState: ContactBusinessInfoUiState,
     onRequestSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onRetryStats: () -> Unit,
     onRetryPreferences: () -> Unit,
+    onRetryBusinessInfo: () -> Unit,
     onMarketingOptInChange: (Boolean) -> Unit,
     onOpenPersonalData: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
@@ -172,6 +183,7 @@ private fun ProfileScreenContent(
 ) {
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
     val isRestoringSession = sessionState == AuthSessionState.Restoring
+    val uriHandler = LocalUriHandler.current
 
     Column(
         modifier = Modifier
@@ -199,7 +211,11 @@ private fun ProfileScreenContent(
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            NearestLocationCard()
+            NearestLocationCard(
+                businessInfoState = businessInfoState,
+                onRetryBusinessInfo = onRetryBusinessInfo,
+                onOpenMaps = { mapsUri -> uriHandler.openUri(mapsUri) },
+            )
             if (authenticatedUser != null) {
                 ProfileMenuCard(
                     onOpenPersonalData = onOpenPersonalData,
@@ -661,7 +677,13 @@ private fun AuthUser.initials(): String {
 }
 
 @Composable
-private fun NearestLocationCard() {
+private fun NearestLocationCard(
+    businessInfoState: ContactBusinessInfoUiState,
+    onRetryBusinessInfo: () -> Unit,
+    onOpenMaps: (String) -> Unit,
+) {
+    val businessInfo = businessInfoState.infoOrDefault()
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -677,6 +699,11 @@ private fun NearestLocationCard() {
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
+            )
+
+            NearestLocationStatus(
+                state = businessInfoState,
+                onRetry = onRetryBusinessInfo,
             )
 
             Row(
@@ -695,12 +722,12 @@ private fun NearestLocationCard() {
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "R. Virgílio Vieira da Cunha, 2400-447 Leiria",
+                        text = businessInfo.fullAddressLabel(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Button(
-                        onClick = {},
+                        onClick = { onOpenMaps(businessInfo.mapsUri) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 6.dp)
@@ -740,7 +767,7 @@ private fun NearestLocationCard() {
                             tint = MaterialTheme.colorScheme.secondary,
                         )
                         Text(
-                            text = "Leiria",
+                            text = businessInfo.mapPreviewLabel(),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             fontWeight = FontWeight.Bold,
@@ -750,6 +777,89 @@ private fun NearestLocationCard() {
             }
         }
     }
+}
+
+@Composable
+private fun NearestLocationStatus(
+    state: ContactBusinessInfoUiState,
+    onRetry: () -> Unit,
+) {
+    when (state) {
+        ContactBusinessInfoUiState.Idle -> Unit
+        ContactBusinessInfoUiState.Loading -> Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text = "A atualizar morada e navegação.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        is ContactBusinessInfoUiState.Loaded -> Unit
+        is ContactBusinessInfoUiState.Error -> Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.82f),
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = state.message,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                if (state.retryable) {
+                    TextButton(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                    ) {
+                        Text(
+                            text = "Tentar",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun ContactBusinessInfoUi.fullAddressLabel(): String {
+    return listOf(addressLine1, addressLine2)
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .joinToString(separator = "\n")
+}
+
+private fun ContactBusinessInfoUi.mapPreviewLabel(): String {
+    return addressLine2
+        .substringBefore(",")
+        .trim()
+        .ifBlank { addressLine1.substringAfterLast(",").trim() }
+        .ifBlank { "Leiria" }
 }
 
 @Composable
