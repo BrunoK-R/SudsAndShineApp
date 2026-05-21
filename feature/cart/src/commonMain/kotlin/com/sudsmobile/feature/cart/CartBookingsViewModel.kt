@@ -21,17 +21,24 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.booking.isCancelableReservation
+import com.sudsmobile.data.booking.isReviewableReservation
+import com.sudsmobile.data.booking.toBookingReservationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 internal enum class BookingStatusUi(val label: String) {
+    Pending("Novo"),
     Confirmed("Confirmado"),
+    InProgress("Em execução"),
     Completed("Concluído"),
     Cancelled("Cancelado"),
+    Unknown("A atualizar"),
 }
 
 internal data class BookingSummaryUi(
@@ -46,6 +53,8 @@ internal data class BookingSummaryUi(
     val showLocation: Boolean,
     val reviewed: Boolean,
     val reviewRating: Int?,
+    val reviewable: Boolean,
+    val cancelable: Boolean,
 )
 
 internal data class CartBusinessInfoUi(
@@ -256,6 +265,8 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         showLocation = upcoming,
         reviewed = reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
+        reviewable = isReviewableReservation(),
+        cancelable = isCancelableReservation(),
     )
 }
 
@@ -277,11 +288,13 @@ private fun BookingHistoryReservation.serviceIcon(): ImageVector {
 }
 
 private fun String.toStatusUi(): BookingStatusUi {
-    val normalized = lowercase()
-    return when {
-        normalized in setOf("cancelled", "canceled", "cancelado") -> BookingStatusUi.Cancelled
-        normalized in setOf("completed", "concluido", "concluído") -> BookingStatusUi.Completed
-        else -> BookingStatusUi.Confirmed
+    return when (toBookingReservationStatus()) {
+        BookingReservationStatus.Pending -> BookingStatusUi.Pending
+        BookingReservationStatus.Confirmed -> BookingStatusUi.Confirmed
+        BookingReservationStatus.InProgress -> BookingStatusUi.InProgress
+        BookingReservationStatus.Completed -> BookingStatusUi.Completed
+        BookingReservationStatus.Cancelled -> BookingStatusUi.Cancelled
+        BookingReservationStatus.Unknown -> BookingStatusUi.Unknown
     }
 }
 

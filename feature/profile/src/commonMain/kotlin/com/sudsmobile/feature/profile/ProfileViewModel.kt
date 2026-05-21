@@ -7,11 +7,11 @@ import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingChangeNotifier
 import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
-import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
+import com.sudsmobile.data.booking.isCompletedReservation
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileChangeNotifier
@@ -313,7 +313,7 @@ private fun buildProfileStatsState(
 }
 
 private fun BookingHistory.toProfileStats(vehicleCount: Int): ProfileStatsUi {
-    val completedWashCount = reservations.count { !it.upcoming && !it.isCancelled() }
+    val completedWashCount = reservations.count { it.isCompletedReservation() }
     val loyaltyProgress = this.loyalty?.toBackendLoyaltyProgress() ?: completedWashCount.toLoyaltyProgress()
 
     return ProfileStatsUi(
@@ -321,11 +321,6 @@ private fun BookingHistory.toProfileStats(vehicleCount: Int): ProfileStatsUi {
         loyaltyRemaining = loyaltyProgress.remainingWashes.toString(),
         vehicleCount = vehicleCount.toString(),
     )
-}
-
-private fun BookingHistoryReservation.isCancelled(): Boolean {
-    val normalized = status.lowercase()
-    return normalized in setOf("cancelled", "canceled", "cancelado")
 }
 
 private fun List<UserVehicle>.validVehicleCount(): Int {

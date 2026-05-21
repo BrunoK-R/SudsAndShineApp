@@ -17,8 +17,12 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
+import com.sudsmobile.data.booking.isCancelledReservation
+import com.sudsmobile.data.booking.isCompletedReservation
+import com.sudsmobile.data.booking.toBookingReservationStatus
 import com.sudsmobile.data.catalog.ServiceCatalog
 import com.sudsmobile.data.catalog.ServiceCatalogError
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
@@ -289,10 +293,10 @@ private fun BookingHistory.toHomeState(
     catalog: FeaturedServicesResult,
 ): HomeUiState {
     val validReservations = reservations.filter { it.id.isNotBlank() && it.slotStartIso.isNotBlank() }
-    val completedWashCount = validReservations.count { !it.upcoming && !it.isCancelled() }
+    val completedWashCount = validReservations.count { it.isCompletedReservation() }
     val loyaltyProgress = this.loyalty?.toBackendLoyaltyProgress() ?: completedWashCount.toLoyaltyUi()
     val nextBooking = validReservations
-        .filter { it.upcoming && !it.isCancelled() }
+        .filter { it.upcoming && !it.isCancelledReservation() }
         .minByOrNull { it.slotStartIso }
         ?.toHomeBookingUi()
 
@@ -427,18 +431,14 @@ private fun String.toServiceIcon(): ImageVector = when (lowercase()) {
 }
 
 private fun String.toStatusLabel(): String {
-    val normalized = lowercase()
-    return when {
-        normalized in setOf("confirmed", "confirmado") -> "Confirmado"
-        normalized in setOf("pending", "novo") -> "Pendente"
-        normalized in setOf("in_progress", "em_execucao") -> "Em curso"
-        else -> replaceFirstChar { it.titlecase() }
+    return when (toBookingReservationStatus()) {
+        BookingReservationStatus.Pending -> "Novo"
+        BookingReservationStatus.Confirmed -> "Confirmado"
+        BookingReservationStatus.InProgress -> "Em execução"
+        BookingReservationStatus.Completed -> "Concluído"
+        BookingReservationStatus.Cancelled -> "Cancelado"
+        BookingReservationStatus.Unknown -> "A atualizar"
     }
-}
-
-private fun BookingHistoryReservation.isCancelled(): Boolean {
-    val normalized = status.lowercase()
-    return normalized in setOf("cancelled", "canceled", "cancelado")
 }
 
 private fun Int.toLoyaltyUi(): HomeLoyaltyUi = toLoyaltyProgress()

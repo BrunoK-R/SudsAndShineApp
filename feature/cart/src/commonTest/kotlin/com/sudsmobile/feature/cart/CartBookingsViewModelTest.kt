@@ -149,6 +149,57 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun loadBookingsPreservesBackendStatusLifecycleAndActions() = runTest {
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "new-1",
+                                slotStartIso = "2026-05-21T10:00:00.000Z",
+                                slotEndIso = "2026-05-21T10:45:00.000Z",
+                                upcoming = true,
+                                priceCents = 3400,
+                                status = "novo",
+                            ),
+                            historyReservation(
+                                id = "running-1",
+                                slotStartIso = "2026-05-21T12:00:00.000Z",
+                                slotEndIso = "2026-05-21T12:45:00.000Z",
+                                upcoming = true,
+                                priceCents = 3400,
+                                status = "em_execucao",
+                            ),
+                            historyReservation(
+                                id = "done-1",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                slotEndIso = "2026-05-18T10:45:00.000Z",
+                                upcoming = false,
+                                priceCents = 3200,
+                                status = "concluido",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.loadBookings()
+        runCurrent()
+
+        val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(BookingStatusUi.Pending, loaded.upcoming[0].status)
+        assertEquals(true, loaded.upcoming[0].cancelable)
+        assertEquals(BookingStatusUi.InProgress, loaded.upcoming[1].status)
+        assertEquals(false, loaded.upcoming[1].cancelable)
+        assertEquals(BookingStatusUi.Completed, loaded.completed.single().status)
+        assertEquals(true, loaded.completed.single().reviewable)
+    }
+
+    @Test
     fun refreshForSessionReloadsAfterSignInAndClearsAfterSignOut() = runTest {
         val authRepository = FakeCartAuthRepository(authenticated = false)
         val repository = FakeBookingRepository(
@@ -436,6 +487,7 @@ private fun historyReservation(
     vehicleLabel: String? = null,
     reviewed: Boolean = false,
     reviewRating: Int? = null,
+    status: String = if (upcoming) "pending" else "completed",
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -443,7 +495,7 @@ private fun historyReservation(
     serviceName = "Lavagem Premium",
     slotStartIso = slotStartIso,
     slotEndIso = slotEndIso,
-    status = if (upcoming) "pending" else "completed",
+    status = status,
     vehicleType = "suv",
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,

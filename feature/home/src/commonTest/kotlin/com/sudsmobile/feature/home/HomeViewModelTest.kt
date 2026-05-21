@@ -170,6 +170,47 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun authenticatedHomeShowsWebsiteStatusLabelAndCountsOnlyCompletedWashes() = runTest {
+        val viewModel = homeViewModel(
+            bookingRepository = FakeHomeBookingRepository(
+                historyResult = BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            homeReservation(
+                                id = "running",
+                                slotStartIso = "2026-05-22T10:00:00.000Z",
+                                upcoming = true,
+                                status = "em_execucao",
+                            ),
+                            homeReservation(
+                                id = "done",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                upcoming = false,
+                                status = "concluido",
+                            ),
+                            homeReservation(
+                                id = "cancelled",
+                                slotStartIso = "2026-05-16T10:00:00.000Z",
+                                upcoming = false,
+                                status = "cancelado",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val loaded = assertIs<HomeUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("running", loaded.nextBooking?.id)
+        assertEquals("Em execução", loaded.nextBooking?.statusLabel)
+        assertEquals(1, loaded.loyalty.completedWashes)
+        assertEquals(9, loaded.loyalty.remainingWashes)
+    }
+
+    @Test
     fun authenticatedHomeMapsHistoryFailureToRetryableErrorWithFeaturedServices() = runTest {
         val viewModel = homeViewModel(
             bookingRepository = FakeHomeBookingRepository(
@@ -347,6 +388,7 @@ private fun homeReservation(
     upcoming: Boolean,
     priceCents: Int? = 3200,
     vehicleLabel: String? = null,
+    status: String = if (upcoming) "confirmed" else "completed",
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -354,7 +396,7 @@ private fun homeReservation(
     serviceName = "Lavagem Premium",
     slotStartIso = slotStartIso,
     slotEndIso = "2026-05-22T10:45:00.000Z",
-    status = if (upcoming) "confirmed" else "completed",
+    status = status,
     vehicleType = "passageiros",
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,

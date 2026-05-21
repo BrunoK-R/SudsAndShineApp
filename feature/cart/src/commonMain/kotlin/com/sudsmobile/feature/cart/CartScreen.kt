@@ -318,10 +318,10 @@ private fun BookingsContent(
                         BookingSummaryCard(
                             booking = booking,
                             showRatingAction = selectedTab == BookingsTab.Completed &&
-                                booking.status == BookingStatusUi.Completed &&
+                                booking.reviewable &&
                                 !booking.reviewed,
                             showCancelAction = selectedTab == BookingsTab.Upcoming &&
-                                booking.status != BookingStatusUi.Cancelled,
+                                booking.cancelable,
                             businessInfoState = businessInfoState,
                             cancellationState = cancellationState.forReservation(booking.id),
                             cancellationConfirmationVisible = pendingCancellationId == booking.id,
@@ -1476,19 +1476,28 @@ private fun ratingLabel(rating: Int): String = when (rating) {
 @Composable
 private fun BookingStatusBadge(status: BookingStatusUi) {
     val containerColor = when (status) {
+        BookingStatusUi.Pending -> MaterialTheme.colorScheme.secondaryContainer
         BookingStatusUi.Confirmed -> MaterialTheme.colorScheme.tertiaryContainer
+        BookingStatusUi.InProgress -> MaterialTheme.colorScheme.primaryContainer
         BookingStatusUi.Completed -> MaterialTheme.colorScheme.primaryContainer
         BookingStatusUi.Cancelled -> MaterialTheme.colorScheme.errorContainer
+        BookingStatusUi.Unknown -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val contentColor = when (status) {
+        BookingStatusUi.Pending -> MaterialTheme.colorScheme.onSecondaryContainer
         BookingStatusUi.Confirmed -> MaterialTheme.colorScheme.onTertiaryContainer
+        BookingStatusUi.InProgress -> MaterialTheme.colorScheme.onPrimaryContainer
         BookingStatusUi.Completed -> MaterialTheme.colorScheme.onPrimaryContainer
         BookingStatusUi.Cancelled -> MaterialTheme.colorScheme.onErrorContainer
+        BookingStatusUi.Unknown -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val icon = when (status) {
+        BookingStatusUi.Pending,
         BookingStatusUi.Confirmed,
+        BookingStatusUi.InProgress,
         BookingStatusUi.Completed -> Icons.Filled.CheckCircle
-        BookingStatusUi.Cancelled -> Icons.Filled.RadioButtonUnchecked
+        BookingStatusUi.Cancelled,
+        BookingStatusUi.Unknown -> Icons.Filled.RadioButtonUnchecked
     }
 
     Surface(

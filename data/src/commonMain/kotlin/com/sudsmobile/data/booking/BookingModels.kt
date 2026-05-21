@@ -93,6 +93,15 @@ data class BookingHistoryReservation(
     val extras: List<BookingReservationExtra> = emptyList(),
 )
 
+enum class BookingReservationStatus {
+    Pending,
+    Confirmed,
+    InProgress,
+    Completed,
+    Cancelled,
+    Unknown,
+}
+
 data class BookingReviewRequest(
     val reservationId: String,
     val rating: Int,
@@ -297,4 +306,46 @@ fun BookingLoyaltySummary.toLoyaltyProgress(): LoyaltyProgress = LoyaltyProgress
     completedRewards = completedRewards.coerceAtLeast(0),
     claimedRewards = claimedRewards.coerceAtLeast(0),
     availableRewards = availableRewards.coerceAtLeast(0),
+)
+
+fun String.toBookingReservationStatus(): BookingReservationStatus {
+    val normalized = trim()
+        .lowercase()
+        .replace("-", "_")
+        .replace(" ", "_")
+
+    return when (normalized) {
+        "pending", "novo", "new" -> BookingReservationStatus.Pending
+        "confirmed", "confirmado" -> BookingReservationStatus.Confirmed
+        "in_progress", "em_execucao", "em_execução" -> BookingReservationStatus.InProgress
+        "completed", "complete", "done", "concluido", "concluído" -> BookingReservationStatus.Completed
+        "cancelled", "canceled", "cancelado" -> BookingReservationStatus.Cancelled
+        else -> BookingReservationStatus.Unknown
+    }
+}
+
+fun BookingHistoryReservation.bookingReservationStatus(): BookingReservationStatus {
+    return status.toBookingReservationStatus()
+}
+
+fun BookingHistoryReservation.isCancelledReservation(): Boolean {
+    return bookingReservationStatus() == BookingReservationStatus.Cancelled
+}
+
+fun BookingHistoryReservation.isCompletedReservation(): Boolean {
+    return bookingReservationStatus() == BookingReservationStatus.Completed ||
+        (!upcoming && !isCancelledReservation())
+}
+
+fun BookingHistoryReservation.isReviewableReservation(): Boolean {
+    return isCompletedReservation()
+}
+
+fun BookingHistoryReservation.isCancelableReservation(): Boolean {
+    return upcoming && bookingReservationStatus() in cancelableReservationStatuses
+}
+
+private val cancelableReservationStatuses = setOf(
+    BookingReservationStatus.Pending,
+    BookingReservationStatus.Confirmed,
 )

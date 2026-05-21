@@ -133,6 +133,50 @@ class ProfileHistoryViewModelTest {
     }
 
     @Test
+    fun loadHistoryUsesWebsiteCompletedStatusAndSkipsClosedNonCompletedItems() = runTest {
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "done-1",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                upcoming = false,
+                                status = "concluido",
+                                priceCents = 3200,
+                            ),
+                            historyReservation(
+                                id = "cancelled-1",
+                                slotStartIso = "2026-05-17T10:00:00.000Z",
+                                upcoming = false,
+                                status = "cancelado",
+                                priceCents = 3200,
+                            ),
+                            historyReservation(
+                                id = "running-1",
+                                slotStartIso = "2026-05-19T10:00:00.000Z",
+                                upcoming = true,
+                                status = "em_execucao",
+                                priceCents = 3200,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeProfileHistoryAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadHistory()
+        runCurrent()
+
+        val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(listOf("done-1"), loaded.items.map { it.id })
+        assertEquals(ProfileHistoryStatusUi.Completed, loaded.items.single().status)
+        assertEquals("1", loaded.summary.washCount)
+    }
+
+    @Test
     fun refreshForSessionReloadsAfterSignInAndClearsAfterSignOut() = runTest {
         val authRepository = FakeProfileHistoryAuthRepository(authenticated = false)
         val repository = FakeBookingRepository(

@@ -11,6 +11,7 @@ import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.BookingReviewError
 import com.sudsmobile.data.booking.BookingReviewRequest
 import com.sudsmobile.data.booking.BookingReviewResult
+import com.sudsmobile.data.booking.isReviewableReservation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -187,7 +188,7 @@ internal class RatingViewModel(
 }
 
 private fun BookingHistoryReservation.toRatingTargetState(): RatingTargetUiState {
-    if (upcoming || isCancelled() || id.isBlank() || slotStartIso.isBlank()) {
+    if (!isReviewableReservation() || id.isBlank() || slotStartIso.isBlank()) {
         return RatingTargetUiState.NotFound
     }
 
@@ -199,11 +200,6 @@ private fun BookingHistoryReservation.toRatingTargetState(): RatingTargetUiState
             vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         ),
     )
-}
-
-private fun BookingHistoryReservation.isCancelled(): Boolean {
-    val normalized = status.lowercase()
-    return normalized in setOf("cancelled", "canceled", "cancelado")
 }
 
 private fun String.toVehicleLabel(): String = when (lowercase()) {

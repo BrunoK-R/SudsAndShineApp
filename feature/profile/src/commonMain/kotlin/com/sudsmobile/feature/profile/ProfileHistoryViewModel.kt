@@ -9,8 +9,11 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.booking.isCompletedReservation
+import com.sudsmobile.data.booking.toBookingReservationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -110,8 +113,7 @@ internal class ProfileHistoryViewModel(
 
     private fun BookingHistory.toUiState(): ProfileHistoryUiState {
         val items = reservations
-            .filterNot { it.upcoming }
-            .filterNot { it.isCancelled() }
+            .filter { it.isCompletedReservation() }
             .mapNotNull { it.toHistoryItemOrNull() }
 
         if (items.isEmpty()) return ProfileHistoryUiState.Empty
@@ -158,18 +160,14 @@ private fun BookingHistoryReservation.serviceLabelWithExtras(): String {
     return "$baseLabel + $extrasLabel"
 }
 
-private fun BookingHistoryReservation.isCancelled(): Boolean {
-    val normalized = status.lowercase()
-    return normalized in setOf("cancelled", "canceled", "cancelado")
-}
-
 private fun String.toHistoryStatusUi(): ProfileHistoryStatusUi {
-    val normalized = lowercase()
-    return when {
-        normalized in setOf("cancelled", "canceled", "cancelado") -> ProfileHistoryStatusUi.Cancelled
-        normalized in setOf("completed", "concluido", "concluído", "complete", "done") ->
-            ProfileHistoryStatusUi.Completed
-        else -> ProfileHistoryStatusUi.Past
+    return when (toBookingReservationStatus()) {
+        BookingReservationStatus.Completed -> ProfileHistoryStatusUi.Completed
+        BookingReservationStatus.Cancelled -> ProfileHistoryStatusUi.Cancelled
+        BookingReservationStatus.Pending,
+        BookingReservationStatus.Confirmed,
+        BookingReservationStatus.InProgress,
+        BookingReservationStatus.Unknown -> ProfileHistoryStatusUi.Past
     }
 }
 
