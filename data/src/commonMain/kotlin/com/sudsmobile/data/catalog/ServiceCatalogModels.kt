@@ -2,6 +2,7 @@ package com.sudsmobile.data.catalog
 
 data class ServiceCatalog(
     val services: List<ServiceCatalogService>,
+    val extras: List<ServiceCatalogExtra> = emptyList(),
 )
 
 data class ServiceCatalogService(
@@ -13,6 +14,14 @@ data class ServiceCatalogService(
     val suvPriceCents: Int,
     val iconKey: String,
     val popular: Boolean,
+)
+
+data class ServiceCatalogExtra(
+    val id: String,
+    val name: String,
+    val description: String,
+    val priceCents: Int,
+    val iconKey: String,
 )
 
 sealed interface ServiceCatalogResult {

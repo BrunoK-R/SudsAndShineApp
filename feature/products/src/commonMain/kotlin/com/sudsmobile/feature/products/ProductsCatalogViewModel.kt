@@ -1,8 +1,11 @@
 package com.sudsmobile.feature.products
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -10,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.catalog.ServiceCatalog
 import com.sudsmobile.data.catalog.ServiceCatalogError
+import com.sudsmobile.data.catalog.ServiceCatalogExtra
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
 import com.sudsmobile.data.catalog.ServiceCatalogResult
 import com.sudsmobile.data.catalog.ServiceCatalogService
@@ -32,10 +36,22 @@ data class ProductServiceUi(
     val popular: Boolean,
 )
 
+data class ProductExtraUi(
+    val id: String,
+    val name: String,
+    val description: String,
+    val priceCents: Int,
+    val price: String,
+    val icon: ImageVector,
+)
+
 sealed interface ProductCatalogUiState {
     data object Idle : ProductCatalogUiState
     data object Loading : ProductCatalogUiState
-    data class Loaded(val services: List<ProductServiceUi>) : ProductCatalogUiState
+    data class Loaded(
+        val services: List<ProductServiceUi>,
+        val extras: List<ProductExtraUi> = emptyList(),
+    ) : ProductCatalogUiState
     data object Empty : ProductCatalogUiState
     data class Error(val message: String, val retryable: Boolean) : ProductCatalogUiState
 }
@@ -62,11 +78,16 @@ class ProductsCatalogViewModel(
 private fun ServiceCatalog.toUiState(): ProductCatalogUiState {
     val mappedServices = services
         .mapNotNull { it.toUiModelOrNull() }
+    val mappedExtras = extras
+        .mapNotNull { it.toUiModelOrNull() }
 
     return if (mappedServices.isEmpty()) {
         ProductCatalogUiState.Empty
     } else {
-        ProductCatalogUiState.Loaded(mappedServices)
+        ProductCatalogUiState.Loaded(
+            services = mappedServices,
+            extras = mappedExtras,
+        )
     }
 }
 
@@ -88,6 +109,19 @@ private fun ServiceCatalogService.toUiModelOrNull(): ProductServiceUi? {
     )
 }
 
+private fun ServiceCatalogExtra.toUiModelOrNull(): ProductExtraUi? {
+    if (id.isBlank() || name.isBlank()) return null
+
+    return ProductExtraUi(
+        id = id,
+        name = name,
+        description = description,
+        priceCents = priceCents.coerceAtLeast(0),
+        price = priceCents.coerceAtLeast(0).toEuroLabel(),
+        icon = iconKey.toServiceIcon(),
+    )
+}
+
 private fun ServiceCatalogError.toUiState(): ProductCatalogUiState.Error {
     val retryable = this is ServiceCatalogError.Unavailable ||
         this is ServiceCatalogError.Backend
@@ -101,6 +135,9 @@ internal fun Int.toEuroLabel(): String {
 }
 
 private fun String.toServiceIcon(): ImageVector = when (lowercase()) {
+    "air", "vacuum", "odor" -> Icons.Filled.Air
+    "circle", "tires", "tyre" -> Icons.Filled.Circle
+    "shield", "wax" -> Icons.Filled.Shield
     "sparkles", "auto_awesome", "premium" -> Icons.Filled.AutoAwesome
     "water", "water_drop", "droplets", "exterior" -> Icons.Filled.WaterDrop
     "sofa", "weekend", "interior" -> Icons.Filled.Weekend

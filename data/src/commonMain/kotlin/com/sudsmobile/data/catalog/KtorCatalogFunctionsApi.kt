@@ -56,9 +56,11 @@ private data class CallableServiceCatalogResponse(
 @Serializable
 private data class GetServiceCatalogResult(
     val services: List<GetServiceCatalogService>,
+    val extras: List<GetServiceCatalogExtra> = emptyList(),
 ) {
     fun toCatalog(): ServiceCatalog = ServiceCatalog(
         services = services.map { it.toService() },
+        extras = extras.map { it.toExtra() },
     )
 }
 
@@ -82,6 +84,23 @@ private data class GetServiceCatalogService(
         suvPriceCents = suvPriceCents.coerceAtLeast(0),
         iconKey = iconKey.ifBlank { "car" },
         popular = popular,
+    )
+}
+
+@Serializable
+private data class GetServiceCatalogExtra(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val priceCents: Int,
+    val iconKey: String = "auto_awesome",
+) {
+    fun toExtra(): ServiceCatalogExtra = ServiceCatalogExtra(
+        id = id,
+        name = name,
+        description = description,
+        priceCents = priceCents.coerceAtLeast(0),
+        iconKey = iconKey.ifBlank { "auto_awesome" },
     )
 }
 

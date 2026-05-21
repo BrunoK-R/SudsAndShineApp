@@ -20,14 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,21 +47,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.viewmodel.koinViewModel
-
-private data class ServiceExtra(
-    val id: String,
-    val name: String,
-    val price: String,
-    val icon: ImageVector,
-)
-
-private val serviceExtras = listOf(
-    ServiceExtra("wax", "Enceramento", "15,00€", Icons.Filled.Shield),
-    ServiceExtra("vacuum", "Aspiração Profunda", "8,00€", Icons.Filled.Air),
-    ServiceExtra("tires", "Brilho de Pneus", "5,00€", Icons.Filled.Circle),
-    ServiceExtra("odor", "Tratamento de Odores", "12,00€", Icons.Filled.Air),
-    ServiceExtra("upholstery", "Limpeza de Estofos", "20,00€", Icons.Filled.Weekend),
-)
 
 @Composable
 fun ServicesScreen(
@@ -109,20 +90,10 @@ fun ServicesScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ExtraCard(serviceExtras[0], Modifier.weight(1f))
-                        ExtraCard(serviceExtras[1], Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ExtraCard(serviceExtras[2], Modifier.weight(1f))
-                        ExtraCard(serviceExtras[3], Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ExtraCard(serviceExtras[4], Modifier.weight(1f))
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
+                ServicesExtrasContent(
+                    catalogState = catalogState,
+                    onRetryCatalog = catalogViewModel::loadCatalog,
+                )
             }
 
             ServicesTipCard()
@@ -430,7 +401,113 @@ private fun PriceBlock(label: String, price: String) {
 }
 
 @Composable
-private fun ExtraCard(extra: ServiceExtra, modifier: Modifier = Modifier) {
+private fun ServicesExtrasContent(
+    catalogState: ProductCatalogUiState,
+    onRetryCatalog: () -> Unit,
+) {
+    when (catalogState) {
+        ProductCatalogUiState.Idle,
+        ProductCatalogUiState.Loading -> ServiceExtrasLoadingGrid()
+
+        is ProductCatalogUiState.Loaded -> {
+            if (catalogState.extras.isEmpty()) {
+                ServiceCatalogStatusCard(
+                    title = "Sem extras disponíveis",
+                    body = "O catálogo ainda não tem extras ativos para marcação.",
+                    onRetry = onRetryCatalog,
+                )
+            } else {
+                ExtrasGrid(catalogState.extras)
+            }
+        }
+
+        ProductCatalogUiState.Empty -> ServiceCatalogStatusCard(
+            title = "Sem extras disponíveis",
+            body = "Quando houver extras ativos no catálogo, aparecem aqui.",
+            onRetry = onRetryCatalog,
+        )
+
+        is ProductCatalogUiState.Error -> ServiceCatalogStatusCard(
+            title = "Não foi possível carregar extras",
+            body = catalogState.message,
+            onRetry = onRetryCatalog,
+        )
+    }
+}
+
+@Composable
+private fun ServiceExtrasLoadingGrid() {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        repeat(2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ExtraLoadingCard(Modifier.weight(1f))
+                ExtraLoadingCard(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtraLoadingCard(modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.height(132.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f),
+                contentColor = MaterialTheme.colorScheme.tertiary,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(13.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    strokeWidth = 2.dp,
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "A carregar",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "Preço em tempo real",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtrasGrid(extras: List<ProductExtraUi>) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        extras.chunked(2).forEach { rowExtras ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                rowExtras.forEach { extra ->
+                    ExtraCard(extra, Modifier.weight(1f))
+                }
+                if (rowExtras.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtraCard(extra: ProductExtraUi, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.height(132.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),

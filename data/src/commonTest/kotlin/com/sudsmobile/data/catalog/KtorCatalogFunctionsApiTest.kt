@@ -35,6 +35,15 @@ class KtorCatalogFunctionsApiTest {
                         "iconKey": "sparkles",
                         "popular": true
                       }
+                    ],
+                    "extras": [
+                      {
+                        "id": "wax",
+                        "name": "Enceramento",
+                        "description": "Proteção extra",
+                        "priceCents": 1500,
+                        "iconKey": "shield"
+                      }
                     ]
                   }
                 }
@@ -54,6 +63,12 @@ class KtorCatalogFunctionsApiTest {
         assertEquals(3400, service.suvPriceCents)
         assertEquals("sparkles", service.iconKey)
         assertEquals(true, service.popular)
+        val extra = success.catalog.extras.single()
+        assertEquals("wax", extra.id)
+        assertEquals("Enceramento", extra.name)
+        assertEquals("Proteção extra", extra.description)
+        assertEquals(1500, extra.priceCents)
+        assertEquals("shield", extra.iconKey)
     }
 
     @Test
