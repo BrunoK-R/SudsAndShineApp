@@ -199,6 +199,7 @@ private fun ProductsScreenContent(
 ) {
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedExtraIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDateId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
@@ -225,7 +226,9 @@ private fun ProductsScreenContent(
         contactEmail.trim().contains("@") &&
         acceptsPrivacy
     val loadedServices = (catalogState as? ProductCatalogUiState.Loaded)?.services.orEmpty()
+    val loadedExtras = (catalogState as? ProductCatalogUiState.Loaded)?.extras.orEmpty()
     val selectedService = loadedServices.firstOrNull { it.id == selectedServiceId }
+    val selectedExtras = loadedExtras.filter { extra -> extra.id in selectedExtraIds }
     val savedVehicles = (vehiclesState as? BookingVehiclesUiState.Loaded)?.vehicles.orEmpty()
     val vehicleOptions = savedVehicles + bookingVehicleCategories
     val selectedVehicle = vehicleOptions.firstOrNull { it.id == selectedVehicleId }
@@ -246,6 +249,7 @@ private fun ProductsScreenContent(
         notes = contactNotes,
         acceptsPrivacy = acceptsPrivacy,
         loyaltyRewardCode = loyaltyRewardCode,
+        selectedExtras = selectedExtras,
     )
 
     fun clearAppliedContactProfileIfUnchanged() {
@@ -310,6 +314,13 @@ private fun ProductsScreenContent(
             selectedServiceId = null
             selectedDateId = null
             selectedTime = null
+        }
+        if (catalogState is ProductCatalogUiState.Loaded) {
+            val availableExtraIds = catalogState.extras.map { it.id }.toSet()
+            val validSelectedExtraIds = selectedExtraIds.filter { it in availableExtraIds }
+            if (validSelectedExtraIds.size != selectedExtraIds.size) {
+                selectedExtraIds = validSelectedExtraIds
+            }
         }
     }
 
@@ -406,6 +417,7 @@ private fun ProductsScreenContent(
                         BookingServiceStepContent(
                             catalogState = catalogState,
                             selectedServiceId = selectedServiceId,
+                            selectedExtraIds = selectedExtraIds,
                             unavailableInitialServiceId = unavailableInitialServiceId,
                             onRetryCatalog = onLoadCatalog,
                             onServiceSelected = { service ->
@@ -417,6 +429,14 @@ private fun ProductsScreenContent(
                                 }
                                 unavailableInitialServiceId = null
                                 selectedServiceId = service.id
+                                onClearSubmitError()
+                            },
+                            onExtraToggled = { extra ->
+                                selectedExtraIds = if (extra.id in selectedExtraIds) {
+                                    selectedExtraIds - extra.id
+                                } else {
+                                    selectedExtraIds + extra.id
+                                }
                                 onClearSubmitError()
                             },
                         )
@@ -547,6 +567,7 @@ private fun ProductsScreenContent(
 
                     BookingConfirmationContent(
                         service = selectedService,
+                        selectedExtras = selectedExtras,
                         vehicle = selectedVehicle,
                         date = selectedDate,
                         time = selectedTime,
@@ -595,6 +616,7 @@ private fun ProductsScreenContent(
                 BookingStep.Success -> {
                     BookingSuccessContent(
                         service = selectedService,
+                        selectedExtras = selectedExtras,
                         date = selectedDate,
                         time = selectedTime,
                         phone = contactPhone,
@@ -772,6 +794,7 @@ private fun BookingStepHeader(
 @Composable
 private fun BookingConfirmationContent(
     service: ProductServiceUi?,
+    selectedExtras: List<ProductExtraUi>,
     vehicle: BookingVehicleUi?,
     date: BookingAvailabilityDay?,
     time: String?,
@@ -806,6 +829,15 @@ private fun BookingConfirmationContent(
                 title = service?.name ?: "Serviço por selecionar",
                 body = "Veículo: ${vehicle?.name ?: "Por selecionar"}",
             )
+            if (selectedExtras.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                selectedExtras.forEach { extra ->
+                    ConfirmationLine(
+                        icon = extra.icon,
+                        text = "${extra.name} (+${extra.price})",
+                    )
+                }
+            }
         }
 
         ConfirmationCard(
@@ -857,13 +889,16 @@ private fun BookingConfirmationContent(
         )
 
         val basePriceCents = service?.priceCentsForVehicle(vehicle?.type) ?: 0
+        val extrasPriceCents = selectedExtras.sumOf { it.priceCents }
+        val totalPriceCents = basePriceCents + extrasPriceCents
         val rewardPendingValidation = loyaltyRewardCode.isNotBlank() && sessionState is AuthSessionState.Authenticated
         PriceSummaryCard(
             serviceName = service?.name ?: "Serviço",
             basePrice = basePriceCents.toEuroLabel(),
+            extras = selectedExtras,
             discount = null,
             pendingRewardValidation = rewardPendingValidation,
-            total = basePriceCents.toEuroLabel(),
+            total = totalPriceCents.toEuroLabel(),
         )
 
         BookingSubmitStatusCard(
@@ -1246,6 +1281,7 @@ private fun ConfirmationLine(
 private fun PriceSummaryCard(
     serviceName: String,
     basePrice: String,
+    extras: List<ProductExtraUi>,
     discount: String?,
     pendingRewardValidation: Boolean = false,
     total: String,
@@ -1293,6 +1329,24 @@ private fun PriceSummaryCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
                 )
+            }
+
+            extras.forEach { extra ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = extra.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
+                    )
+                    Text(
+                        text = extra.price,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
+                    )
+                }
             }
 
             if (discount != null) {
@@ -1361,6 +1415,7 @@ private fun PriceSummaryCard(
 @Composable
 private fun BookingSuccessContent(
     service: ProductServiceUi?,
+    selectedExtras: List<ProductExtraUi>,
     date: BookingAvailabilityDay?,
     time: String?,
     phone: String,
@@ -1447,6 +1502,7 @@ private fun BookingSuccessContent(
 
         SuccessSummaryCard(
             service = service,
+            selectedExtras = selectedExtras,
             date = date,
             time = time,
             phone = phone,
@@ -1570,6 +1626,7 @@ private fun LoyaltyRewardAppliedCard(rewardCode: String?) {
 @Composable
 private fun SuccessSummaryCard(
     service: ProductServiceUi?,
+    selectedExtras: List<ProductExtraUi>,
     date: BookingAvailabilityDay?,
     time: String?,
     phone: String,
@@ -1579,7 +1636,11 @@ private fun SuccessSummaryCard(
             ConfirmationIconRow(
                 icon = Icons.Filled.Event,
                 title = "${date?.summaryLabel ?: "Data por confirmar"}, ${time ?: "hora por confirmar"}",
-                body = service?.name ?: "Serviço por confirmar",
+                body = if (selectedExtras.isEmpty()) {
+                    service?.name ?: "Serviço por confirmar"
+                } else {
+                    "${service?.name ?: "Serviço por confirmar"} + ${selectedExtras.countLabel()}"
+                },
             )
             ConfirmationIconRow(
                 icon = Icons.Filled.LocationOn,
@@ -2453,9 +2514,11 @@ private fun SectionHeader(
 private fun BookingServiceStepContent(
     catalogState: ProductCatalogUiState,
     selectedServiceId: String?,
+    selectedExtraIds: List<String>,
     unavailableInitialServiceId: String?,
     onRetryCatalog: () -> Unit,
     onServiceSelected: (ProductServiceUi) -> Unit,
+    onExtraToggled: (ProductExtraUi) -> Unit,
 ) {
     if (unavailableInitialServiceId != null) {
         AvailabilityStatusCard(
@@ -2477,6 +2540,11 @@ private fun BookingServiceStepContent(
                     onSelected = { onServiceSelected(service) },
                 )
             }
+            BookingExtrasSelectionSection(
+                extras = catalogState.extras,
+                selectedExtraIds = selectedExtraIds,
+                onExtraToggled = onExtraToggled,
+            )
         }
 
         ProductCatalogUiState.Empty -> AvailabilityStatusCard(
@@ -2659,6 +2727,137 @@ private fun BookingServiceCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun BookingExtrasSelectionSection(
+    extras: List<ProductExtraUi>,
+    selectedExtraIds: List<String>,
+    onExtraToggled: (ProductExtraUi) -> Unit,
+) {
+    if (extras.isEmpty()) return
+
+    Spacer(Modifier.height(8.dp))
+
+    Text(
+        text = "Extras opcionais",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontWeight = FontWeight.Bold,
+    )
+    Text(
+        text = "Adicione cuidados ao serviço escolhido",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        extras.chunked(2).forEach { rowExtras ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                rowExtras.forEach { extra ->
+                    BookingExtraCard(
+                        extra = extra,
+                        selected = extra.id in selectedExtraIds,
+                        onSelected = { onExtraToggled(extra) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (rowExtras.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingExtraCard(
+    extra: ProductExtraUi,
+    selected: Boolean,
+    onSelected: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelected),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.18f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLowest
+            },
+        ),
+        border = BorderStroke(
+            width = 1.5.dp,
+            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 5.dp else 3.dp),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f)
+                    },
+                    contentColor = if (selected) {
+                        MaterialTheme.colorScheme.onTertiary
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    },
+                ) {
+                    Icon(
+                        imageVector = extra.icon,
+                        contentDescription = null,
+                        modifier = Modifier.padding(10.dp),
+                    )
+                }
+                Surface(
+                    modifier = Modifier.size(22.dp),
+                    shape = CircleShape,
+                    color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = if (selected) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {
+                    Icon(
+                        imageVector = if (selected) Icons.Filled.Check else Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.padding(5.dp),
+                    )
+                }
+            }
+            Text(
+                text = extra.name,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (extra.description.isNotBlank()) {
+                Text(
+                    text = extra.description,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = extra.price,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
@@ -2978,6 +3177,7 @@ private fun buildBookingDraft(
     notes: String,
     acceptsPrivacy: Boolean,
     loyaltyRewardCode: String,
+    selectedExtras: List<ProductExtraUi>,
 ): ProductsBookingDraft? {
     if (service == null || vehicle == null || date == null || time == null) return null
     return ProductsBookingDraft(
@@ -2995,6 +3195,7 @@ private fun buildBookingDraft(
         gdprConsent = acceptsPrivacy,
         notes = notes,
         loyaltyRewardCode = loyaltyRewardCode.trim().takeIf { it.isNotBlank() },
+        extraIds = selectedExtras.map { it.id },
     )
 }
 
@@ -3012,6 +3213,10 @@ private fun String?.normalizedInitialServiceId(): String? = this
 
 private fun ProductServiceUi.priceCentsForVehicle(vehicleType: String?): Int {
     return if (vehicleType == "suv") suvPriceCents else passengerPriceCents
+}
+
+private fun List<ProductExtraUi>.countLabel(): String {
+    return if (size == 1) "1 extra" else "$size extras"
 }
 
 private fun BookingVehicleUi.icon(): ImageVector {

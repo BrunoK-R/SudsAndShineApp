@@ -16,6 +16,7 @@ data class BookingCreateRequest(
     val userVehicleId: String? = null,
     val vehicleLabel: String? = null,
     val loyaltyRewardCode: String? = null,
+    val extraIds: List<String> = emptyList(),
 )
 
 data class BookingReceipt(
@@ -25,6 +26,13 @@ data class BookingReceipt(
     val loyaltyRewardCode: String? = null,
     val priceCents: Int? = null,
     val discountCents: Int? = null,
+    val extras: List<BookingReservationExtra> = emptyList(),
+)
+
+data class BookingReservationExtra(
+    val id: String,
+    val name: String,
+    val priceCents: Int,
 )
 
 data class BookingHistory(
@@ -59,6 +67,7 @@ data class BookingHistoryReservation(
     val reviewed: Boolean = false,
     val reviewRating: Int? = null,
     val reviewTags: List<String> = emptyList(),
+    val extras: List<BookingReservationExtra> = emptyList(),
 )
 
 data class BookingReviewRequest(

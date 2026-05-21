@@ -141,13 +141,21 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
 
     return ProfileHistoryItemUi(
         id = id,
-        service = serviceName.ifBlank { "Serviço" },
+        service = serviceLabelWithExtras(),
         date = slotStartIso.toDateLabel(),
         vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         priceCents = priceCents,
         status = status.toHistoryStatusUi(),
     )
+}
+
+private fun BookingHistoryReservation.serviceLabelWithExtras(): String {
+    val baseLabel = serviceName.ifBlank { "Serviço" }
+    if (extras.isEmpty()) return baseLabel
+
+    val extrasLabel = if (extras.size == 1) "1 extra" else "${extras.size} extras"
+    return "$baseLabel + $extrasLabel"
 }
 
 private fun BookingHistoryReservation.isCancelled(): Boolean {

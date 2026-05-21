@@ -124,6 +124,10 @@ class FirebaseBookingRepository(
                 BookingCreateError.Validation("Escolha um veículo guardado válido.")
             request.loyaltyRewardCode?.contains("/") == true || request.loyaltyRewardCode?.length.orZero() > 80 ->
                 BookingCreateError.Validation("Indique um código de recompensa válido.")
+            request.extraIds.size > 12 ->
+                BookingCreateError.Validation("Escolha no máximo 12 extras para esta marcação.")
+            request.extraIds.any { it.isBlank() || it.contains("/") || it.length > 120 } ->
+                BookingCreateError.Validation("Escolha extras válidos para esta marcação.")
             !request.gdprConsent -> BookingCreateError.Validation("Aceite a política de privacidade para continuar.")
             else -> null
         }
@@ -168,6 +172,10 @@ class FirebaseBookingRepository(
             ?.replace(Regex("\\s+"), "")
             ?.uppercase()
             ?.takeIf { it.isNotBlank() },
+        extraIds = extraIds
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() },
     )
 
     private fun BookingReviewRequest.normalized(): BookingReviewRequest = copy(

@@ -43,6 +43,16 @@ class ProductsBookingDraftTest {
     }
 
     @Test
+    fun mapsSelectedExtrasToBackendRequest() {
+        val request = validDraft()
+            .copy(extraIds = listOf("wax", "vacuum"))
+            .toCreateRequest()
+
+        assertNotNull(request)
+        assertEquals(listOf("wax", "vacuum"), request.extraIds)
+    }
+
+    @Test
     fun invalidTimeDoesNotCreateBackendRequest() {
         val request = validDraft().copy(time = "25:90").toCreateRequest()
 

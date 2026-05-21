@@ -94,7 +94,14 @@ class KtorBookingFunctionsApiTest {
                     "loyaltyRewardApplied": true,
                     "loyaltyRewardCode": "SS-FREE-UID1-0001",
                     "priceCents": 0,
-                    "discountCents": 3200
+                    "discountCents": 3200,
+                    "extras": [
+                      {
+                        "id": "wax",
+                        "name": "Enceramento",
+                        "priceCents": 1500
+                      }
+                    ]
                   }
                 }
                 """.trimIndent(),
@@ -111,6 +118,9 @@ class KtorBookingFunctionsApiTest {
         assertEquals("SS-FREE-UID1-0001", success.receipt.loyaltyRewardCode)
         assertEquals(0, success.receipt.priceCents)
         assertEquals(3200, success.receipt.discountCents)
+        assertEquals("wax", success.receipt.extras.single().id)
+        assertEquals("Enceramento", success.receipt.extras.single().name)
+        assertEquals(1500, success.receipt.extras.single().priceCents)
     }
 
     @Test
@@ -219,6 +229,13 @@ class KtorBookingFunctionsApiTest {
                         "vehicleType": "suv",
                         "vehicleLabel": "BMW 320d",
                         "priceCents": 3400,
+                        "extras": [
+                          {
+                            "id": "wax",
+                            "name": "Enceramento",
+                            "priceCents": 1500
+                          }
+                        ],
                         "upcoming": true,
                         "reviewed": true,
                         "reviewRating": 5,
@@ -241,6 +258,8 @@ class KtorBookingFunctionsApiTest {
         assertEquals("reservation-1", success.history.reservations.first().id)
         assertEquals("BMW 320d", success.history.reservations.first().vehicleLabel)
         assertEquals(3400, success.history.reservations.first().priceCents)
+        assertEquals("wax", success.history.reservations.first().extras.single().id)
+        assertEquals("Enceramento", success.history.reservations.first().extras.single().name)
         assertEquals(true, success.history.reservations.first().upcoming)
         assertEquals(true, success.history.reservations.first().reviewed)
         assertEquals(5, success.history.reservations.first().reviewRating)

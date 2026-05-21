@@ -80,6 +80,32 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun normalizesSelectedExtraIdsBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.createBooking(
+            validRequest().copy(extraIds = listOf(" wax ", "vacuum", "WAX", "")),
+        )
+
+        assertIs<BookingCreateResult.Success>(result)
+        assertEquals(1, api.calls)
+        assertEquals(listOf("wax", "vacuum"), api.lastRequest?.extraIds)
+    }
+
+    @Test
+    fun rejectsInvalidSelectedExtraIdsBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.createBooking(validRequest().copy(extraIds = listOf("service_extras/wax")))
+
+        assertIs<BookingCreateResult.Failure>(result)
+        assertIs<BookingCreateError.Validation>(result.error)
+        assertEquals(0, api.calls)
+    }
+
+    @Test
     fun rejectsLoyaltyRewardCodeWhenUnauthenticatedBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api, FakeAuthRepository())

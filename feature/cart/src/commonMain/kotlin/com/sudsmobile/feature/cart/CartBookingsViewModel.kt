@@ -186,7 +186,7 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
 
     return BookingSummaryUi(
         id = id,
-        service = serviceName.ifBlank { "Serviço" },
+        service = serviceLabelWithExtras(),
         date = slotStartIso.toDateLabel(),
         time = slotStartIso.toTimeLabel(),
         vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
@@ -197,6 +197,14 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         reviewed = reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
     )
+}
+
+private fun BookingHistoryReservation.serviceLabelWithExtras(): String {
+    val baseLabel = serviceName.ifBlank { "Serviço" }
+    if (extras.isEmpty()) return baseLabel
+
+    val extrasLabel = if (extras.size == 1) "1 extra" else "${extras.size} extras"
+    return "$baseLabel + $extrasLabel"
 }
 
 private fun BookingHistoryReservation.serviceIcon(): ImageVector {

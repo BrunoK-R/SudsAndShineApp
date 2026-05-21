@@ -58,6 +58,7 @@ class KtorBookingFunctionsApi(
                         loyaltyRewardCode = body.result.loyaltyRewardCode,
                         priceCents = body.result.priceCents,
                         discountCents = body.result.discountCents,
+                        extras = body.result.extras.map { it.toReservationExtra() },
                     ),
                 )
                 else -> BookingCreateResult.Failure(
@@ -264,6 +265,7 @@ private data class CreateReservationPayload(
     val userVehicleId: String? = null,
     val vehicleLabel: String? = null,
     val loyaltyRewardCode: String? = null,
+    val extraIds: List<String> = emptyList(),
 ) {
     companion object {
         fun from(request: BookingCreateRequest): CreateReservationPayload = CreateReservationPayload(
@@ -280,6 +282,7 @@ private data class CreateReservationPayload(
             userVehicleId = request.userVehicleId,
             vehicleLabel = request.vehicleLabel,
             loyaltyRewardCode = request.loyaltyRewardCode,
+            extraIds = request.extraIds,
         )
     }
 }
@@ -402,7 +405,21 @@ private data class CreateReservationResult(
     val loyaltyRewardCode: String? = null,
     val priceCents: Int? = null,
     val discountCents: Int? = null,
+    val extras: List<ReservationExtraPayload> = emptyList(),
 )
+
+@Serializable
+private data class ReservationExtraPayload(
+    val id: String,
+    val name: String,
+    val priceCents: Int,
+) {
+    fun toReservationExtra(): BookingReservationExtra = BookingReservationExtra(
+        id = id,
+        name = name,
+        priceCents = priceCents.coerceAtLeast(0),
+    )
+}
 
 @Serializable
 private data class ReviewResult(
@@ -497,6 +514,7 @@ private data class MyReservationItem(
     val reviewed: Boolean = false,
     val reviewRating: Int? = null,
     val reviewTags: List<String> = emptyList(),
+    val extras: List<ReservationExtraPayload> = emptyList(),
 ) {
     fun toReservation(): BookingHistoryReservation = BookingHistoryReservation(
         id = id,
@@ -513,6 +531,7 @@ private data class MyReservationItem(
         reviewed = reviewed,
         reviewRating = reviewRating,
         reviewTags = reviewTags,
+        extras = extras.map { it.toReservationExtra() },
     )
 }
 
