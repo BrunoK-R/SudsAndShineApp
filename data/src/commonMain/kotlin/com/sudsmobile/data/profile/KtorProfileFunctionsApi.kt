@@ -87,12 +87,14 @@ private data class ProfileSavePayload(
     val displayName: String,
     val phoneNumber: String,
     val marketingOptIn: Boolean,
+    val appointmentReminderOptIn: Boolean,
 ) {
     companion object {
         fun from(request: UserProfileSaveRequest): ProfileSavePayload = ProfileSavePayload(
             displayName = request.displayName,
             phoneNumber = request.phoneNumber,
             marketingOptIn = request.marketingOptIn,
+            appointmentReminderOptIn = request.appointmentReminderOptIn,
         )
     }
 }
@@ -115,6 +117,7 @@ private data class ProfileItem(
     val displayName: String = "",
     val phoneNumber: String = "",
     val marketingOptIn: Boolean = false,
+    val appointmentReminderOptIn: Boolean = false,
 ) {
     fun toUserProfile(): UserProfile = UserProfile(
         uid = uid,
@@ -122,6 +125,7 @@ private data class ProfileItem(
         displayName = displayName,
         phoneNumber = phoneNumber,
         marketingOptIn = marketingOptIn,
+        appointmentReminderOptIn = appointmentReminderOptIn,
     )
 }
 

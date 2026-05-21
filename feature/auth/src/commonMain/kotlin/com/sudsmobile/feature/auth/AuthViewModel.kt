@@ -183,6 +183,7 @@ class AuthViewModel(
                     displayName = pendingProfile.displayName,
                     phoneNumber = pendingProfile.phoneNumber,
                     marketingOptIn = false,
+                    appointmentReminderOptIn = false,
                 ),
             )
         ) {

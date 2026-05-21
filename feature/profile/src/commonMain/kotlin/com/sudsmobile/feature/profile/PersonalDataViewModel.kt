@@ -20,6 +20,7 @@ internal data class PersonalDataFormUi(
     val email: String,
     val phoneNumber: String,
     val marketingOptIn: Boolean,
+    val appointmentReminderOptIn: Boolean = false,
 )
 
 internal sealed interface PersonalDataUiState {
@@ -120,6 +121,7 @@ internal class PersonalDataViewModel(
                     displayName = form.displayName,
                     phoneNumber = form.phoneNumber,
                     marketingOptIn = form.marketingOptIn,
+                    appointmentReminderOptIn = form.appointmentReminderOptIn,
                 ),
             )
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
@@ -188,4 +190,5 @@ private fun UserProfile.toFormUi(): PersonalDataFormUi = PersonalDataFormUi(
     email = email,
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
+    appointmentReminderOptIn = appointmentReminderOptIn,
 )

@@ -64,7 +64,11 @@ class PersonalDataViewModelTest {
             authRepository = FakePersonalDataAuthRepository(authenticated = true),
             profileRepository = FakePersonalDataRepository(
                 profileResult = UserProfileResult.Success(
-                    personalDataProfile(displayName = "Bruno Ribeiro", marketingOptIn = true),
+                    personalDataProfile(
+                        displayName = "Bruno Ribeiro",
+                        marketingOptIn = true,
+                        appointmentReminderOptIn = true,
+                    ),
                 ),
             ),
         )
@@ -76,6 +80,7 @@ class PersonalDataViewModelTest {
         assertEquals("Bruno Ribeiro", loaded.form.displayName)
         assertEquals("bruno@example.com", loaded.form.email)
         assertEquals(true, loaded.form.marketingOptIn)
+        assertEquals(true, loaded.form.appointmentReminderOptIn)
     }
 
     @Test
@@ -121,6 +126,7 @@ class PersonalDataViewModelTest {
                 email = "bruno@example.com",
                 phoneNumber = "913 005 855",
                 marketingOptIn = false,
+                appointmentReminderOptIn = true,
             ),
         )
         runCurrent()
@@ -129,6 +135,7 @@ class PersonalDataViewModelTest {
         assertEquals("Bruno Atualizado", loaded.form.displayName)
         assertIs<PersonalDataSaveUiState.Saved>(viewModel.saveState.value)
         assertEquals(1, repository.updateCalls)
+        assertEquals(true, repository.lastRequest?.appointmentReminderOptIn)
     }
 
     @Test
@@ -159,6 +166,8 @@ private class FakePersonalDataRepository(
         private set
     var updateCalls: Int = 0
         private set
+    var lastRequest: UserProfileSaveRequest? = null
+        private set
 
     override suspend fun getMyProfile(): UserProfileResult {
         loadCalls += 1
@@ -167,6 +176,7 @@ private class FakePersonalDataRepository(
 
     override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
         updateCalls += 1
+        lastRequest = request
         return mutationResult
     }
 }
@@ -225,10 +235,12 @@ private fun personalDataProfile(
     displayName: String = "Bruno",
     phoneNumber: String = "913005855",
     marketingOptIn: Boolean = false,
+    appointmentReminderOptIn: Boolean = false,
 ): UserProfile = UserProfile(
     uid = "uid-1",
     email = "bruno@example.com",
     displayName = displayName,
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
+    appointmentReminderOptIn = appointmentReminderOptIn,
 )

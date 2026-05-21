@@ -109,6 +109,7 @@ private fun PersonalDataScreenContent(
     var email by rememberSaveable { mutableStateOf("") }
     var phoneNumber by rememberSaveable { mutableStateOf("") }
     var marketingOptIn by rememberSaveable { mutableStateOf(false) }
+    var appointmentReminderOptIn by rememberSaveable { mutableStateOf(false) }
     val isSaving = saveState is PersonalDataSaveUiState.Saving
 
     LaunchedEffect(uiState) {
@@ -117,6 +118,7 @@ private fun PersonalDataScreenContent(
         email = loaded.form.email
         phoneNumber = loaded.form.phoneNumber
         marketingOptIn = loaded.form.marketingOptIn
+        appointmentReminderOptIn = loaded.form.appointmentReminderOptIn
     }
 
     Column(
@@ -188,6 +190,7 @@ private fun PersonalDataScreenContent(
                                     email = email,
                                     phoneNumber = phoneNumber,
                                     marketingOptIn = marketingOptIn,
+                                    appointmentReminderOptIn = appointmentReminderOptIn,
                                 ),
                             )
                         },

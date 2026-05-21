@@ -65,6 +65,7 @@ class AuthViewModelTest {
         assertEquals("Bruno Ribeiro", profileRepository.lastRequest?.displayName)
         assertEquals("913 005 855", profileRepository.lastRequest?.phoneNumber)
         assertEquals(false, profileRepository.lastRequest?.marketingOptIn)
+        assertEquals(false, profileRepository.lastRequest?.appointmentReminderOptIn)
         assertEquals(1, profileRepository.updateCalls)
     }
 
@@ -253,4 +254,5 @@ private fun registrationProfile(
     displayName = displayName,
     phoneNumber = phoneNumber,
     marketingOptIn = false,
+    appointmentReminderOptIn = false,
 )

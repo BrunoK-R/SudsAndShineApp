@@ -41,6 +41,7 @@ class FirebaseUserProfileRepositoryTest {
                 displayName = "  Bruno Ribeiro  ",
                 phoneNumber = " 913 005 855 ",
                 marketingOptIn = true,
+                appointmentReminderOptIn = true,
             ),
         )
 
@@ -49,6 +50,7 @@ class FirebaseUserProfileRepositoryTest {
         assertEquals("Bruno Ribeiro", api.lastRequest?.displayName)
         assertEquals("913 005 855", api.lastRequest?.phoneNumber)
         assertEquals(true, api.lastRequest?.marketingOptIn)
+        assertEquals(true, api.lastRequest?.appointmentReminderOptIn)
         assertEquals(1L, profileChangeNotifier.revision.value)
     }
 
@@ -62,6 +64,7 @@ class FirebaseUserProfileRepositoryTest {
                 displayName = "Bruno Ribeiro",
                 phoneNumber = "abc",
                 marketingOptIn = false,
+                appointmentReminderOptIn = true,
             ),
         )
 
@@ -99,6 +102,7 @@ private class RecordingProfileFunctionsApi : ProfileFunctionsApi {
                 displayName = request.displayName,
                 phoneNumber = request.phoneNumber,
                 marketingOptIn = request.marketingOptIn,
+                appointmentReminderOptIn = request.appointmentReminderOptIn,
             ),
         )
     }
@@ -155,10 +159,12 @@ private fun profile(
     displayName: String = "Bruno Ribeiro",
     phoneNumber: String = "913005855",
     marketingOptIn: Boolean = false,
+    appointmentReminderOptIn: Boolean = false,
 ): UserProfile = UserProfile(
     uid = "uid-1",
     email = "bruno@example.com",
     displayName = displayName,
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
+    appointmentReminderOptIn = appointmentReminderOptIn,
 )

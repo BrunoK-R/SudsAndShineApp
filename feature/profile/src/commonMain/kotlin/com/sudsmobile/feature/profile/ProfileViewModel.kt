@@ -56,6 +56,7 @@ internal data class ProfilePreferencesUi(
     val displayName: String,
     val phoneNumber: String,
     val marketingOptIn: Boolean,
+    val appointmentReminderOptIn: Boolean,
 )
 
 internal sealed interface ProfilePreferencesUiState {
@@ -172,6 +173,20 @@ internal class ProfileViewModel(
     }
 
     fun updateMarketingOptIn(marketingOptIn: Boolean) {
+        updatePreferences { it.copy(marketingOptIn = marketingOptIn) }
+    }
+
+    fun updateAppointmentReminderOptIn(appointmentReminderOptIn: Boolean) {
+        updatePreferences { it.copy(appointmentReminderOptIn = appointmentReminderOptIn) }
+    }
+
+    fun retryPreferenceSave() {
+        updatePreferences { it }
+    }
+
+    private fun updatePreferences(
+        transform: (ProfilePreferencesUi) -> ProfilePreferencesUi,
+    ) {
         if (_preferencesState.value is ProfilePreferencesUiState.Saving) return
 
         val currentPreferences = _preferencesState.value.preferencesOrNull() ?: return
@@ -193,15 +208,16 @@ internal class ProfileViewModel(
             return
         }
         val requestedUid = session.session.user.uid
-        val requestedPreferences = currentPreferences.copy(marketingOptIn = marketingOptIn)
+        val requestedPreferences = transform(currentPreferences)
 
         viewModelScope.launch {
             _preferencesState.value = ProfilePreferencesUiState.Saving(requestedPreferences)
             val result = userProfileRepository.updateMyProfile(
                 UserProfileSaveRequest(
-                    displayName = currentPreferences.displayName,
-                    phoneNumber = currentPreferences.phoneNumber,
-                    marketingOptIn = marketingOptIn,
+                    displayName = requestedPreferences.displayName,
+                    phoneNumber = requestedPreferences.phoneNumber,
+                    marketingOptIn = requestedPreferences.marketingOptIn,
+                    appointmentReminderOptIn = requestedPreferences.appointmentReminderOptIn,
                 ),
             )
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
@@ -222,7 +238,7 @@ internal class ProfileViewModel(
                     )
                 }
                 is UserProfileMutationResult.Failure -> {
-                    _preferencesState.value = result.error.toPreferenceSaveState(currentPreferences)
+                    _preferencesState.value = result.error.toPreferenceSaveState(requestedPreferences)
                 }
             }
         }
@@ -356,6 +372,7 @@ private fun UserProfile.toPreferencesUi(): ProfilePreferencesUi = ProfilePrefere
     displayName = displayName,
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
+    appointmentReminderOptIn = appointmentReminderOptIn,
 )
 
 private fun ProfilePreferencesUiState.preferencesOrNull(): ProfilePreferencesUi? {

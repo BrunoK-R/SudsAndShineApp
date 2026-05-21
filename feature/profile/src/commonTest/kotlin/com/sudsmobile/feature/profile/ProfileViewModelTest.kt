@@ -327,7 +327,7 @@ class ProfileViewModelTest {
     }
 
     @Test
-    fun loadPreferencesMapsMarketingOptInFromProfile() = runTest {
+    fun loadPreferencesMapsNotificationPrefsFromProfile() = runTest {
         val viewModel = ProfileViewModel(
             authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
             bookingRepository = ProfileStatsFakeBookingRepository(
@@ -335,7 +335,12 @@ class ProfileViewModelTest {
             ),
             userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
             userProfileRepository = ProfileStatsFakeProfileRepository(
-                UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = true)),
+                UserProfileResult.Success(
+                    profilePreferencesProfile(
+                        marketingOptIn = true,
+                        appointmentReminderOptIn = true,
+                    ),
+                ),
             ),
         )
 
@@ -344,6 +349,7 @@ class ProfileViewModelTest {
 
         val loaded = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
         assertEquals(true, loaded.preferences.marketingOptIn)
+        assertEquals(true, loaded.preferences.appointmentReminderOptIn)
     }
 
     @Test
@@ -369,7 +375,45 @@ class ProfileViewModelTest {
         val saved = assertIs<ProfilePreferencesUiState.Saved>(viewModel.preferencesState.value)
         assertEquals(true, saved.preferences.marketingOptIn)
         assertEquals(true, profileRepository.lastRequest?.marketingOptIn)
+        assertEquals(false, profileRepository.lastRequest?.appointmentReminderOptIn)
         assertEquals("Bruno Ribeiro", profileRepository.lastRequest?.displayName)
+        assertEquals(1, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun updateAppointmentReminderOptInSavesProfilePreference() = runTest {
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            profileResult = UserProfileResult.Success(
+                profilePreferencesProfile(
+                    marketingOptIn = true,
+                    appointmentReminderOptIn = false,
+                ),
+            ),
+            mutationResult = UserProfileMutationResult.Success(
+                profilePreferencesProfile(
+                    marketingOptIn = true,
+                    appointmentReminderOptIn = true,
+                ),
+            ),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.updateAppointmentReminderOptIn(true)
+        runCurrent()
+
+        val saved = assertIs<ProfilePreferencesUiState.Saved>(viewModel.preferencesState.value)
+        assertEquals(true, saved.preferences.appointmentReminderOptIn)
+        assertEquals(true, profileRepository.lastRequest?.appointmentReminderOptIn)
+        assertEquals(true, profileRepository.lastRequest?.marketingOptIn)
         assertEquals(1, profileRepository.updateCalls)
     }
 
@@ -602,10 +646,12 @@ private fun profilePreferencesProfile(
     displayName: String = "Bruno Ribeiro",
     phoneNumber: String = "913005855",
     marketingOptIn: Boolean = false,
+    appointmentReminderOptIn: Boolean = false,
 ): UserProfile = UserProfile(
     uid = "uid-1",
     email = "bruno@example.com",
     displayName = displayName,
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
+    appointmentReminderOptIn = appointmentReminderOptIn,
 )

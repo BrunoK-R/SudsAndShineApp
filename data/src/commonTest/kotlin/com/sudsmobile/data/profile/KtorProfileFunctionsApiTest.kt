@@ -32,7 +32,8 @@ class KtorProfileFunctionsApiTest {
                       "email": "bruno@example.com",
                       "displayName": "Bruno Ribeiro",
                       "phoneNumber": "913005855",
-                      "marketingOptIn": true
+                      "marketingOptIn": true,
+                      "appointmentReminderOptIn": true
                     }
                   }
                 }
@@ -50,6 +51,7 @@ class KtorProfileFunctionsApiTest {
         assertEquals("uid-1", success.profile.uid)
         assertEquals("Bruno Ribeiro", success.profile.displayName)
         assertEquals(true, success.profile.marketingOptIn)
+        assertEquals(true, success.profile.appointmentReminderOptIn)
     }
 
     @Test
@@ -65,7 +67,8 @@ class KtorProfileFunctionsApiTest {
                       "email": "bruno@example.com",
                       "displayName": "Bruno Ribeiro",
                       "phoneNumber": "913005855",
-                      "marketingOptIn": false
+                      "marketingOptIn": false,
+                      "appointmentReminderOptIn": true
                     }
                   }
                 }
@@ -142,4 +145,5 @@ private fun validProfileRequest(): UserProfileSaveRequest = UserProfileSaveReque
     displayName = "Bruno Ribeiro",
     phoneNumber = "913005855",
     marketingOptIn = false,
+    appointmentReminderOptIn = true,
 )

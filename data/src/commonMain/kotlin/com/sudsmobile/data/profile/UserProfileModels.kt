@@ -6,12 +6,14 @@ data class UserProfile(
     val displayName: String,
     val phoneNumber: String,
     val marketingOptIn: Boolean,
+    val appointmentReminderOptIn: Boolean = false,
 )
 
 data class UserProfileSaveRequest(
     val displayName: String,
     val phoneNumber: String,
     val marketingOptIn: Boolean,
+    val appointmentReminderOptIn: Boolean = false,
 )
 
 sealed interface UserProfileResult {

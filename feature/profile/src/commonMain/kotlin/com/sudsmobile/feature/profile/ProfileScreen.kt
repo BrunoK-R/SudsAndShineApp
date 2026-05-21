@@ -152,8 +152,10 @@ fun ProfileScreen(
         onSignOut = viewModel::signOut,
         onRetryStats = viewModel::loadStats,
         onRetryPreferences = viewModel::loadPreferences,
+        onRetryPreferenceSave = viewModel::retryPreferenceSave,
         onRetryBusinessInfo = { contactViewModel.loadBusinessInfo(force = true) },
         onMarketingOptInChange = viewModel::updateMarketingOptIn,
+        onAppointmentReminderOptInChange = viewModel::updateAppointmentReminderOptIn,
         onOpenPersonalData = onOpenPersonalData,
         onManageVehicles = onManageVehicles,
         onOpenHistory = onOpenHistory,
@@ -173,8 +175,10 @@ private fun ProfileScreenContent(
     onSignOut: () -> Unit,
     onRetryStats: () -> Unit,
     onRetryPreferences: () -> Unit,
+    onRetryPreferenceSave: () -> Unit,
     onRetryBusinessInfo: () -> Unit,
     onMarketingOptInChange: (Boolean) -> Unit,
+    onAppointmentReminderOptInChange: (Boolean) -> Unit,
     onOpenPersonalData: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
@@ -226,8 +230,10 @@ private fun ProfileScreenContent(
                 )
                 PreferencesCard(
                     preferencesState = preferencesState,
+                    onAppointmentReminderOptInChange = onAppointmentReminderOptInChange,
                     onMarketingOptInChange = onMarketingOptInChange,
                     onRetryPreferences = onRetryPreferences,
+                    onRetryPreferenceSave = onRetryPreferenceSave,
                 )
                 LogoutButton(onClick = onSignOut)
             } else if (isRestoringSession) {
@@ -934,13 +940,16 @@ private fun ProfileMenuRow(
 @Composable
 private fun PreferencesCard(
     preferencesState: ProfilePreferencesUiState,
+    onAppointmentReminderOptInChange: (Boolean) -> Unit,
     onMarketingOptInChange: (Boolean) -> Unit,
     onRetryPreferences: () -> Unit,
+    onRetryPreferenceSave: () -> Unit,
 ) {
     val preferences = preferencesState.preferencesOrNull()
+    val appointmentReminderChecked = preferences?.appointmentReminderOptIn ?: false
     val marketingChecked = preferences?.marketingOptIn ?: false
     val saving = preferencesState is ProfilePreferencesUiState.Saving
-    val marketingEnabled = preferences != null && !saving
+    val controlsEnabled = preferences != null && !saving
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -959,27 +968,26 @@ private fun PreferencesCard(
                 fontWeight = FontWeight.Bold,
             )
             PreferenceRow(
-                title = "Notificações Push",
+                title = "Lembretes de marcação",
                 description = "Receber lembretes de marcações",
-                checked = false,
-                enabled = false,
-                onCheckedChange = {},
+                checked = appointmentReminderChecked,
+                enabled = controlsEnabled,
+                loading = saving,
+                onCheckedChange = onAppointmentReminderOptInChange,
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             PreferenceRow(
                 title = "Email Marketing",
                 description = "Receber ofertas e promoções",
                 checked = marketingChecked,
-                enabled = marketingEnabled,
+                enabled = controlsEnabled,
                 loading = saving,
                 onCheckedChange = onMarketingOptInChange,
             )
             ProfilePreferencesStatus(
                 preferencesState = preferencesState,
                 onRetryPreferences = onRetryPreferences,
-                onRetrySave = {
-                    preferences?.let { onMarketingOptInChange(!it.marketingOptIn) }
-                },
+                onRetrySave = onRetryPreferenceSave,
             )
         }
     }
@@ -1081,7 +1089,7 @@ private fun ProfilePreferencesStatus(
 
         is ProfilePreferencesUiState.Saving -> PreferenceStatusUi(
             title = "A guardar preferências",
-            body = "Estamos a atualizar a preferência de marketing.",
+            body = "Estamos a atualizar as suas preferências.",
             loading = true,
             error = false,
             actionLabel = null,
