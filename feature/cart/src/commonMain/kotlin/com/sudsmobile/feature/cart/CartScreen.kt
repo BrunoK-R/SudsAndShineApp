@@ -92,12 +92,17 @@ fun CartScreen(
 ) {
     val viewModel: CartBookingsViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val businessInfoState by viewModel.businessInfoState.collectAsStateWithLifecycle()
     val cancellationState by viewModel.cancellationState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     var selectedTabName by rememberSaveable { mutableStateOf(BookingsTab.Upcoming.name) }
     var pendingCancellationId by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedTab = BookingsTab.valueOf(selectedTabName)
+
+    LaunchedEffect(Unit) {
+        viewModel.loadBusinessInfo()
+    }
 
     LaunchedEffect(sessionState, bookingRevision) {
         viewModel.refreshForSession()
@@ -128,11 +133,13 @@ fun CartScreen(
         ) {
             BookingsContent(
                 uiState = uiState,
+                businessInfoState = businessInfoState,
                 cancellationState = cancellationState,
                 selectedTab = selectedTab,
                 pendingCancellationId = pendingCancellationId,
                 onTabSelected = { selectedTabName = it.name },
                 onRetry = viewModel::loadBookings,
+                onRetryBusinessInfo = { viewModel.loadBusinessInfo(force = true) },
                 onRequestSignIn = onRequestSignIn,
                 onRateService = onRateService,
                 onRequestCancellation = { reservationId ->
@@ -237,11 +244,13 @@ private fun BookingsSegmentedTabs(
 @Composable
 private fun BookingsContent(
     uiState: CartBookingsUiState,
+    businessInfoState: CartBusinessInfoUiState,
     cancellationState: BookingCancellationUiState,
     selectedTab: BookingsTab,
     pendingCancellationId: String?,
     onTabSelected: (BookingsTab) -> Unit,
     onRetry: () -> Unit,
+    onRetryBusinessInfo: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRateService: (String) -> Unit,
     onRequestCancellation: (String) -> Unit,
@@ -313,8 +322,10 @@ private fun BookingsContent(
                                 !booking.reviewed,
                             showCancelAction = selectedTab == BookingsTab.Upcoming &&
                                 booking.status != BookingStatusUi.Cancelled,
+                            businessInfoState = businessInfoState,
                             cancellationState = cancellationState.forReservation(booking.id),
                             cancellationConfirmationVisible = pendingCancellationId == booking.id,
+                            onRetryBusinessInfo = onRetryBusinessInfo,
                             onRateService = { onRateService(booking.id) },
                             onRequestCancellation = { onRequestCancellation(booking.id) },
                             onDismissCancellation = { onDismissCancellation(booking.id) },
@@ -414,8 +425,10 @@ private fun BookingSummaryCard(
     booking: BookingSummaryUi,
     showRatingAction: Boolean,
     showCancelAction: Boolean,
+    businessInfoState: CartBusinessInfoUiState,
     cancellationState: BookingCancellationUiState,
     cancellationConfirmationVisible: Boolean,
+    onRetryBusinessInfo: () -> Unit,
     onRateService: () -> Unit,
     onRequestCancellation: () -> Unit,
     onDismissCancellation: () -> Unit,
@@ -499,7 +512,10 @@ private fun BookingSummaryCard(
                 BookingDetailRow(Icons.Filled.CalendarMonth, booking.date)
                 BookingDetailRow(Icons.Filled.AccessTime, booking.time)
                 if (booking.showLocation) {
-                    BookingDetailRow(Icons.Filled.Place, "Shopping Norte Sul, Piso -1")
+                    BookingLocationRows(
+                        state = businessInfoState,
+                        onRetry = onRetryBusinessInfo,
+                    )
                 }
             }
 
@@ -539,6 +555,77 @@ private fun BookingSummaryCard(
             }
         }
     }
+}
+
+@Composable
+private fun BookingLocationRows(
+    state: CartBusinessInfoUiState,
+    onRetry: () -> Unit,
+) {
+    val info = state.infoOrDefault()
+
+    when (state) {
+        CartBusinessInfoUiState.Idle,
+        CartBusinessInfoUiState.Loading -> BookingDetailRow(
+            icon = Icons.Filled.Place,
+            text = "A carregar localização",
+        )
+
+        is CartBusinessInfoUiState.Loaded -> BookingDetailRow(
+            icon = Icons.Filled.Place,
+            text = info.singleLineAddress(),
+        )
+
+        is CartBusinessInfoUiState.Error -> {
+            BookingDetailRow(
+                icon = Icons.Filled.Place,
+                text = info.singleLineAddress(),
+            )
+            Row(
+                modifier = Modifier.padding(start = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (state.retryable) {
+                        OutlinedButton(
+                            onClick = onRetry,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.tertiary,
+                            ),
+                        ) {
+                            Text(
+                                text = "Atualizar localização",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun CartBusinessInfoUi.singleLineAddress(): String {
+    return listOf(addressLine1, addressLine2)
+        .filter { it.isNotBlank() }
+        .joinToString(separator = ", ")
 }
 
 @Composable

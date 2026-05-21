@@ -8,6 +8,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.business.BusinessInfo
+import com.sudsmobile.data.business.BusinessInfoError
+import com.sudsmobile.data.business.BusinessInfoRepository
+import com.sudsmobile.data.business.BusinessInfoResult
+import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.booking.BookingCancelError
 import com.sudsmobile.data.booking.BookingCancelRequest
 import com.sudsmobile.data.booking.BookingCancelResult
@@ -43,6 +48,11 @@ internal data class BookingSummaryUi(
     val reviewRating: Int?,
 )
 
+internal data class CartBusinessInfoUi(
+    val addressLine1: String,
+    val addressLine2: String,
+)
+
 internal sealed interface CartBookingsUiState {
     data object Idle : CartBookingsUiState
     data object Loading : CartBookingsUiState
@@ -53,6 +63,17 @@ internal sealed interface CartBookingsUiState {
         val completed: List<BookingSummaryUi>,
     ) : CartBookingsUiState
     data class Error(val message: String, val retryable: Boolean) : CartBookingsUiState
+}
+
+internal sealed interface CartBusinessInfoUiState {
+    data object Idle : CartBusinessInfoUiState
+    data object Loading : CartBusinessInfoUiState
+    data class Loaded(val info: CartBusinessInfoUi) : CartBusinessInfoUiState
+    data class Error(
+        val fallbackInfo: CartBusinessInfoUi,
+        val message: String,
+        val retryable: Boolean,
+    ) : CartBusinessInfoUiState
 }
 
 internal sealed interface BookingCancellationUiState {
@@ -69,16 +90,32 @@ internal sealed interface BookingCancellationUiState {
 internal class CartBookingsViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
+    private val businessInfoRepository: BusinessInfoRepository,
     private val bookingChangeNotifier: BookingChangeNotifier = MutableBookingChangeNotifier(),
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
     private val _uiState = MutableStateFlow<CartBookingsUiState>(CartBookingsUiState.Idle)
     val uiState: StateFlow<CartBookingsUiState> = _uiState.asStateFlow()
+    private val _businessInfoState = MutableStateFlow<CartBusinessInfoUiState>(CartBusinessInfoUiState.Idle)
+    val businessInfoState: StateFlow<CartBusinessInfoUiState> = _businessInfoState.asStateFlow()
     private val _cancellationState = MutableStateFlow<BookingCancellationUiState>(BookingCancellationUiState.Idle)
     val cancellationState: StateFlow<BookingCancellationUiState> = _cancellationState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
+
+    fun loadBusinessInfo(force: Boolean = false) {
+        if (_businessInfoState.value is CartBusinessInfoUiState.Loading) return
+        if (!force && _businessInfoState.value is CartBusinessInfoUiState.Loaded) return
+
+        viewModelScope.launch {
+            _businessInfoState.value = CartBusinessInfoUiState.Loading
+            _businessInfoState.value = when (val result = businessInfoRepository.getBusinessInfo()) {
+                is BusinessInfoResult.Success -> CartBusinessInfoUiState.Loaded(result.info.toCartBusinessInfoUi())
+                is BusinessInfoResult.Failure -> result.error.toCartBusinessInfoState()
+            }
+        }
+    }
 
     fun refreshForSession() {
         val session = sessionState.value as? AuthSessionState.Authenticated
@@ -180,6 +217,29 @@ internal class CartBookingsViewModel(
         )
     }
 }
+
+internal fun CartBusinessInfoUiState.infoOrDefault(): CartBusinessInfoUi {
+    return when (this) {
+        CartBusinessInfoUiState.Idle,
+        CartBusinessInfoUiState.Loading -> DefaultBusinessInfo.toCartBusinessInfoUi()
+        is CartBusinessInfoUiState.Loaded -> info
+        is CartBusinessInfoUiState.Error -> fallbackInfo
+    }
+}
+
+private fun BusinessInfoError.toCartBusinessInfoState(): CartBusinessInfoUiState.Error {
+    val retryable = this is BusinessInfoError.Unavailable || this is BusinessInfoError.Backend
+    return CartBusinessInfoUiState.Error(
+        fallbackInfo = DefaultBusinessInfo.toCartBusinessInfoUi(),
+        message = message,
+        retryable = retryable,
+    )
+}
+
+private fun BusinessInfo.toCartBusinessInfoUi(): CartBusinessInfoUi = CartBusinessInfoUi(
+    addressLine1 = addressLine1.trim().ifBlank { DefaultBusinessInfo.addressLine1 },
+    addressLine2 = addressLine2.trim().ifBlank { DefaultBusinessInfo.addressLine2 },
+)
 
 private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
     if (id.isBlank() || slotStartIso.isBlank()) return null

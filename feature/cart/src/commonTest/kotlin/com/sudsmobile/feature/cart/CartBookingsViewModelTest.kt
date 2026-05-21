@@ -6,6 +6,14 @@ import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
+import com.sudsmobile.data.business.BusinessFaq
+import com.sudsmobile.data.business.BusinessInfo
+import com.sudsmobile.data.business.BusinessInfoError
+import com.sudsmobile.data.business.BusinessInfoRepository
+import com.sudsmobile.data.business.BusinessInfoResult
+import com.sudsmobile.data.business.BusinessOpeningHours
+import com.sudsmobile.data.business.BusinessStat
+import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.data.booking.BookingAvailabilityRequest
 import com.sudsmobile.data.booking.BookingAvailabilityResult
 import com.sudsmobile.data.booking.BookingCancelError
@@ -57,6 +65,7 @@ class CartBookingsViewModelTest {
         val viewModel = CartBookingsViewModel(
             bookingRepository = repository,
             authRepository = FakeCartAuthRepository(authenticated = false),
+            businessInfoRepository = FakeBusinessInfoRepository(),
         )
 
         viewModel.loadBookings()
@@ -93,6 +102,7 @@ class CartBookingsViewModelTest {
                 ),
             ),
             authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
         )
 
         viewModel.loadBookings()
@@ -127,6 +137,7 @@ class CartBookingsViewModelTest {
                 ),
             ),
             authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
         )
 
         viewModel.loadBookings()
@@ -158,6 +169,7 @@ class CartBookingsViewModelTest {
         val viewModel = CartBookingsViewModel(
             bookingRepository = repository,
             authRepository = authRepository,
+            businessInfoRepository = FakeBusinessInfoRepository(),
         )
 
         viewModel.refreshForSession()
@@ -189,6 +201,7 @@ class CartBookingsViewModelTest {
         val viewModel = CartBookingsViewModel(
             bookingRepository = repository,
             authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
             bookingChangeNotifier = bookingChangeNotifier,
         )
 
@@ -225,6 +238,7 @@ class CartBookingsViewModelTest {
         val viewModel = CartBookingsViewModel(
             bookingRepository = repository,
             authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
         )
 
         viewModel.cancelBooking("reservation-1")
@@ -247,6 +261,7 @@ class CartBookingsViewModelTest {
         val viewModel = CartBookingsViewModel(
             bookingRepository = repository,
             authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
         )
 
         viewModel.cancelBooking("reservation-1")
@@ -256,6 +271,55 @@ class CartBookingsViewModelTest {
         assertEquals("reservation-1", error.reservationId)
         assertEquals("Reservation can no longer be cancelled", error.message)
         assertEquals(false, error.retryable)
+    }
+
+    @Test
+    fun loadBusinessInfoMapsBackendAddressAndSkipsCachedReload() = runTest {
+        val businessRepository = FakeBusinessInfoRepository(
+            BusinessInfoResult.Success(
+                businessInfo(
+                    addressLine1 = "Rua das Lavagens 24",
+                    addressLine2 = "Leiria",
+                ),
+            ),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(BookingHistoryResult.Success(BookingHistory(emptyList()))),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = businessRepository,
+        )
+
+        viewModel.loadBusinessInfo()
+        runCurrent()
+
+        val loaded = assertIs<CartBusinessInfoUiState.Loaded>(viewModel.businessInfoState.value)
+        assertEquals("Rua das Lavagens 24", loaded.info.addressLine1)
+        assertEquals("Leiria", loaded.info.addressLine2)
+
+        viewModel.loadBusinessInfo()
+        runCurrent()
+
+        assertEquals(1, businessRepository.calls)
+    }
+
+    @Test
+    fun loadBusinessInfoMapsRetryableFailureWithFallbackAddress() = runTest {
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(BookingHistoryResult.Success(BookingHistory(emptyList()))),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(
+                BusinessInfoResult.Failure(BusinessInfoError.Unavailable("Contactos indisponíveis")),
+            ),
+        )
+
+        viewModel.loadBusinessInfo()
+        runCurrent()
+
+        val error = assertIs<CartBusinessInfoUiState.Error>(viewModel.businessInfoState.value)
+        assertEquals("Contactos indisponíveis", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(DefaultBusinessInfo.addressLine1, error.fallbackInfo.addressLine1)
+        assertEquals(DefaultBusinessInfo.addressLine2, error.fallbackInfo.addressLine2)
     }
 }
 
@@ -292,6 +356,18 @@ private class FakeBookingRepository(
         cancelCalls += 1
         lastCancelRequest = request
         return cancelResult
+    }
+}
+
+private class FakeBusinessInfoRepository(
+    private var result: BusinessInfoResult = BusinessInfoResult.Success(businessInfo()),
+) : BusinessInfoRepository {
+    var calls: Int = 0
+        private set
+
+    override suspend fun getBusinessInfo(): BusinessInfoResult {
+        calls += 1
+        return result
     }
 }
 
@@ -374,4 +450,27 @@ private fun historyReservation(
     upcoming = upcoming,
     reviewed = reviewed,
     reviewRating = reviewRating,
+)
+
+private fun businessInfo(
+    addressLine1: String = DefaultBusinessInfo.addressLine1,
+    addressLine2: String = DefaultBusinessInfo.addressLine2,
+): BusinessInfo = BusinessInfo(
+    phone = DefaultBusinessInfo.phone,
+    phoneUri = DefaultBusinessInfo.phoneUri,
+    email = DefaultBusinessInfo.email,
+    emailUri = DefaultBusinessInfo.emailUri,
+    addressLine1 = addressLine1,
+    addressLine2 = addressLine2,
+    mapsUri = DefaultBusinessInfo.mapsUri,
+    whatsappUri = DefaultBusinessInfo.whatsappUri,
+    openingHours = listOf(
+        BusinessOpeningHours(dayLabel = "Segunda", hoursLabel = "09:00 - 19:00", closed = false),
+    ),
+    faq = listOf(
+        BusinessFaq(question = "Onde?", answer = "No centro."),
+    ),
+    stats = listOf(
+        BusinessStat(value = "500+", label = "Carros"),
+    ),
 )
