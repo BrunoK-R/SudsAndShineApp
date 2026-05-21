@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.profile
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -55,6 +56,49 @@ class PersonalDataViewModelTest {
         runCurrent()
 
         assertIs<PersonalDataUiState.Unauthenticated>(viewModel.uiState.value)
+        assertEquals(0, repository.loadCalls)
+    }
+
+    @Test
+    fun refreshForSessionWaitsWhileSessionIsRestoring() = runTest {
+        val repository = FakePersonalDataRepository(
+            profileResult = UserProfileResult.Success(personalDataProfile()),
+        )
+        val viewModel = PersonalDataViewModel(
+            authRepository = FakePersonalDataAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            profileRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<PersonalDataUiState.Loading>(viewModel.uiState.value)
+        assertIs<PersonalDataSaveUiState.Idle>(viewModel.saveState.value)
+        assertEquals(0, repository.loadCalls)
+    }
+
+    @Test
+    fun refreshForSessionMapsRestoreFailureWithoutProfileCall() = runTest {
+        val repository = FakePersonalDataRepository(
+            profileResult = UserProfileResult.Success(personalDataProfile()),
+        )
+        val viewModel = PersonalDataViewModel(
+            authRepository = FakePersonalDataAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.RestoreFailed(AuthError.Unavailable("Sessão indisponível.")),
+            ),
+            profileRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val error = assertIs<PersonalDataUiState.Error>(viewModel.uiState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
         assertEquals(0, repository.loadCalls)
     }
 
@@ -183,9 +227,10 @@ private class FakePersonalDataRepository(
 
 private class FakePersonalDataAuthRepository(
     authenticated: Boolean,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) authenticatedSessionState() else AuthSessionState.Unauthenticated,
+        initialState ?: if (authenticated) authenticatedSessionState() else AuthSessionState.Unauthenticated,
     )
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
 

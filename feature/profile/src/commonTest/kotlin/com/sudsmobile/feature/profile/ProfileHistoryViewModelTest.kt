@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.profile
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -59,6 +60,48 @@ class ProfileHistoryViewModelTest {
         runCurrent()
 
         assertIs<ProfileHistoryUiState.Unauthenticated>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun refreshForSessionWaitsWhileSessionIsRestoring() = runTest {
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProfileHistoryAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileHistoryUiState.Loading>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun refreshForSessionMapsRestoreFailureWithoutHistoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProfileHistoryAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.RestoreFailed(AuthError.Backend("Falha ao validar sessão.")),
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val error = assertIs<ProfileHistoryUiState.Error>(viewModel.uiState.value)
+        assertEquals("Falha ao validar sessão.", error.message)
+        assertEquals(true, error.retryable)
         assertEquals(0, repository.historyCalls)
     }
 
@@ -283,9 +326,10 @@ private class FakeBookingRepository(
 
 private class FakeProfileHistoryAuthRepository(
     authenticated: Boolean,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
+        initialState ?: if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
     )
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
 

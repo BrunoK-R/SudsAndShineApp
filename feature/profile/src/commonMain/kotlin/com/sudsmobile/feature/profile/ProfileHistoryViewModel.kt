@@ -2,6 +2,7 @@ package com.sudsmobile.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingChangeNotifier
@@ -65,12 +66,23 @@ internal class ProfileHistoryViewModel(
     private var loadedRevision: Long? = null
 
     fun refreshForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedRevision = null
-            _uiState.value = ProfileHistoryUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = ProfileHistoryUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toProfileHistoryState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = ProfileHistoryUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val uid = session.session.user.uid
@@ -82,12 +94,23 @@ internal class ProfileHistoryViewModel(
     fun loadHistory() {
         if (_uiState.value is ProfileHistoryUiState.Loading) return
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedRevision = null
-            _uiState.value = ProfileHistoryUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = ProfileHistoryUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toProfileHistoryState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = ProfileHistoryUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
         val requestedRevision = bookingRevision.value
@@ -135,6 +158,11 @@ internal class ProfileHistoryViewModel(
             is BookingHistoryError.Unavailable,
             is BookingHistoryError.Backend -> ProfileHistoryUiState.Error(message = message, retryable = true)
         }
+    }
+
+    private fun clearLoadedSession() {
+        loadedUid = null
+        loadedRevision = null
     }
 }
 
@@ -207,3 +235,11 @@ private val monthNames = listOf(
     "novembro",
     "dezembro",
 )
+
+private fun AuthError.toProfileHistoryState(): ProfileHistoryUiState.Error {
+    return ProfileHistoryUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.isRetryableSessionError(): Boolean {
+    return this is AuthError.Unavailable || this is AuthError.Backend
+}

@@ -2,6 +2,7 @@ package com.sudsmobile.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingChangeNotifier
@@ -100,13 +101,23 @@ internal class ProfileViewModel(
     fun loadStats() {
         if (_statsState.value is ProfileStatsUiState.Loading) return
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedBookingRevision = null
-            loadedVehicleRevision = null
-            _statsState.value = ProfileStatsUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedStats()
+                _statsState.value = ProfileStatsUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedStats()
+                _statsState.value = currentSessionState.error.toProfileStatsErrorState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedStats()
+                _statsState.value = ProfileStatsUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
         val requestedBookingRevision = bookingRevision.value
@@ -143,12 +154,23 @@ internal class ProfileViewModel(
             return
         }
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedPreferencesUid = null
-            loadedProfileRevision = null
-            _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedPreferences()
+                _preferencesState.value = ProfilePreferencesUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedPreferences()
+                _preferencesState.value = currentSessionState.error.toProfilePreferencesErrorState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedPreferences()
+                _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
         val requestedProfileRevision = profileRevision.value
@@ -245,16 +267,29 @@ internal class ProfileViewModel(
     }
 
     fun refreshForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedBookingRevision = null
-            loadedVehicleRevision = null
-            loadedPreferencesUid = null
-            loadedProfileRevision = null
-            _statsState.value = ProfileStatsUiState.Unauthenticated
-            _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedStats()
+                clearLoadedPreferences()
+                _statsState.value = ProfileStatsUiState.Loading
+                _preferencesState.value = ProfilePreferencesUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedStats()
+                clearLoadedPreferences()
+                _statsState.value = currentSessionState.error.toProfileStatsErrorState()
+                _preferencesState.value = currentSessionState.error.toProfilePreferencesErrorState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedStats()
+                clearLoadedPreferences()
+                _statsState.value = ProfileStatsUiState.Unauthenticated
+                _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         refreshStatsForSession(session)
@@ -304,6 +339,17 @@ internal class ProfileViewModel(
         loadedProfileRevision = null
         _statsState.value = ProfileStatsUiState.Unauthenticated
         _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+    }
+
+    private fun clearLoadedStats() {
+        loadedUid = null
+        loadedBookingRevision = null
+        loadedVehicleRevision = null
+    }
+
+    private fun clearLoadedPreferences() {
+        loadedPreferencesUid = null
+        loadedProfileRevision = null
     }
 }
 
@@ -421,4 +467,16 @@ private fun UserProfileError.toPreferenceSaveState(
         is UserProfileError.Unavailable,
         is UserProfileError.Backend -> ProfilePreferencesUiState.SaveError(preferences, message, retryable = true)
     }
+}
+
+private fun AuthError.toProfileStatsErrorState(): ProfileStatsUiState.Error {
+    return ProfileStatsUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.toProfilePreferencesErrorState(): ProfilePreferencesUiState.Error {
+    return ProfilePreferencesUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.isRetryableSessionError(): Boolean {
+    return this is AuthError.Unavailable || this is AuthError.Backend
 }

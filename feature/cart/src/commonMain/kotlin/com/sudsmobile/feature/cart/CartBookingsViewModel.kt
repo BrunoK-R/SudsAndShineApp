@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingAvailabilityError
@@ -175,14 +176,29 @@ internal class CartBookingsViewModel(
     }
 
     fun refreshForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedRevision = null
-            clearCancellationState()
-            clearRescheduleState()
-            _uiState.value = CartBookingsUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                clearCancellationState()
+                clearRescheduleState()
+                _uiState.value = CartBookingsUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                clearCancellationState()
+                clearRescheduleState()
+                _uiState.value = currentSessionState.error.toCartBookingsState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                clearCancellationState()
+                clearRescheduleState()
+                _uiState.value = CartBookingsUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val uid = session.session.user.uid
@@ -196,14 +212,29 @@ internal class CartBookingsViewModel(
     fun loadBookings() {
         if (_uiState.value is CartBookingsUiState.Loading) return
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedRevision = null
-            clearCancellationState()
-            clearRescheduleState()
-            _uiState.value = CartBookingsUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                clearCancellationState()
+                clearRescheduleState()
+                _uiState.value = CartBookingsUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                clearCancellationState()
+                clearRescheduleState()
+                _uiState.value = currentSessionState.error.toCartBookingsState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                clearCancellationState()
+                clearRescheduleState()
+                _uiState.value = CartBookingsUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
         val requestedRevision = bookingRevision.value
@@ -349,6 +380,11 @@ internal class CartBookingsViewModel(
             retryable = retryable,
             changeSlot = changeSlot,
         )
+    }
+
+    private fun clearLoadedSession() {
+        loadedUid = null
+        loadedRevision = null
     }
 }
 
@@ -543,3 +579,11 @@ private fun isValidDateId(dateId: String): Boolean {
 }
 
 private fun Int.twoDigits(): String = toString().padStart(length = 2, padChar = '0')
+
+private fun AuthError.toCartBookingsState(): CartBookingsUiState.Error {
+    return CartBookingsUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.isRetryableSessionError(): Boolean {
+    return this is AuthError.Unavailable || this is AuthError.Backend
+}

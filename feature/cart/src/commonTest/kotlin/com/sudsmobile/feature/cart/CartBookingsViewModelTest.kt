@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.cart
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -79,6 +80,50 @@ class CartBookingsViewModelTest {
         runCurrent()
 
         assertIs<CartBookingsUiState.Unauthenticated>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun refreshForSessionWaitsWhileSessionIsRestoring() = runTest {
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<CartBookingsUiState.Loading>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun refreshForSessionMapsRestoreFailureWithoutBookingCall() = runTest {
+        val repository = FakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.RestoreFailed(AuthError.Unavailable("Sessão indisponível.")),
+            ),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val error = assertIs<CartBookingsUiState.Error>(viewModel.uiState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
         assertEquals(0, repository.historyCalls)
     }
 
@@ -590,9 +635,10 @@ private class FakeBusinessInfoRepository(
 
 private class FakeCartAuthRepository(
     authenticated: Boolean,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
+        initialState ?: if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
     )
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
 

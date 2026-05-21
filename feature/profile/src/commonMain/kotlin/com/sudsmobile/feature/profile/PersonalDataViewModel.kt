@@ -2,6 +2,7 @@ package com.sudsmobile.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.profile.UserProfile
@@ -54,12 +55,26 @@ internal class PersonalDataViewModel(
     private var loadedUid: String? = null
 
     fun refreshForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            _uiState.value = PersonalDataUiState.Unauthenticated
-            _saveState.value = PersonalDataSaveUiState.Idle
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                loadedUid = null
+                _uiState.value = PersonalDataUiState.Loading
+                _saveState.value = PersonalDataSaveUiState.Idle
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                loadedUid = null
+                _uiState.value = currentSessionState.error.toPersonalDataState()
+                _saveState.value = PersonalDataSaveUiState.Idle
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                loadedUid = null
+                _uiState.value = PersonalDataUiState.Unauthenticated
+                _saveState.value = PersonalDataSaveUiState.Idle
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val uid = session.session.user.uid
@@ -70,11 +85,23 @@ internal class PersonalDataViewModel(
     fun loadProfile() {
         if (_uiState.value is PersonalDataUiState.Loading) return
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            _uiState.value = PersonalDataUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                loadedUid = null
+                _uiState.value = PersonalDataUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                loadedUid = null
+                _uiState.value = currentSessionState.error.toPersonalDataState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                loadedUid = null
+                _uiState.value = PersonalDataUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
 
@@ -192,3 +219,11 @@ private fun UserProfile.toFormUi(): PersonalDataFormUi = PersonalDataFormUi(
     marketingOptIn = marketingOptIn,
     appointmentReminderOptIn = appointmentReminderOptIn,
 )
+
+private fun AuthError.toPersonalDataState(): PersonalDataUiState.Error {
+    return PersonalDataUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.isRetryableSessionError(): Boolean {
+    return this is AuthError.Unavailable || this is AuthError.Backend
+}

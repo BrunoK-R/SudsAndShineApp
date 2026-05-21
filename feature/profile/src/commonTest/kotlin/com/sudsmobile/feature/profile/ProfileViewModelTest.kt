@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.profile
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -83,6 +84,72 @@ class ProfileViewModelTest {
         assertIs<ProfileStatsUiState.Unauthenticated>(viewModel.statsState.value)
         assertEquals(0, bookingRepository.historyCalls)
         assertEquals(0, vehicleRepository.listCalls)
+    }
+
+    @Test
+    fun refreshForSessionWaitsWhileSessionIsRestoring() = runTest {
+        val bookingRepository = ProfileStatsFakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val vehicleRepository = ProfileStatsFakeVehicleRepository(
+            UserVehicleListResult.Success(emptyList()),
+        )
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            UserProfileResult.Success(profilePreferencesProfile()),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            bookingRepository = bookingRepository,
+            userVehicleRepository = vehicleRepository,
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileStatsUiState.Loading>(viewModel.statsState.value)
+        assertIs<ProfilePreferencesUiState.Loading>(viewModel.preferencesState.value)
+        assertEquals(0, bookingRepository.historyCalls)
+        assertEquals(0, vehicleRepository.listCalls)
+        assertEquals(0, profileRepository.loadCalls)
+    }
+
+    @Test
+    fun refreshForSessionMapsRestoreFailureWithoutUserDataCalls() = runTest {
+        val bookingRepository = ProfileStatsFakeBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val vehicleRepository = ProfileStatsFakeVehicleRepository(
+            UserVehicleListResult.Success(emptyList()),
+        )
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            UserProfileResult.Success(profilePreferencesProfile()),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.RestoreFailed(AuthError.Unavailable("Sessão indisponível.")),
+            ),
+            bookingRepository = bookingRepository,
+            userVehicleRepository = vehicleRepository,
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val statsError = assertIs<ProfileStatsUiState.Error>(viewModel.statsState.value)
+        val preferencesError = assertIs<ProfilePreferencesUiState.Error>(viewModel.preferencesState.value)
+        assertEquals("Sessão indisponível.", statsError.message)
+        assertEquals(true, statsError.retryable)
+        assertEquals("Sessão indisponível.", preferencesError.message)
+        assertEquals(true, preferencesError.retryable)
+        assertEquals(0, bookingRepository.historyCalls)
+        assertEquals(0, vehicleRepository.listCalls)
+        assertEquals(0, profileRepository.loadCalls)
     }
 
     @Test
@@ -564,9 +631,10 @@ private class ProfileStatsFakeProfileRepository(
 
 private class ProfileStatsFakeAuthRepository(
     authenticated: Boolean,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) {
+        initialState ?: if (authenticated) {
             AuthSessionState.Authenticated(
                 AuthSession(
                     user = AuthUser(

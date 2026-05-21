@@ -187,6 +187,7 @@ private fun ProfileScreenContent(
 ) {
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
     val isRestoringSession = sessionState == AuthSessionState.Restoring
+    val restoreFailedMessage = (sessionState as? AuthSessionState.RestoreFailed)?.error?.message
     val uriHandler = LocalUriHandler.current
 
     Column(
@@ -238,6 +239,11 @@ private fun ProfileScreenContent(
                 LogoutButton(onClick = onSignOut)
             } else if (isRestoringSession) {
                 RestoringSessionCard()
+            } else if (restoreFailedMessage != null) {
+                RestoreFailedSessionCard(
+                    message = restoreFailedMessage,
+                    onRequestSignIn = onRequestSignIn,
+                )
             } else {
                 GuestProfileCard(onRequestSignIn = onRequestSignIn)
             }
@@ -481,6 +487,64 @@ private fun RestoringSessionCard() {
                     text = "Os veículos e histórico aparecem assim que a sessão for validada.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestoreFailedSessionCard(
+    message: String,
+    onRequestSignIn: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                ProfileIconContainer(icon = Icons.Filled.Security)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "Não foi possível validar a sessão",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = onRequestSignIn,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ),
+            ) {
+                Text(
+                    text = "Entrar novamente",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
                 )
             }
         }
