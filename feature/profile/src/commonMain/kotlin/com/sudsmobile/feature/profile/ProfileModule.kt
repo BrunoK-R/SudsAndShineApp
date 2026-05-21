@@ -8,4 +8,5 @@ val profileModule = module {
     viewModelOf(::ProfileHistoryViewModel)
     viewModelOf(::PersonalDataViewModel)
     viewModelOf(::VehiclesViewModel)
+    viewModelOf(::ContactViewModel)
 }

@@ -27,6 +27,9 @@ data class FirebaseFunctionsConfig(
             "https://$region-$projectId.cloudfunctions.net/getServiceCatalog"
         }
 
+    val getBusinessInfoUrl: String
+        get() = functionUrl("getBusinessInfo")
+
     val getMyReservationsUrl: String
         get() = if (useEmulator) {
             "http://$emulatorHost:5001/$projectId/$region/getMyReservations"

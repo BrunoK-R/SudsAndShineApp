@@ -34,12 +34,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +56,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.viewmodel.koinViewModel
 
 private data class ContactItem(
     val title: String,
@@ -62,80 +67,40 @@ private data class ContactItem(
     val multiLine: Boolean = false,
 )
 
-private data class FaqItem(
-    val question: String,
-    val answer: String,
-)
-
-private data class ContactStat(
-    val value: String,
-    val label: String,
-)
-
-private val contactItems = listOf(
-    ContactItem(
-        title = "Telefone",
-        detail = "913 005 855",
-        icon = Icons.Filled.Phone,
-        uri = "tel:913005855",
-    ),
-    ContactItem(
-        title = "Email",
-        detail = "info@sudsshine.pt",
-        icon = Icons.Filled.Email,
-        uri = "mailto:info@sudsshine.pt",
-    ),
-    ContactItem(
-        title = "Morada",
-        detail = "Shopping Norte Sul, Piso -1\nLeiria, Portugal",
-        icon = Icons.Filled.Place,
-        uri = "https://www.google.com/maps/search/?api=1&query=Shopping+Norte+Sul+Leiria",
-        multiLine = true,
-    ),
-)
-
-private val faqItems = listOf(
-    FaqItem(
-        question = "Como posso marcar uma lavagem?",
-        answer = "Pode marcar através da app na secção Marcar, escolhendo o serviço, tipo de veículo, data e hora desejados. Também pode ligar para 913 005 855.",
-    ),
-    FaqItem(
-        question = "Quanto tempo demora cada serviço?",
-        answer = "Lavagem Exterior: 20 min, Lavagem Standard: 30 min, Limpeza Interior: 25 min, Lavagem Premium: 45 min.",
-    ),
-    FaqItem(
-        question = "Como funciona o programa de fidelização?",
-        answer = "A cada lavagem completa, recebe 1 selo. Quando completar 10 selos, ganha 1 lavagem grátis automaticamente.",
-    ),
-    FaqItem(
-        question = "Posso cancelar ou remarcar?",
-        answer = "Sim, pode cancelar ou remarcar até 2 horas antes da marcação através da app ou contactando-nos diretamente.",
-    ),
-    FaqItem(
-        question = "Aceitam pagamento com cartão?",
-        answer = "Sim, aceitamos pagamento em dinheiro, cartão de débito e crédito, e MB Way.",
-    ),
-    FaqItem(
-        question = "Onde estão localizados?",
-        answer = "Estamos localizados no Shopping Norte Sul, Piso -1, em Leiria. Temos estacionamento gratuito e fácil acesso.",
-    ),
-)
-
-private val contactStats = listOf(
-    ContactStat(value = "500+", label = "Carros Tratados"),
-    ContactStat(value = "4.9", label = "Avaliação Média"),
-    ContactStat(value = "3+", label = "Anos Experiência"),
-)
-
 @Composable
 fun ContactScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     onBookWash: () -> Unit,
 ) {
+    val viewModel: ContactViewModel = koinViewModel()
+    val businessInfoState by viewModel.businessInfoState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.loadBusinessInfo()
+    }
+
+    ContactScreenContent(
+        contentPadding = contentPadding,
+        businessInfoState = businessInfoState,
+        onBack = onBack,
+        onBookWash = onBookWash,
+        onRetryBusinessInfo = { viewModel.loadBusinessInfo(force = true) },
+    )
+}
+
+@Composable
+private fun ContactScreenContent(
+    contentPadding: PaddingValues,
+    businessInfoState: ContactBusinessInfoUiState,
+    onBack: () -> Unit,
+    onBookWash: () -> Unit,
+    onRetryBusinessInfo: () -> Unit,
+) {
     val uriHandler = LocalUriHandler.current
+    val businessInfo = businessInfoState.infoOrDefault()
     val openMaps = {
-        uriHandler.openUri("https://www.google.com/maps/search/?api=1&query=Shopping+Norte+Sul+Leiria")
+        uriHandler.openUri(businessInfo.mapsUri)
     }
 
     Column(
@@ -154,17 +119,25 @@ fun ContactScreen(
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            ContactBusinessInfoStatus(
+                state = businessInfoState,
+                onRetry = onRetryBusinessInfo,
+            )
             ContactInfoCard(
+                businessInfo = businessInfo,
                 onOpenUri = { uriHandler.openUri(it) },
             )
-            OpeningHoursCard()
+            OpeningHoursCard(openingHours = businessInfo.openingHours)
             QuickActionsCard(
-                onWhatsApp = { uriHandler.openUri("https://wa.me/351913005855") },
-                onCall = { uriHandler.openUri("tel:913005855") },
+                onWhatsApp = { uriHandler.openUri(businessInfo.whatsappUri) },
+                onCall = { uriHandler.openUri(businessInfo.phoneUri) },
             )
-            FaqCard()
-            DirectionsCard(onOpenMaps = openMaps)
-            WhyChooseUsCard()
+            FaqCard(faqItems = businessInfo.faq)
+            DirectionsCard(
+                addressLine = businessInfo.addressLine1,
+                onOpenMaps = openMaps,
+            )
+            WhyChooseUsCard(stats = businessInfo.stats)
             Button(
                 onClick = onBookWash,
                 modifier = Modifier
@@ -181,6 +154,112 @@ fun ContactScreen(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContactBusinessInfoStatus(
+    state: ContactBusinessInfoUiState,
+    onRetry: () -> Unit,
+) {
+    when (state) {
+        ContactBusinessInfoUiState.Idle,
+        ContactBusinessInfoUiState.Loading -> ContactStatusCard(
+            title = "A carregar contactos",
+            body = "Estamos a consultar os dados públicos do espaço.",
+            loading = true,
+        )
+
+        is ContactBusinessInfoUiState.Error -> ContactStatusCard(
+            title = "Contactos de reserva",
+            body = state.message,
+            actionLabel = if (state.retryable) "Tentar novamente" else null,
+            onAction = if (state.retryable) onRetry else null,
+        )
+
+        is ContactBusinessInfoUiState.Loaded -> Unit
+    }
+}
+
+@Composable
+private fun ContactStatusCard(
+    title: String,
+    body: String,
+    loading: Boolean = false,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f),
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = MaterialTheme.colorScheme.tertiary,
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (actionLabel != null && onAction != null) {
+                OutlinedButton(
+                    onClick = onAction,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.tertiary,
+                    ),
+                ) {
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }
@@ -245,8 +324,11 @@ private fun ContactHeader(onBack: () -> Unit) {
 
 @Composable
 private fun ContactInfoCard(
+    businessInfo: ContactBusinessInfoUi,
     onOpenUri: (String) -> Unit,
 ) {
+    val contactItems = businessInfo.toContactItems()
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -320,7 +402,7 @@ private fun ContactInfoRow(
 }
 
 @Composable
-private fun OpeningHoursCard() {
+private fun OpeningHoursCard(openingHours: List<ContactOpeningHoursUi>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -335,15 +417,16 @@ private fun OpeningHoursCard() {
                 icon = Icons.Filled.AccessTime,
                 title = "Horário de Funcionamento",
             )
-            OpeningHoursRow(day = "Segunda a Sexta", hours = "09:00 - 19:00")
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            OpeningHoursRow(day = "Sábado", hours = "09:00 - 13:00")
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            OpeningHoursRow(
-                day = "Domingo",
-                hours = "Encerrado",
-                closed = true,
-            )
+            openingHours.forEachIndexed { index, hours ->
+                OpeningHoursRow(
+                    day = hours.dayLabel,
+                    hours = hours.hoursLabel,
+                    closed = hours.closed,
+                )
+                if (index != openingHours.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
         }
     }
 }
@@ -439,7 +522,7 @@ private fun QuickActionButton(
 }
 
 @Composable
-private fun FaqCard() {
+private fun FaqCard(faqItems: List<ContactFaqUi>) {
     var expandedIndex by remember { mutableIntStateOf(-1) }
 
     Card(
@@ -475,7 +558,7 @@ private fun FaqCard() {
 
 @Composable
 private fun FaqRow(
-    faq: FaqItem,
+    faq: ContactFaqUi,
     expanded: Boolean,
     onClick: () -> Unit,
 ) {
@@ -515,7 +598,10 @@ private fun FaqRow(
 }
 
 @Composable
-private fun DirectionsCard(onOpenMaps: () -> Unit) {
+private fun DirectionsCard(
+    addressLine: String,
+    onOpenMaps: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -560,7 +646,7 @@ private fun DirectionsCard(onOpenMaps: () -> Unit) {
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "Shopping Norte Sul, Piso -1",
+                        text = addressLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -572,7 +658,7 @@ private fun DirectionsCard(onOpenMaps: () -> Unit) {
 }
 
 @Composable
-private fun WhyChooseUsCard() {
+private fun WhyChooseUsCard(stats: List<ContactStatUi>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -604,7 +690,7 @@ private fun WhyChooseUsCard() {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                contactStats.forEach { stat ->
+                stats.forEach { stat ->
                     ContactStatBlock(
                         stat = stat,
                         modifier = Modifier.weight(1f),
@@ -617,7 +703,7 @@ private fun WhyChooseUsCard() {
 
 @Composable
 private fun ContactStatBlock(
-    stat: ContactStat,
+    stat: ContactStatUi,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -682,3 +768,25 @@ private fun ContactIconContainer(icon: ImageVector) {
         }
     }
 }
+
+private fun ContactBusinessInfoUi.toContactItems(): List<ContactItem> = listOf(
+    ContactItem(
+        title = "Telefone",
+        detail = phone,
+        icon = Icons.Filled.Phone,
+        uri = phoneUri,
+    ),
+    ContactItem(
+        title = "Email",
+        detail = email,
+        icon = Icons.Filled.Email,
+        uri = emailUri,
+    ),
+    ContactItem(
+        title = "Morada",
+        detail = "$addressLine1\n$addressLine2",
+        icon = Icons.Filled.Place,
+        uri = mapsUri,
+        multiLine = true,
+    ),
+)
