@@ -2,6 +2,7 @@ package com.sudsmobile.feature.cart
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingHistoryError
@@ -64,12 +65,23 @@ internal class RatingViewModel(
             return
         }
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedReservationId = null
-            _targetState.value = RatingTargetUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedTarget()
+                _targetState.value = RatingTargetUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedTarget()
+                _targetState.value = currentSessionState.error.toTargetState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedTarget()
+                _targetState.value = RatingTargetUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val hasReusableState = loadedUid == session.session.user.uid &&
@@ -88,12 +100,23 @@ internal class RatingViewModel(
             return
         }
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedReservationId = null
-            _targetState.value = RatingTargetUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedTarget()
+                _targetState.value = RatingTargetUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedTarget()
+                _targetState.value = currentSessionState.error.toTargetState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedTarget()
+                _targetState.value = RatingTargetUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
 
@@ -109,15 +132,29 @@ internal class RatingViewModel(
                 is BookingHistoryResult.Failure -> result.error.toTargetState()
             }
 
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedUid = requestedUid
-                loadedReservationId = cleanReservationId
-                _targetState.value = nextState
-            } else {
-                loadedUid = null
-                loadedReservationId = null
-                _targetState.value = RatingTargetUiState.Unauthenticated
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    clearLoadedTarget()
+                    _targetState.value = RatingTargetUiState.Loading
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    clearLoadedTarget()
+                    _targetState.value = currentSessionState.error.toTargetState()
+                }
+                AuthSessionState.Unauthenticated -> {
+                    clearLoadedTarget()
+                    _targetState.value = RatingTargetUiState.Unauthenticated
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid == requestedUid) {
+                        loadedUid = requestedUid
+                        loadedReservationId = cleanReservationId
+                        _targetState.value = nextState
+                    } else {
+                        clearLoadedTarget()
+                        _targetState.value = RatingTargetUiState.Unauthenticated
+                    }
+                }
             }
         }
     }
@@ -185,6 +222,19 @@ internal class RatingViewModel(
             is BookingReviewError.Backend -> RatingSubmitUiState.Error(message = message, retryable = true)
         }
     }
+
+    private fun clearLoadedTarget() {
+        loadedUid = null
+        loadedReservationId = null
+    }
+}
+
+private fun AuthError.toTargetState(): RatingTargetUiState.Error {
+    return RatingTargetUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.isRetryableSessionError(): Boolean {
+    return this is AuthError.Unavailable || this is AuthError.Backend
 }
 
 private fun BookingHistoryReservation.toRatingTargetState(): RatingTargetUiState {

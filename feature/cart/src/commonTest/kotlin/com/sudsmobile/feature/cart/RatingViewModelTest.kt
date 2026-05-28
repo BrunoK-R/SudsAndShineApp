@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.cart
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -59,6 +60,44 @@ class RatingViewModelTest {
         runCurrent()
 
         assertIs<RatingTargetUiState.Unauthenticated>(viewModel.targetState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun refreshTargetWaitsWhileSessionIsRestoring() = runTest {
+        val repository = FakeRatingBookingRepository(historyResult = completedHistory())
+        val viewModel = RatingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeRatingAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+        )
+
+        viewModel.refreshTarget("reservation-1")
+        runCurrent()
+
+        assertIs<RatingTargetUiState.Loading>(viewModel.targetState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun refreshTargetMapsRestoreFailureWithoutRepositoryCall() = runTest {
+        val repository = FakeRatingBookingRepository(historyResult = completedHistory())
+        val viewModel = RatingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeRatingAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.RestoreFailed(AuthError.Unavailable("Sessão indisponível.")),
+            ),
+        )
+
+        viewModel.refreshTarget("reservation-1")
+        runCurrent()
+
+        val error = assertIs<RatingTargetUiState.Error>(viewModel.targetState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
         assertEquals(0, repository.historyCalls)
     }
 
@@ -195,9 +234,10 @@ private class FakeRatingBookingRepository(
 
 private class FakeRatingAuthRepository(
     authenticated: Boolean,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
+        initialState ?: if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
     )
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
 
