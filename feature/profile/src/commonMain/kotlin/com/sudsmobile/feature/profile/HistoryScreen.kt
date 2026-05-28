@@ -125,8 +125,8 @@ private fun HistoryScreenContent(
                 )
 
                 ProfileHistoryUiState.Empty -> HistoryStatusCard(
-                    title = "Sem lavagens concluídas",
-                    body = "Quando uma lavagem for concluída, o detalhe aparece aqui.",
+                    title = "Sem histórico de lavagens",
+                    body = "Quando uma lavagem for concluída ou cancelada, o detalhe aparece aqui.",
                     icon = HistoryStatusIcon.Empty,
                     actionLabel = "Atualizar",
                     onAction = onRetry,
@@ -207,7 +207,7 @@ private fun HistoryHeader(onBack: () -> Unit) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Todas as suas lavagens anteriores",
+            text = "Lavagens concluídas e canceladas",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
@@ -229,7 +229,7 @@ private fun HistorySummaryCard(summary: ProfileHistorySummaryUi) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             HistorySummaryStat(
-                label = "Total de Lavagens",
+                label = "Lavagens concluídas",
                 value = summary.washCount,
                 modifier = Modifier.weight(1f),
             )
@@ -570,10 +570,22 @@ private fun HistoryBookAgainAction(onBookAgain: () -> Unit) {
 private fun HistoryAuditNotes(notes: List<ProfileHistoryAuditNoteUi>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         notes.forEach { note ->
+            val containerColor = when (note.tone) {
+                ProfileHistoryAuditToneUi.Neutral -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f)
+                ProfileHistoryAuditToneUi.Warning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.42f)
+            }
+            val contentColor = when (note.tone) {
+                ProfileHistoryAuditToneUi.Neutral -> MaterialTheme.colorScheme.onTertiaryContainer
+                ProfileHistoryAuditToneUi.Warning -> MaterialTheme.colorScheme.onErrorContainer
+            }
+            val iconTint = when (note.tone) {
+                ProfileHistoryAuditToneUi.Neutral -> MaterialTheme.colorScheme.tertiary
+                ProfileHistoryAuditToneUi.Warning -> MaterialTheme.colorScheme.error
+            }
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f),
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                color = containerColor,
+                contentColor = contentColor,
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Row(
@@ -585,7 +597,7 @@ private fun HistoryAuditNotes(notes: List<ProfileHistoryAuditNoteUi>) {
                         imageVector = Icons.Filled.Info,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.tertiary,
+                        tint = iconTint,
                     )
                     Column(
                         modifier = Modifier.weight(1f),
@@ -631,7 +643,11 @@ private fun HistoryStatusBadge(status: ProfileHistoryStatusUi) {
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Icon(
-                imageVector = Icons.Filled.CheckCircle,
+                imageVector = if (status == ProfileHistoryStatusUi.Cancelled) {
+                    Icons.Filled.ErrorOutline
+                } else {
+                    Icons.Filled.CheckCircle
+                },
                 contentDescription = null,
                 modifier = Modifier.size(14.dp),
             )

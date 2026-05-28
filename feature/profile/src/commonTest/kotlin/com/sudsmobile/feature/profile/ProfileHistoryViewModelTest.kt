@@ -156,7 +156,7 @@ class ProfileHistoryViewModelTest {
         val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
         assertEquals("2", loaded.summary.washCount)
         assertEquals("57,00€", loaded.summary.totalSpent)
-        assertEquals(listOf("completed-1", "completed-2"), loaded.items.map { it.id })
+        assertEquals(listOf("completed-1", "completed-2", "cancelled-1"), loaded.items.map { it.id })
         assertEquals("18 de maio, 2026", loaded.items.first().date)
         assertEquals("10:00", loaded.items.first().time)
         assertEquals("SS-completed-1", loaded.items.first().reference)
@@ -168,6 +168,8 @@ class ProfileHistoryViewModelTest {
         assertEquals("Ficou impecável. Voltava a reservar.", loaded.items.first().reviewComment)
         assertEquals("premium", loaded.items.first().rebookServiceId)
         assertEquals(true, loaded.items[1].reviewable)
+        assertEquals(ProfileHistoryStatusUi.Cancelled, loaded.items[2].status)
+        assertEquals(false, loaded.items[2].reviewable)
     }
 
     @Test
@@ -308,8 +310,9 @@ class ProfileHistoryViewModelTest {
         runCurrent()
 
         val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
-        assertEquals(listOf("done-1"), loaded.items.map { it.id })
-        assertEquals(ProfileHistoryStatusUi.Completed, loaded.items.single().status)
+        assertEquals(listOf("done-1", "cancelled-1"), loaded.items.map { it.id })
+        assertEquals(ProfileHistoryStatusUi.Completed, loaded.items[0].status)
+        assertEquals(ProfileHistoryStatusUi.Cancelled, loaded.items[1].status)
         assertEquals("1", loaded.summary.washCount)
     }
 
@@ -346,6 +349,42 @@ class ProfileHistoryViewModelTest {
             "De 21 de maio, 2026 às 10:00 para 22 de maio, 2026 às 11:00.",
             auditNote.body,
         )
+    }
+
+    @Test
+    fun loadHistoryMapsCancellationAuditForCancelledReservations() = runTest {
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "cancelled-1",
+                                slotStartIso = "2026-05-22T11:00:00.000Z",
+                                upcoming = false,
+                                status = "cancelado",
+                                priceCents = 3200,
+                                cancelledAtIso = "2026-05-21T15:30:00.000Z",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeProfileHistoryAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadHistory()
+        runCurrent()
+
+        val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        val item = loaded.items.single()
+        val auditNote = item.auditNotes.single()
+        assertEquals(ProfileHistoryStatusUi.Cancelled, item.status)
+        assertEquals("0", loaded.summary.washCount)
+        assertEquals("0,00€", loaded.summary.totalSpent)
+        assertEquals("Cancelada", auditNote.title)
+        assertEquals("Cancelada em 21 de maio, 2026 às 15:30.", auditNote.body)
+        assertEquals(ProfileHistoryAuditToneUi.Warning, auditNote.tone)
     }
 
     @Test
@@ -526,6 +565,7 @@ private fun historyReservation(
     reviewTags: List<String> = emptyList(),
     reviewComment: String = "",
     rescheduledAtIso: String? = null,
+    cancelledAtIso: String? = null,
     previousSlotStartIso: String? = null,
     previousSlotEndIso: String? = null,
     rescheduleCount: Int = 0,
@@ -547,6 +587,7 @@ private fun historyReservation(
     reviewTags = reviewTags,
     reviewComment = reviewComment,
     extras = extras,
+    cancelledAtIso = cancelledAtIso,
     rescheduledAtIso = rescheduledAtIso,
     previousSlotStartIso = previousSlotStartIso,
     previousSlotEndIso = previousSlotEndIso,

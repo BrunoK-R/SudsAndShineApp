@@ -16,6 +16,7 @@ import com.sudsmobile.data.booking.BookingReservationExtra
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.booking.bookingPaymentStatus
+import com.sudsmobile.data.booking.isCancelledReservation
 import com.sudsmobile.data.booking.isCompletedReservation
 import com.sudsmobile.data.booking.isReviewableReservation
 import com.sudsmobile.data.booking.toBookingReservationStatus
@@ -64,7 +65,13 @@ internal data class ProfileHistoryExtraUi(
 internal data class ProfileHistoryAuditNoteUi(
     val title: String,
     val body: String,
+    val tone: ProfileHistoryAuditToneUi = ProfileHistoryAuditToneUi.Neutral,
 )
+
+internal enum class ProfileHistoryAuditToneUi {
+    Neutral,
+    Warning,
+}
 
 internal sealed interface ProfileHistoryUiState {
     data object Idle : ProfileHistoryUiState
@@ -161,15 +168,16 @@ internal class ProfileHistoryViewModel(
 
     private fun BookingHistory.toUiState(): ProfileHistoryUiState {
         val items = reservations
-            .filter { it.isCompletedReservation() }
+            .filter { it.isProfileHistoryReservation() }
             .mapNotNull { it.toHistoryItemOrNull() }
 
         if (items.isEmpty()) return ProfileHistoryUiState.Empty
 
-        val totalCents = items.sumOf { it.priceCents ?: 0 }
+        val completedItems = items.filterNot { it.status == ProfileHistoryStatusUi.Cancelled }
+        val totalCents = completedItems.sumOf { it.priceCents ?: 0 }
         return ProfileHistoryUiState.Loaded(
             summary = ProfileHistorySummaryUi(
-                washCount = items.size.toString(),
+                washCount = completedItems.size.toString(),
                 totalSpent = totalCents.toEuroLabel(),
             ),
             items = items,
@@ -216,6 +224,10 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
     )
 }
 
+private fun BookingHistoryReservation.isProfileHistoryReservation(): Boolean {
+    return isCompletedReservation() || isCancelledReservation()
+}
+
 private fun String.normalizedRebookServiceId(): String? = trim().takeIf { it.isNotBlank() }
 
 private fun List<BookingReservationExtra>.toHistoryExtraUi(): List<ProfileHistoryExtraUi> {
@@ -243,28 +255,43 @@ private fun String.sanitizedReviewComment(): String {
 }
 
 private fun BookingHistoryReservation.auditNotes(): List<ProfileHistoryAuditNoteUi> {
-    if (rescheduleCount <= 0 && previousSlotStartIso.isNullOrBlank()) return emptyList()
+    val notes = mutableListOf<ProfileHistoryAuditNoteUi>()
 
-    val previousSlot = previousSlotStartIso?.toDateTimeLabel()
-    val currentSlot = slotStartIso.toDateTimeLabel()
-    val rescheduledAt = rescheduledAtIso?.toDateTimeLabel()
-    val body = when {
-        previousSlot != null && currentSlot != null -> "De $previousSlot para $currentSlot."
-        previousSlot != null -> "Horário anterior: $previousSlot."
-        rescheduledAt != null -> "Alterada em $rescheduledAt."
-        else -> "Esta lavagem foi remarcada antes da conclusão."
-    }
+    if (rescheduleCount > 0 || !previousSlotStartIso.isNullOrBlank()) {
+        val previousSlot = previousSlotStartIso?.toDateTimeLabel()
+        val currentSlot = slotStartIso.toDateTimeLabel()
+        val rescheduledAt = rescheduledAtIso?.toDateTimeLabel()
+        val body = when {
+            previousSlot != null && currentSlot != null -> "De $previousSlot para $currentSlot."
+            previousSlot != null -> "Horário anterior: $previousSlot."
+            rescheduledAt != null -> "Alterada em $rescheduledAt."
+            else -> "Esta lavagem foi remarcada antes da conclusão."
+        }
 
-    return listOf(
-        ProfileHistoryAuditNoteUi(
+        notes += ProfileHistoryAuditNoteUi(
             title = if (rescheduleCount > 1) {
                 "Remarcada $rescheduleCount vezes"
             } else {
                 "Remarcada"
             },
             body = body,
-        ),
-    )
+        )
+    }
+
+    if (isCancelledReservation()) {
+        val cancelledAt = cancelledAtIso?.toDateTimeLabel()
+        notes += ProfileHistoryAuditNoteUi(
+            title = "Cancelada",
+            body = if (cancelledAt != null) {
+                "Cancelada em $cancelledAt."
+            } else {
+                "Esta marcação foi cancelada."
+            },
+            tone = ProfileHistoryAuditToneUi.Warning,
+        )
+    }
+
+    return notes
 }
 
 private fun BookingHistoryReservation.serviceLabelWithExtras(): String {
