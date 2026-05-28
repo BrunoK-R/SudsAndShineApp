@@ -35,6 +35,7 @@ import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.booking.bookingPaymentStatus
 import com.sudsmobile.data.booking.isCancelableReservation
+import com.sudsmobile.data.booking.isCancelledReservation
 import com.sudsmobile.data.booking.isReviewableReservation
 import com.sudsmobile.data.booking.requiresPayment
 import com.sudsmobile.data.booking.toBookingReservationStatus
@@ -71,6 +72,18 @@ internal data class BookingSummaryUi(
     val cancelable: Boolean,
     val paymentLabel: String,
     val requiresPayment: Boolean,
+    val auditNotes: List<BookingAuditNoteUi>,
+)
+
+internal enum class BookingAuditToneUi {
+    Neutral,
+    Warning,
+}
+
+internal data class BookingAuditNoteUi(
+    val title: String,
+    val body: String,
+    val tone: BookingAuditToneUi = BookingAuditToneUi.Neutral,
 )
 
 internal data class CartBusinessInfoUi(
@@ -433,7 +446,47 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         cancelable = isCancelableReservation(),
         paymentLabel = bookingPaymentStatus().toPaymentLabel(),
         requiresPayment = requiresPayment(),
+        auditNotes = auditNotes(),
     )
+}
+
+private fun BookingHistoryReservation.auditNotes(): List<BookingAuditNoteUi> {
+    val notes = mutableListOf<BookingAuditNoteUi>()
+
+    if (rescheduleCount > 0 || !previousSlotStartIso.isNullOrBlank()) {
+        val previousSlot = previousSlotStartIso?.toDateTimeLabel()
+        val currentSlot = slotStartIso.toDateTimeLabel()
+        val rescheduledAt = rescheduledAtIso?.toDateTimeLabel()
+        val countLabel = when (rescheduleCount) {
+            0, 1 -> "Marcação remarcada"
+            else -> "Marcação remarcada $rescheduleCount vezes"
+        }
+        val body = when {
+            previousSlot != null && currentSlot != null -> "De $previousSlot para $currentSlot."
+            previousSlot != null -> "Horário anterior: $previousSlot."
+            rescheduledAt != null -> "Alterada em $rescheduledAt."
+            else -> "Esta marcação foi alterada."
+        }
+        notes += BookingAuditNoteUi(
+            title = countLabel,
+            body = body,
+        )
+    }
+
+    if (isCancelledReservation()) {
+        val cancelledAt = cancelledAtIso?.toDateTimeLabel()
+        notes += BookingAuditNoteUi(
+            title = "Marcação cancelada",
+            body = if (cancelledAt != null) {
+                "Cancelada em $cancelledAt."
+            } else {
+                "Esta marcação foi cancelada."
+            },
+            tone = BookingAuditToneUi.Warning,
+        )
+    }
+
+    return notes
 }
 
 private fun BookingPaymentStatus.toPaymentLabel(): String = when (this) {
@@ -492,6 +545,13 @@ private fun String.toDateLabel(): String {
 private fun String.toTimeLabel(): String {
     val time = substringAfter("T", missingDelimiterValue = "")
     return time.takeIf { it.length >= 5 }?.take(5) ?: "Hora a confirmar"
+}
+
+private fun String.toDateTimeLabel(): String? {
+    if (isBlank()) return null
+    val date = toDateLabel().takeUnless { it == "Data a confirmar" } ?: return null
+    val time = toTimeLabel().takeUnless { it == "Hora a confirmar" }
+    return if (time == null) date else "$date às $time"
 }
 
 private fun BookingHistoryReservation.serviceDurationMinutes(): Int {

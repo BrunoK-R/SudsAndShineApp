@@ -674,6 +674,11 @@ private fun BookingSummaryCard(
                 }
             }
 
+            if (booking.auditNotes.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                BookingAuditNotes(notes = booking.auditNotes)
+            }
+
             if (booking.reviewed) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -741,6 +746,66 @@ private fun BookingSummaryCard(
                     onConfirmCancellation = onConfirmCancellation,
                     modifier = Modifier.padding(top = 14.dp),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingAuditNotes(
+    notes: List<BookingAuditNoteUi>,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        notes.forEach { note ->
+            val warning = note.tone == BookingAuditToneUi.Warning
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = if (warning) {
+                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.44f)
+                } else {
+                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f)
+                },
+                contentColor = if (warning) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onTertiaryContainer
+                },
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (warning) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.tertiary
+                        },
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = note.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = note.body,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             }
         }
     }

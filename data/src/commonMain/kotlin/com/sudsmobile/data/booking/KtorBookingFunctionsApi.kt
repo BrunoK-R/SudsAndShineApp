@@ -663,6 +663,13 @@ private data class MyReservationItem(
     val reviewRating: Int? = null,
     val reviewTags: List<String> = emptyList(),
     val extras: List<ReservationExtraPayload> = emptyList(),
+    val createdAt: String = "",
+    val updatedAt: String = "",
+    val cancelledAt: String? = null,
+    val rescheduledAt: String? = null,
+    val previousSlotStart: String? = null,
+    val previousSlotEnd: String? = null,
+    val rescheduleCount: Int = 0,
 ) {
     fun toReservation(): BookingHistoryReservation = BookingHistoryReservation(
         id = id,
@@ -681,6 +688,13 @@ private data class MyReservationItem(
         reviewRating = reviewRating,
         reviewTags = reviewTags,
         extras = extras.map { it.toReservationExtra() },
+        createdAtIso = createdAt,
+        updatedAtIso = updatedAt,
+        cancelledAtIso = cancelledAt,
+        rescheduledAtIso = rescheduledAt,
+        previousSlotStartIso = previousSlotStart,
+        previousSlotEndIso = previousSlotEnd,
+        rescheduleCount = rescheduleCount.coerceAtLeast(0),
     )
 }
 

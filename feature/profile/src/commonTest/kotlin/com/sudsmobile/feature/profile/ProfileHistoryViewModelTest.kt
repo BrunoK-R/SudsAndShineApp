@@ -220,6 +220,41 @@ class ProfileHistoryViewModelTest {
     }
 
     @Test
+    fun loadHistoryMapsRescheduleAuditForCompletedReservations() = runTest {
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "completed-1",
+                                slotStartIso = "2026-05-22T11:00:00.000Z",
+                                upcoming = false,
+                                priceCents = 3200,
+                                previousSlotStartIso = "2026-05-21T10:00:00.000Z",
+                                previousSlotEndIso = "2026-05-21T10:45:00.000Z",
+                                rescheduleCount = 1,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeProfileHistoryAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadHistory()
+        runCurrent()
+
+        val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        val auditNote = loaded.items.single().auditNotes.single()
+        assertEquals("Remarcada", auditNote.title)
+        assertEquals(
+            "De 21 de maio, 2026 às 10:00 para 22 de maio, 2026 às 11:00.",
+            auditNote.body,
+        )
+    }
+
+    @Test
     fun refreshForSessionReloadsAfterSignInAndClearsAfterSignOut() = runTest {
         val authRepository = FakeProfileHistoryAuthRepository(authenticated = false)
         val repository = FakeBookingRepository(
@@ -388,6 +423,10 @@ private fun historyReservation(
     status: String = if (upcoming) "pending" else "completed",
     priceCents: Int?,
     vehicleLabel: String? = null,
+    rescheduledAtIso: String? = null,
+    previousSlotStartIso: String? = null,
+    previousSlotEndIso: String? = null,
+    rescheduleCount: Int = 0,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -400,4 +439,8 @@ private fun historyReservation(
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,
     upcoming = upcoming,
+    rescheduledAtIso = rescheduledAtIso,
+    previousSlotStartIso = previousSlotStartIso,
+    previousSlotEndIso = previousSlotEndIso,
+    rescheduleCount = rescheduleCount,
 )

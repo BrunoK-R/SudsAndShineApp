@@ -93,6 +93,13 @@ data class BookingHistoryReservation(
     val reviewRating: Int? = null,
     val reviewTags: List<String> = emptyList(),
     val extras: List<BookingReservationExtra> = emptyList(),
+    val createdAtIso: String = "",
+    val updatedAtIso: String = "",
+    val cancelledAtIso: String? = null,
+    val rescheduledAtIso: String? = null,
+    val previousSlotStartIso: String? = null,
+    val previousSlotEndIso: String? = null,
+    val rescheduleCount: Int = 0,
 )
 
 enum class BookingReservationStatus {

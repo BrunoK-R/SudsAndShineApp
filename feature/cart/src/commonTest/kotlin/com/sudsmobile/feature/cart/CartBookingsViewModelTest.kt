@@ -256,6 +256,57 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun loadBookingsMapsReservationAuditNotes() = runTest {
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "rescheduled-1",
+                                slotStartIso = "2026-05-22T11:00:00.000Z",
+                                slotEndIso = "2026-05-22T11:45:00.000Z",
+                                upcoming = true,
+                                priceCents = 3400,
+                                previousSlotStartIso = "2026-05-21T10:00:00.000Z",
+                                previousSlotEndIso = "2026-05-21T10:45:00.000Z",
+                                rescheduleCount = 2,
+                            ),
+                            historyReservation(
+                                id = "cancelled-1",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                slotEndIso = "2026-05-18T10:45:00.000Z",
+                                upcoming = false,
+                                priceCents = 3200,
+                                status = "cancelled",
+                                cancelledAtIso = "2026-05-17T16:30:00.000Z",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.loadBookings()
+        runCurrent()
+
+        val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+        val rescheduledNote = loaded.upcoming.single().auditNotes.single()
+        assertEquals("Marcação remarcada 2 vezes", rescheduledNote.title)
+        assertEquals(
+            "De 21 de maio, 2026 às 10:00 para 22 de maio, 2026 às 11:00.",
+            rescheduledNote.body,
+        )
+
+        val cancelledNote = loaded.completed.single().auditNotes.single()
+        assertEquals("Marcação cancelada", cancelledNote.title)
+        assertEquals("Cancelada em 17 de maio, 2026 às 16:30.", cancelledNote.body)
+        assertEquals(BookingAuditToneUi.Warning, cancelledNote.tone)
+    }
+
+    @Test
     fun refreshForSessionReloadsAfterSignInAndClearsAfterSignOut() = runTest {
         val authRepository = FakeCartAuthRepository(authenticated = false)
         val repository = FakeBookingRepository(
@@ -701,6 +752,11 @@ private fun historyReservation(
     reviewRating: Int? = null,
     status: String = if (upcoming) "pending" else "completed",
     paymentStatus: String = "",
+    cancelledAtIso: String? = null,
+    rescheduledAtIso: String? = null,
+    previousSlotStartIso: String? = null,
+    previousSlotEndIso: String? = null,
+    rescheduleCount: Int = 0,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -716,6 +772,11 @@ private fun historyReservation(
     upcoming = upcoming,
     reviewed = reviewed,
     reviewRating = reviewRating,
+    cancelledAtIso = cancelledAtIso,
+    rescheduledAtIso = rescheduledAtIso,
+    previousSlotStartIso = previousSlotStartIso,
+    previousSlotEndIso = previousSlotEndIso,
+    rescheduleCount = rescheduleCount,
 )
 
 private fun businessInfo(

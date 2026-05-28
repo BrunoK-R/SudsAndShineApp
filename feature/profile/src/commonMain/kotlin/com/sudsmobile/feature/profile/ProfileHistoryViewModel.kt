@@ -39,6 +39,12 @@ internal data class ProfileHistoryItemUi(
     val price: String,
     val priceCents: Int?,
     val status: ProfileHistoryStatusUi,
+    val auditNotes: List<ProfileHistoryAuditNoteUi>,
+)
+
+internal data class ProfileHistoryAuditNoteUi(
+    val title: String,
+    val body: String,
 )
 
 internal sealed interface ProfileHistoryUiState {
@@ -177,6 +183,32 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         priceCents = priceCents,
         status = status.toHistoryStatusUi(),
+        auditNotes = auditNotes(),
+    )
+}
+
+private fun BookingHistoryReservation.auditNotes(): List<ProfileHistoryAuditNoteUi> {
+    if (rescheduleCount <= 0 && previousSlotStartIso.isNullOrBlank()) return emptyList()
+
+    val previousSlot = previousSlotStartIso?.toDateTimeLabel()
+    val currentSlot = slotStartIso.toDateTimeLabel()
+    val rescheduledAt = rescheduledAtIso?.toDateTimeLabel()
+    val body = when {
+        previousSlot != null && currentSlot != null -> "De $previousSlot para $currentSlot."
+        previousSlot != null -> "Horário anterior: $previousSlot."
+        rescheduledAt != null -> "Alterada em $rescheduledAt."
+        else -> "Esta lavagem foi remarcada antes da conclusão."
+    }
+
+    return listOf(
+        ProfileHistoryAuditNoteUi(
+            title = if (rescheduleCount > 1) {
+                "Remarcada $rescheduleCount vezes"
+            } else {
+                "Remarcada"
+            },
+            body = body,
+        ),
     )
 }
 
@@ -213,6 +245,18 @@ private fun String.toDateLabel(): String {
     val month = parts[1].toIntOrNull()?.let { monthNames.getOrNull(it - 1) } ?: return date
     val day = parts[2].toIntOrNull()?.toString() ?: parts[2]
     return "$day de $month, $year"
+}
+
+private fun String.toTimeLabel(): String {
+    val time = substringAfter("T", missingDelimiterValue = "")
+    return time.takeIf { it.length >= 5 }?.take(5) ?: "Hora a confirmar"
+}
+
+private fun String.toDateTimeLabel(): String? {
+    if (isBlank()) return null
+    val date = toDateLabel().takeUnless { it == "Data a confirmar" } ?: return null
+    val time = toTimeLabel().takeUnless { it == "Hora a confirmar" }
+    return if (time == null) date else "$date às $time"
 }
 
 private fun Int.toEuroLabel(): String {

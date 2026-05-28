@@ -242,7 +242,13 @@ class KtorBookingFunctionsApiTest {
                         "upcoming": true,
                         "reviewed": true,
                         "reviewRating": 5,
-                        "reviewTags": ["Qualidade", "Rápido"]
+                        "reviewTags": ["Qualidade", "Rápido"],
+                        "createdAt": "2026-05-18T08:00:00.000Z",
+                        "updatedAt": "2026-05-19T12:15:00.000Z",
+                        "rescheduledAt": "2026-05-19T12:15:00.000Z",
+                        "previousSlotStart": "2026-05-20T08:30:00.000Z",
+                        "previousSlotEnd": "2026-05-20T09:15:00.000Z",
+                        "rescheduleCount": 1
                       }
                     ]
                   }
@@ -268,6 +274,12 @@ class KtorBookingFunctionsApiTest {
         assertEquals(true, success.history.reservations.first().reviewed)
         assertEquals(5, success.history.reservations.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), success.history.reservations.first().reviewTags)
+        assertEquals("2026-05-18T08:00:00.000Z", success.history.reservations.first().createdAtIso)
+        assertEquals("2026-05-19T12:15:00.000Z", success.history.reservations.first().updatedAtIso)
+        assertEquals("2026-05-19T12:15:00.000Z", success.history.reservations.first().rescheduledAtIso)
+        assertEquals("2026-05-20T08:30:00.000Z", success.history.reservations.first().previousSlotStartIso)
+        assertEquals("2026-05-20T09:15:00.000Z", success.history.reservations.first().previousSlotEndIso)
+        assertEquals(1, success.history.reservations.first().rescheduleCount)
         assertEquals(10, success.history.loyalty?.totalWashes)
         assertEquals(1, success.history.loyalty?.availableRewards)
     }
