@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.profile
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -17,6 +18,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,6 +61,124 @@ class VehiclesViewModelTest {
     }
 
     @Test
+    fun refreshForSessionWaitsWhileSessionIsRestoring() = runTest {
+        val repository = FakeUserVehicleRepository(
+            listResult = UserVehicleListResult.Success(emptyList()),
+        )
+        val viewModel = VehiclesViewModel(
+            authRepository = FakeVehiclesAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            vehicleRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<VehiclesUiState.Loading>(viewModel.uiState.value)
+        assertEquals(0, repository.listCalls)
+    }
+
+    @Test
+    fun refreshForSessionMapsRestoreFailureWithoutVehicleCall() = runTest {
+        val repository = FakeUserVehicleRepository(
+            listResult = UserVehicleListResult.Success(emptyList()),
+        )
+        val viewModel = VehiclesViewModel(
+            authRepository = FakeVehiclesAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.RestoreFailed(AuthError.Unavailable("Sessão indisponível.")),
+            ),
+            vehicleRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val error = assertIs<VehiclesUiState.Error>(viewModel.uiState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(0, repository.listCalls)
+    }
+
+    @Test
+    fun refreshForSessionLoadsAfterRestoreCompletes() = runTest {
+        val authRepository = FakeVehiclesAuthRepository(
+            authenticated = false,
+            initialState = AuthSessionState.Restoring,
+        )
+        val repository = FakeUserVehicleRepository(
+            listResult = UserVehicleListResult.Success(
+                listOf(userVehicle(id = "vehicle-1", brand = "BMW")),
+            ),
+        )
+        val viewModel = VehiclesViewModel(
+            authRepository = authRepository,
+            vehicleRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<VehiclesUiState.Loading>(viewModel.uiState.value)
+        assertEquals(0, repository.listCalls)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<VehiclesUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, repository.listCalls)
+    }
+
+    @Test
+    fun loadVehiclesKeepsRestoringStateWhenSessionChangesDuringListLoad() = runTest {
+        val repository = DeferredUserVehicleRepository()
+        val authRepository = FakeVehiclesAuthRepository(authenticated = true)
+        val viewModel = VehiclesViewModel(
+            authRepository = authRepository,
+            vehicleRepository = repository,
+        )
+
+        viewModel.loadVehicles()
+        runCurrent()
+        authRepository.setSessionState(AuthSessionState.Restoring)
+        repository.result.complete(
+            UserVehicleListResult.Success(listOf(userVehicle(id = "vehicle-1", brand = "BMW"))),
+        )
+        runCurrent()
+
+        assertIs<VehiclesUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.listCalls)
+    }
+
+    @Test
+    fun loadVehiclesMapsRestoreFailureWhenSessionChangesDuringListLoad() = runTest {
+        val repository = DeferredUserVehicleRepository()
+        val authRepository = FakeVehiclesAuthRepository(authenticated = true)
+        val viewModel = VehiclesViewModel(
+            authRepository = authRepository,
+            vehicleRepository = repository,
+        )
+
+        viewModel.loadVehicles()
+        runCurrent()
+        authRepository.setSessionState(
+            AuthSessionState.RestoreFailed(AuthError.Backend("Falha ao validar sessão.")),
+        )
+        repository.result.complete(
+            UserVehicleListResult.Success(listOf(userVehicle(id = "vehicle-1", brand = "BMW"))),
+        )
+        runCurrent()
+
+        val error = assertIs<VehiclesUiState.Error>(viewModel.uiState.value)
+        assertEquals("Falha ao validar sessão.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(1, repository.listCalls)
+    }
+
+    @Test
     fun loadVehiclesMapsBackendListToLoadedState() = runTest {
         val viewModel = VehiclesViewModel(
             authRepository = FakeVehiclesAuthRepository(authenticated = true),
@@ -93,6 +213,61 @@ class VehiclesViewModelTest {
 
         assertIs<VehicleMutationUiState.ValidationError>(viewModel.mutationState.value)
         assertEquals(0, repository.createCalls)
+    }
+
+    @Test
+    fun saveVehicleWaitsForAuthenticatedSessionBeforeRepositoryCall() = runTest {
+        val repository = FakeUserVehicleRepository(
+            listResult = UserVehicleListResult.Success(emptyList()),
+        )
+        val viewModel = VehiclesViewModel(
+            authRepository = FakeVehiclesAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            vehicleRepository = repository,
+        )
+
+        viewModel.saveVehicle(
+            VehicleDraftUi(
+                brand = "BMW",
+                model = "320d",
+                plate = "AA-00-BB",
+            ),
+        )
+        runCurrent()
+
+        assertIs<VehiclesUiState.Loading>(viewModel.uiState.value)
+        assertIs<VehicleMutationUiState.Idle>(viewModel.mutationState.value)
+        assertEquals(0, repository.createCalls)
+    }
+
+    @Test
+    fun saveVehicleDiscardsResultWhenSessionChangesDuringMutation() = runTest {
+        val repository = DeferredMutationUserVehicleRepository()
+        val authRepository = FakeVehiclesAuthRepository(authenticated = true)
+        val viewModel = VehiclesViewModel(
+            authRepository = authRepository,
+            vehicleRepository = repository,
+        )
+
+        viewModel.saveVehicle(
+            VehicleDraftUi(
+                brand = "BMW",
+                model = "320d",
+                plate = "AA-00-BB",
+            ),
+        )
+        runCurrent()
+        authRepository.signOut()
+        repository.mutationResult.complete(
+            UserVehicleMutationResult.Success(userVehicle(id = "vehicle-1", brand = "BMW")),
+        )
+        runCurrent()
+
+        assertIs<VehiclesUiState.Unauthenticated>(viewModel.uiState.value)
+        assertIs<VehicleMutationUiState.Idle>(viewModel.mutationState.value)
+        assertEquals(1, repository.createCalls)
     }
 
     @Test
@@ -241,11 +416,58 @@ private class FakeUserVehicleRepository(
     override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult = deleteResult
 }
 
+private class DeferredUserVehicleRepository : UserVehicleRepository {
+    val result = CompletableDeferred<UserVehicleListResult>()
+    var listCalls: Int = 0
+        private set
+
+    override suspend fun getMyVehicles(): UserVehicleListResult {
+        listCalls += 1
+        return result.await()
+    }
+
+    override suspend fun createVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun updateVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult {
+        error("Not used")
+    }
+}
+
+private class DeferredMutationUserVehicleRepository : UserVehicleRepository {
+    val mutationResult = CompletableDeferred<UserVehicleMutationResult>()
+    var createCalls: Int = 0
+        private set
+
+    override suspend fun getMyVehicles(): UserVehicleListResult {
+        error("Not used")
+    }
+
+    override suspend fun createVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        createCalls += 1
+        return mutationResult.await()
+    }
+
+    override suspend fun updateVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult {
+        error("Not used")
+    }
+}
+
 private class FakeVehiclesAuthRepository(
     authenticated: Boolean,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) {
+        initialState ?: if (authenticated) {
             authenticatedSession()
         } else {
             AuthSessionState.Unauthenticated
@@ -259,6 +481,10 @@ private class FakeVehiclesAuthRepository(
 
     fun authenticate(uid: String = "uid-1") {
         mutableSessionState.value = authenticatedSession(uid)
+    }
+
+    fun setSessionState(state: AuthSessionState) {
+        mutableSessionState.value = state
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {

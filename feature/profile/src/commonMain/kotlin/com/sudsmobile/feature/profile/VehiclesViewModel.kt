@@ -2,6 +2,7 @@ package com.sudsmobile.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.vehicle.UserVehicle
@@ -77,14 +78,26 @@ internal class VehiclesViewModel(
     private var loadedUid: String? = null
 
     fun refreshForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            _uiState.value = VehiclesUiState.Unauthenticated
-            if (_mutationState.value !is VehicleMutationUiState.Loading) {
-                _mutationState.value = VehicleMutationUiState.Idle
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Loading
+                clearMutationStateIfIdle()
+                return
             }
-            return
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toVehiclesUiState()
+                clearMutationStateIfIdle()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Unauthenticated
+                clearMutationStateIfIdle()
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val uid = session.session.user.uid
@@ -95,13 +108,23 @@ internal class VehiclesViewModel(
     }
 
     fun loadVehicles() {
-        if (_uiState.value is VehiclesUiState.Loading) return
-
-        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            _uiState.value = VehiclesUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toVehiclesUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val requestedUid = session.session.user.uid
@@ -111,13 +134,28 @@ internal class VehiclesViewModel(
                 is UserVehicleListResult.Success -> result.vehicles.toUiState()
                 is UserVehicleListResult.Failure -> result.error.toVehiclesUiState()
             }
-            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedUid = requestedUid
-                _uiState.value = nextState
-            } else {
-                loadedUid = null
-                _uiState.value = VehiclesUiState.Unauthenticated
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    clearLoadedSession()
+                    _uiState.value = VehiclesUiState.Loading
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    clearLoadedSession()
+                    _uiState.value = currentSessionState.error.toVehiclesUiState()
+                }
+                AuthSessionState.Unauthenticated -> {
+                    clearLoadedSession()
+                    _uiState.value = VehiclesUiState.Unauthenticated
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid == requestedUid) {
+                        loadedUid = requestedUid
+                        _uiState.value = nextState
+                    } else {
+                        clearLoadedSession()
+                        _uiState.value = VehiclesUiState.Unauthenticated
+                    }
+                }
             }
         }
     }
@@ -131,12 +169,19 @@ internal class VehiclesViewModel(
             return
         }
 
+        val requestedUid = authenticatedUidOrUpdateState() ?: return
+
         viewModelScope.launch {
             _mutationState.value = VehicleMutationUiState.Loading
             val result = if (request.id == null) {
                 vehicleRepository.createVehicle(request)
             } else {
                 vehicleRepository.updateVehicle(request)
+            }
+
+            if (!sessionStillMatches(requestedUid)) {
+                handleSessionChangedDuringMutation()
+                return@launch
             }
 
             _mutationState.value = when (result) {
@@ -152,9 +197,17 @@ internal class VehiclesViewModel(
     fun deleteVehicle(vehicleId: String) {
         if (_mutationState.value is VehicleMutationUiState.Loading) return
 
+        val requestedUid = authenticatedUidOrUpdateState() ?: return
+
         viewModelScope.launch {
             _mutationState.value = VehicleMutationUiState.Loading
-            _mutationState.value = when (val result = vehicleRepository.deleteVehicle(vehicleId)) {
+            val result = vehicleRepository.deleteVehicle(vehicleId)
+            if (!sessionStillMatches(requestedUid)) {
+                handleSessionChangedDuringMutation()
+                return@launch
+            }
+
+            _mutationState.value = when (result) {
                 UserVehicleDeleteResult.Success -> {
                     publishDeletedVehicle(vehicleId)
                     VehicleMutationUiState.Success("Veículo removido.")
@@ -173,9 +226,17 @@ internal class VehiclesViewModel(
             return
         }
 
+        val requestedUid = authenticatedUidOrUpdateState() ?: return
+
         viewModelScope.launch {
             _mutationState.value = VehicleMutationUiState.Loading
-            _mutationState.value = when (val result = vehicleRepository.updateVehicle(request)) {
+            val result = vehicleRepository.updateVehicle(request)
+            if (!sessionStillMatches(requestedUid)) {
+                handleSessionChangedDuringMutation()
+                return@launch
+            }
+
+            _mutationState.value = when (result) {
                 is UserVehicleMutationResult.Success -> {
                     publishSavedVehicle(result.vehicle.toUiModel())
                     VehicleMutationUiState.Success("Veículo predefinido atualizado.")
@@ -187,6 +248,66 @@ internal class VehiclesViewModel(
 
     fun clearMutationState() {
         _mutationState.value = VehicleMutationUiState.Idle
+    }
+
+    private fun authenticatedUidOrUpdateState(): String? {
+        return when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Loading
+                _mutationState.value = VehicleMutationUiState.Idle
+                null
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toVehiclesUiState()
+                _mutationState.value = VehicleMutationUiState.Idle
+                null
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Unauthenticated
+                _mutationState.value = VehicleMutationUiState.Idle
+                null
+            }
+            is AuthSessionState.Authenticated -> currentSessionState.session.user.uid
+        }
+    }
+
+    private fun sessionStillMatches(uid: String): Boolean {
+        return (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid == uid
+    }
+
+    private fun handleSessionChangedDuringMutation() {
+        when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Loading
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toVehiclesUiState()
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Unauthenticated
+            }
+            is AuthSessionState.Authenticated -> {
+                clearLoadedSession()
+                _uiState.value = VehiclesUiState.Unauthenticated
+            }
+        }
+        _mutationState.value = VehicleMutationUiState.Idle
+    }
+
+    private fun clearLoadedSession() {
+        loadedUid = null
+    }
+
+    private fun clearMutationStateIfIdle() {
+        if (_mutationState.value !is VehicleMutationUiState.Loading) {
+            _mutationState.value = VehicleMutationUiState.Idle
+        }
     }
 
     private fun publishSavedVehicle(vehicle: VehicleUi) {
@@ -256,6 +377,14 @@ internal class VehiclesViewModel(
             is UserVehicleError.Backend -> VehicleMutationUiState.Error(message = message, retryable = true)
         }
     }
+}
+
+private fun AuthError.toVehiclesUiState(): VehiclesUiState.Error {
+    return VehiclesUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.isRetryableSessionError(): Boolean {
+    return this is AuthError.Unavailable || this is AuthError.Backend
 }
 
 private val vehicleComparator = compareByDescending<VehicleUi> { it.isDefault }
