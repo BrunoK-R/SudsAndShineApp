@@ -179,6 +179,45 @@ class RatingViewModelTest {
     }
 
     @Test
+    fun submitReviewWaitsForValidatedSessionBeforeRepositoryCall() = runTest {
+        val repository = FakeRatingBookingRepository(historyResult = completedHistory())
+        val viewModel = RatingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeRatingAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+        )
+
+        viewModel.submitReview("reservation-1", rating = 5, tags = emptyList(), comment = "")
+        runCurrent()
+
+        val error = assertIs<RatingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals(true, error.retryable)
+        assertEquals(false, error.requiresSignIn)
+        assertEquals(0, repository.reviewCalls)
+    }
+
+    @Test
+    fun submitReviewRejectsSessionUserChangeBeforeRepositoryCall() = runTest {
+        val authRepository = FakeRatingAuthRepository(authenticated = true)
+        val repository = FakeRatingBookingRepository(historyResult = completedHistory())
+        val viewModel = RatingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+        )
+
+        viewModel.submitReview("reservation-1", rating = 5, tags = emptyList(), comment = "")
+        authRepository.authenticate(uid = "uid-2")
+        runCurrent()
+
+        val error = assertIs<RatingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals(false, error.retryable)
+        assertEquals(false, error.requiresSignIn)
+        assertEquals(0, repository.reviewCalls)
+    }
+
+    @Test
     fun submitReviewMapsBackendFailureToRetryableError() = runTest {
         val viewModel = RatingViewModel(
             bookingRepository = FakeRatingBookingRepository(
@@ -245,7 +284,12 @@ private class FakeRatingAuthRepository(
         return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
     }
 
+    fun authenticate(uid: String = "uid-1") {
+        mutableSessionState.value = authenticatedSession(uid)
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
+        authenticate()
         return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
     }
 
@@ -255,6 +299,7 @@ private class FakeRatingAuthRepository(
         phoneNumber: String,
         password: String,
     ): AuthResult {
+        authenticate()
         return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
     }
 

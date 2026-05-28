@@ -172,8 +172,45 @@ internal class RatingViewModel(
             return
         }
 
+        val expectedUid = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                _submitState.value = restoringSubmitState()
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                _submitState.value = currentSessionState.error.toSubmitState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                _submitState.value = unauthenticatedSubmitState()
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState.session.user.uid
+        }
+
         viewModelScope.launch {
             _submitState.value = RatingSubmitUiState.Loading
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    _submitState.value = restoringSubmitState()
+                    return@launch
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    _submitState.value = currentSessionState.error.toSubmitState()
+                    return@launch
+                }
+                AuthSessionState.Unauthenticated -> {
+                    _submitState.value = unauthenticatedSubmitState()
+                    return@launch
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid != expectedUid) {
+                        _submitState.value = changedSessionSubmitState()
+                        return@launch
+                    }
+                }
+            }
+
             _submitState.value = when (
                 val result = bookingRepository.submitReview(
                     BookingReviewRequest(
@@ -231,6 +268,37 @@ internal class RatingViewModel(
 
 private fun AuthError.toTargetState(): RatingTargetUiState.Error {
     return RatingTargetUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.toSubmitState(): RatingSubmitUiState.Error {
+    val retryable = isRetryableSessionError()
+    return RatingSubmitUiState.Error(
+        message = message,
+        retryable = retryable,
+        requiresSignIn = !retryable,
+    )
+}
+
+private fun restoringSubmitState(): RatingSubmitUiState.Error {
+    return RatingSubmitUiState.Error(
+        message = "A sessão ainda está a ser validada. Tente novamente dentro de momentos.",
+        retryable = true,
+    )
+}
+
+private fun unauthenticatedSubmitState(): RatingSubmitUiState.Error {
+    return RatingSubmitUiState.Error(
+        message = "Inicie sessão para enviar esta avaliação.",
+        retryable = false,
+        requiresSignIn = true,
+    )
+}
+
+private fun changedSessionSubmitState(): RatingSubmitUiState.Error {
+    return RatingSubmitUiState.Error(
+        message = "A sessão mudou antes de enviarmos a avaliação. Atualize e tente novamente.",
+        retryable = false,
+    )
 }
 
 private fun AuthError.isRetryableSessionError(): Boolean {

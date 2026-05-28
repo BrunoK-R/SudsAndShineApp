@@ -276,8 +276,45 @@ internal class CartBookingsViewModel(
     fun cancelBooking(reservationId: String) {
         if (_cancellationState.value is BookingCancellationUiState.Loading) return
 
+        val expectedUid = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                _cancellationState.value = restoringCancellationState(reservationId)
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                _cancellationState.value = currentSessionState.error.toCancellationUiState(reservationId)
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                _cancellationState.value = unauthenticatedCancellationState(reservationId)
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState.session.user.uid
+        }
+
         viewModelScope.launch {
             _cancellationState.value = BookingCancellationUiState.Loading(reservationId)
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    _cancellationState.value = restoringCancellationState(reservationId)
+                    return@launch
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    _cancellationState.value = currentSessionState.error.toCancellationUiState(reservationId)
+                    return@launch
+                }
+                AuthSessionState.Unauthenticated -> {
+                    _cancellationState.value = unauthenticatedCancellationState(reservationId)
+                    return@launch
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid != expectedUid) {
+                        _cancellationState.value = changedSessionCancellationState(reservationId)
+                        return@launch
+                    }
+                }
+            }
+
             _cancellationState.value = when (
                 val result = bookingRepository.cancelBooking(BookingCancelRequest(reservationId))
             ) {
@@ -332,8 +369,45 @@ internal class CartBookingsViewModel(
             return
         }
 
+        val expectedUid = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                _rescheduleState.value = restoringRescheduleState(request.reservationId)
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                _rescheduleState.value = currentSessionState.error.toRescheduleState(request.reservationId)
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                _rescheduleState.value = unauthenticatedRescheduleState(request.reservationId)
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState.session.user.uid
+        }
+
         viewModelScope.launch {
             _rescheduleState.value = BookingRescheduleUiState.Loading(request.reservationId)
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    _rescheduleState.value = restoringRescheduleState(request.reservationId)
+                    return@launch
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    _rescheduleState.value = currentSessionState.error.toRescheduleState(request.reservationId)
+                    return@launch
+                }
+                AuthSessionState.Unauthenticated -> {
+                    _rescheduleState.value = unauthenticatedRescheduleState(request.reservationId)
+                    return@launch
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid != expectedUid) {
+                        _rescheduleState.value = changedSessionRescheduleState(request.reservationId)
+                        return@launch
+                    }
+                }
+            }
+
             _rescheduleState.value = when (val result = bookingRepository.rescheduleBooking(request)) {
                 is BookingRescheduleResult.Success -> BookingRescheduleUiState.Success(result.receipt.reservationId)
                 is BookingRescheduleResult.Failure -> result.error.toRescheduleState(request.reservationId)
@@ -379,6 +453,38 @@ internal class CartBookingsViewModel(
         )
     }
 
+    private fun AuthError.toCancellationUiState(reservationId: String): BookingCancellationUiState.Error {
+        return BookingCancellationUiState.Error(
+            reservationId = reservationId,
+            message = message,
+            retryable = isRetryableSessionError(),
+        )
+    }
+
+    private fun restoringCancellationState(reservationId: String): BookingCancellationUiState.Error {
+        return BookingCancellationUiState.Error(
+            reservationId = reservationId,
+            message = "A sessão ainda está a ser validada. Tente novamente dentro de momentos.",
+            retryable = true,
+        )
+    }
+
+    private fun unauthenticatedCancellationState(reservationId: String): BookingCancellationUiState.Error {
+        return BookingCancellationUiState.Error(
+            reservationId = reservationId,
+            message = "Inicie sessão para cancelar esta marcação.",
+            retryable = false,
+        )
+    }
+
+    private fun changedSessionCancellationState(reservationId: String): BookingCancellationUiState.Error {
+        return BookingCancellationUiState.Error(
+            reservationId = reservationId,
+            message = "A sessão mudou antes de cancelarmos a marcação. Atualize a lista e tente novamente.",
+            retryable = false,
+        )
+    }
+
     private fun BookingAvailabilityError.toRescheduleAvailabilityState(): BookingRescheduleAvailabilityUiState.Error {
         val retryable = this is BookingAvailabilityError.Unavailable ||
             this is BookingAvailabilityError.Backend
@@ -395,6 +501,46 @@ internal class CartBookingsViewModel(
             retryable = retryable,
             changeSlot = changeSlot,
         )
+    }
+
+    private fun AuthError.toRescheduleState(reservationId: String): BookingRescheduleUiState.Error {
+        return BookingRescheduleUiState.Error(
+            reservationId = reservationId,
+            message = message,
+            retryable = isRetryableSessionError(),
+            changeSlot = false,
+        )
+    }
+
+    private fun restoringRescheduleState(reservationId: String): BookingRescheduleUiState.Error {
+        return BookingRescheduleUiState.Error(
+            reservationId = reservationId,
+            message = "A sessão ainda está a ser validada. Tente novamente dentro de momentos.",
+            retryable = true,
+            changeSlot = false,
+        )
+    }
+
+    private fun unauthenticatedRescheduleState(reservationId: String): BookingRescheduleUiState.Error {
+        return BookingRescheduleUiState.Error(
+            reservationId = reservationId,
+            message = "Inicie sessão para remarcar esta marcação.",
+            retryable = false,
+            changeSlot = false,
+        )
+    }
+
+    private fun changedSessionRescheduleState(reservationId: String): BookingRescheduleUiState.Error {
+        return BookingRescheduleUiState.Error(
+            reservationId = reservationId,
+            message = "A sessão mudou antes de remarcarmos a marcação. Atualize a lista e tente novamente.",
+            retryable = false,
+            changeSlot = false,
+        )
+    }
+
+    private fun AuthError.isRetryableSessionError(): Boolean {
+        return this is AuthError.Unavailable || this is AuthError.Backend
     }
 
     private fun clearLoadedSession() {

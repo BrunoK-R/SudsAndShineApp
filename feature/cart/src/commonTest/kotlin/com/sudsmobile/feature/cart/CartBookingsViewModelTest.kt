@@ -436,6 +436,51 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun cancelBookingWaitsForValidatedSessionBeforeRepositoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.cancelBooking("reservation-1")
+        runCurrent()
+
+        val error = assertIs<BookingCancellationUiState.Error>(viewModel.cancellationState.value)
+        assertEquals("reservation-1", error.reservationId)
+        assertEquals(true, error.retryable)
+        assertEquals(0, repository.cancelCalls)
+    }
+
+    @Test
+    fun cancelBookingRejectsSessionUserChangeBeforeRepositoryCall() = runTest {
+        val authRepository = FakeCartAuthRepository(authenticated = true)
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.cancelBooking("reservation-1")
+        authRepository.authenticate(uid = "uid-2")
+        runCurrent()
+
+        val error = assertIs<BookingCancellationUiState.Error>(viewModel.cancellationState.value)
+        assertEquals("reservation-1", error.reservationId)
+        assertEquals(false, error.retryable)
+        assertEquals(0, repository.cancelCalls)
+    }
+
+    @Test
     fun loadRescheduleAvailabilityRequestsBackendDurationAndAnchor() = runTest {
         val repository = FakeBookingRepository(
             historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
@@ -538,6 +583,67 @@ class CartBookingsViewModelTest {
         assertEquals("Este horário deixou de estar disponível.", error.message)
         assertEquals(false, error.retryable)
         assertEquals(true, error.changeSlot)
+    }
+
+    @Test
+    fun rescheduleBookingWaitsForValidatedSessionBeforeRepositoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.rescheduleBooking(
+            BookingRescheduleDraft(
+                reservationId = "reservation-1",
+                dateId = "2026-05-22",
+                time = "11:00",
+                durationMinutes = 45,
+            ),
+        )
+        runCurrent()
+
+        val error = assertIs<BookingRescheduleUiState.Error>(viewModel.rescheduleState.value)
+        assertEquals("reservation-1", error.reservationId)
+        assertEquals(true, error.retryable)
+        assertEquals(false, error.changeSlot)
+        assertEquals(0, repository.rescheduleCalls)
+    }
+
+    @Test
+    fun rescheduleBookingRejectsSessionUserChangeBeforeRepositoryCall() = runTest {
+        val authRepository = FakeCartAuthRepository(authenticated = true)
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.rescheduleBooking(
+            BookingRescheduleDraft(
+                reservationId = "reservation-1",
+                dateId = "2026-05-22",
+                time = "11:00",
+                durationMinutes = 45,
+            ),
+        )
+        authRepository.authenticate(uid = "uid-2")
+        runCurrent()
+
+        val error = assertIs<BookingRescheduleUiState.Error>(viewModel.rescheduleState.value)
+        assertEquals("reservation-1", error.reservationId)
+        assertEquals(false, error.retryable)
+        assertEquals(false, error.changeSlot)
+        assertEquals(0, repository.rescheduleCalls)
     }
 
     @Test
