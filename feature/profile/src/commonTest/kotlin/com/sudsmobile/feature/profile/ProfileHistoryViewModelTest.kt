@@ -15,6 +15,7 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingReservationExtra
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import kotlin.test.AfterTest
@@ -157,11 +158,57 @@ class ProfileHistoryViewModelTest {
         assertEquals("57,00€", loaded.summary.totalSpent)
         assertEquals(listOf("completed-1", "completed-2"), loaded.items.map { it.id })
         assertEquals("18 de maio, 2026", loaded.items.first().date)
+        assertEquals("10:00", loaded.items.first().time)
+        assertEquals("SS-completed-1", loaded.items.first().reference)
         assertEquals("BMW 320d", loaded.items.first().vehicle)
         assertEquals(true, loaded.items.first().reviewed)
         assertEquals(5, loaded.items.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), loaded.items.first().reviewTags)
         assertEquals("Ficou impecável. Voltava a reservar.", loaded.items.first().reviewComment)
+    }
+
+    @Test
+    fun loadHistoryMapsReservationDetailMetadata() = runTest {
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "completed-1",
+                                reservationCode = "SS-DETAIL",
+                                slotStartIso = "2026-05-18T10:30:00.000Z",
+                                upcoming = false,
+                                priceCents = 3950,
+                                paymentStatus = "covered_by_loyalty",
+                                extras = listOf(
+                                    BookingReservationExtra(id = "wax", name = " Cera premium ", priceCents = 700),
+                                    BookingReservationExtra(id = "vacuum", name = "Aspiração", priceCents = 0),
+                                    BookingReservationExtra(id = "blank", name = " ", priceCents = 500),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeProfileHistoryAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadHistory()
+        runCurrent()
+
+        val item = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value).items.single()
+        assertEquals("SS-DETAIL", item.reference)
+        assertEquals("10:30", item.time)
+        assertEquals("Recompensa", item.paymentStatus)
+        assertEquals("Lavagem Premium + 2 extras", item.service)
+        assertEquals(
+            listOf(
+                ProfileHistoryExtraUi(name = "Cera premium", price = "7,00€"),
+                ProfileHistoryExtraUi(name = "Aspiração", price = "Incluído"),
+            ),
+            item.extras,
+        )
     }
 
     @Test
@@ -426,11 +473,14 @@ private fun authenticatedSession(uid: String = "uid-1"): AuthSessionState.Authen
 
 private fun historyReservation(
     id: String,
+    reservationCode: String = "SS-$id",
     slotStartIso: String,
     upcoming: Boolean,
     status: String = if (upcoming) "pending" else "completed",
+    paymentStatus: String = "paid",
     priceCents: Int?,
     vehicleLabel: String? = null,
+    extras: List<BookingReservationExtra> = emptyList(),
     reviewed: Boolean = false,
     reviewRating: Int? = null,
     reviewTags: List<String> = emptyList(),
@@ -441,12 +491,13 @@ private fun historyReservation(
     rescheduleCount: Int = 0,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
-    reservationCode = "SS-$id",
+    reservationCode = reservationCode,
     serviceId = "premium",
     serviceName = "Lavagem Premium",
     slotStartIso = slotStartIso,
     slotEndIso = slotStartIso,
     status = status,
+    paymentStatus = paymentStatus,
     vehicleType = "suv",
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,
@@ -455,6 +506,7 @@ private fun historyReservation(
     reviewRating = reviewRating,
     reviewTags = reviewTags,
     reviewComment = reviewComment,
+    extras = extras,
     rescheduledAtIso = rescheduledAtIso,
     previousSlotStartIso = previousSlotStartIso,
     previousSlotEndIso = previousSlotEndIso,

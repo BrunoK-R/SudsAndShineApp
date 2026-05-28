@@ -10,9 +10,12 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingPaymentStatus
 import com.sudsmobile.data.booking.BookingReservationStatus
+import com.sudsmobile.data.booking.BookingReservationExtra
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.booking.bookingPaymentStatus
 import com.sudsmobile.data.booking.isCompletedReservation
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,17 +36,26 @@ internal enum class ProfileHistoryStatusUi(val label: String) {
 
 internal data class ProfileHistoryItemUi(
     val id: String,
+    val reference: String,
     val service: String,
     val date: String,
+    val time: String,
     val vehicle: String,
     val price: String,
     val priceCents: Int?,
+    val paymentStatus: String,
+    val extras: List<ProfileHistoryExtraUi>,
     val status: ProfileHistoryStatusUi,
     val reviewed: Boolean,
     val reviewRating: Int?,
     val reviewTags: List<String>,
     val reviewComment: String,
     val auditNotes: List<ProfileHistoryAuditNoteUi>,
+)
+
+internal data class ProfileHistoryExtraUi(
+    val name: String,
+    val price: String,
 )
 
 internal data class ProfileHistoryAuditNoteUi(
@@ -181,11 +193,15 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
 
     return ProfileHistoryItemUi(
         id = id,
+        reference = reservationCode.ifBlank { id },
         service = serviceLabelWithExtras(),
         date = slotStartIso.toDateLabel(),
+        time = slotStartIso.toTimeLabel(),
         vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         priceCents = priceCents,
+        paymentStatus = bookingPaymentStatus().toHistoryPaymentLabel(),
+        extras = extras.toHistoryExtraUi(),
         status = status.toHistoryStatusUi(),
         reviewed = reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
@@ -193,6 +209,17 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         reviewComment = reviewComment.sanitizedReviewComment(),
         auditNotes = auditNotes(),
     )
+}
+
+private fun List<BookingReservationExtra>.toHistoryExtraUi(): List<ProfileHistoryExtraUi> {
+    return mapNotNull { extra ->
+        val name = extra.name.trim()
+        if (name.isBlank()) return@mapNotNull null
+        ProfileHistoryExtraUi(
+            name = name,
+            price = if (extra.priceCents > 0) extra.priceCents.toEuroLabel() else "Incluído",
+        )
+    }.take(8)
 }
 
 private fun List<String>.sanitizedReviewTags(): List<String> {
@@ -235,9 +262,10 @@ private fun BookingHistoryReservation.auditNotes(): List<ProfileHistoryAuditNote
 
 private fun BookingHistoryReservation.serviceLabelWithExtras(): String {
     val baseLabel = serviceName.ifBlank { "Serviço" }
-    if (extras.isEmpty()) return baseLabel
+    val extraCount = extras.count { it.name.trim().isNotBlank() }
+    if (extraCount == 0) return baseLabel
 
-    val extrasLabel = if (extras.size == 1) "1 extra" else "${extras.size} extras"
+    val extrasLabel = if (extraCount == 1) "1 extra" else "$extraCount extras"
     return "$baseLabel + $extrasLabel"
 }
 
@@ -250,6 +278,15 @@ private fun String.toHistoryStatusUi(): ProfileHistoryStatusUi {
         BookingReservationStatus.InProgress,
         BookingReservationStatus.Unknown -> ProfileHistoryStatusUi.Past
     }
+}
+
+private fun BookingPaymentStatus.toHistoryPaymentLabel(): String = when (this) {
+    BookingPaymentStatus.Pending -> "Pendente"
+    BookingPaymentStatus.Paid -> "Pago"
+    BookingPaymentStatus.CoveredByLoyalty -> "Recompensa"
+    BookingPaymentStatus.Refunded -> "Reembolsado"
+    BookingPaymentStatus.Failed -> "Falhou"
+    BookingPaymentStatus.Unknown -> "A confirmar"
 }
 
 private fun String.toVehicleLabel(): String = when (lowercase()) {

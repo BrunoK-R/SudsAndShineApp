@@ -33,6 +33,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -48,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.viewmodel.koinViewModel
@@ -315,6 +317,8 @@ private fun HistoryItemCard(item: ProfileHistoryItemUi) {
                 )
             }
 
+            HistoryBookingDetails(item = item)
+
             if (item.auditNotes.isNotEmpty()) {
                 HistoryAuditNotes(notes = item.auditNotes)
             }
@@ -327,6 +331,58 @@ private fun HistoryItemCard(item: ProfileHistoryItemUi) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun HistoryBookingDetails(item: ProfileHistoryItemUi) {
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        HistoryDetailRow(label = "Referência", value = item.reference)
+        HistoryDetailRow(label = "Hora", value = item.time)
+        HistoryDetailRow(label = "Pagamento", value = item.paymentStatus)
+
+        if (item.extras.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text(
+                    text = "Extras",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold,
+                )
+                item.extras.forEach { extra ->
+                    HistoryDetailRow(label = extra.name, value = extra.price)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryDetailRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            modifier = Modifier.weight(1.1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
