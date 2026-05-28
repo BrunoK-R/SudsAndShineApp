@@ -54,6 +54,7 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun PaymentScreen(
+    targetReservationId: String? = null,
     contentPadding: PaddingValues,
     onBack: () -> Unit = {},
     onRequestSignIn: () -> Unit = {},
@@ -69,8 +70,8 @@ fun PaymentScreen(
         viewModel.loadBusinessInfo()
     }
 
-    LaunchedEffect(sessionState, bookingRevision) {
-        viewModel.refreshForSession()
+    LaunchedEffect(sessionState, bookingRevision, targetReservationId) {
+        viewModel.refreshForSession(targetReservationId = targetReservationId)
     }
 
     Column(
@@ -92,7 +93,7 @@ fun PaymentScreen(
             PaymentContent(
                 uiState = uiState,
                 businessInfoState = businessInfoState,
-                onRetry = { viewModel.refreshForSession(force = true) },
+                onRetry = { viewModel.refreshForSession(targetReservationId = targetReservationId, force = true) },
                 onRetryBusinessInfo = { viewModel.loadBusinessInfo(force = true) },
                 onRequestSignIn = onRequestSignIn,
                 onBookWash = onBookWash,
@@ -194,6 +195,19 @@ private fun PaymentContent(
             )
         }
 
+        is PaymentUiState.TargetUnavailable -> {
+            PaymentStatusCard(
+                title = uiState.title,
+                body = uiState.message,
+                actionLabel = "Atualizar",
+                onAction = onRetry,
+            )
+            PaymentHelpCard(
+                businessInfoState = businessInfoState,
+                onRetryBusinessInfo = onRetryBusinessInfo,
+            )
+        }
+
         is PaymentUiState.Error -> PaymentStatusCard(
             title = "Não foi possível carregar",
             body = uiState.message,
@@ -202,7 +216,12 @@ private fun PaymentContent(
         )
 
         is PaymentUiState.Loaded -> {
-            PaymentTotalCard(totalDue = uiState.totalDue, bookingCount = uiState.bookings.size)
+            PaymentTotalCard(
+                totalDue = uiState.totalDue,
+                bookingCount = uiState.bookings.size,
+                focusedBookingReference = uiState.focusedBookingReference,
+                otherPendingCount = uiState.otherPendingCount,
+            )
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 uiState.bookings.forEach { booking ->
                     PaymentBookingCard(booking = booking)
@@ -220,7 +239,10 @@ private fun PaymentContent(
 private fun PaymentTotalCard(
     totalDue: String,
     bookingCount: Int,
+    focusedBookingReference: String?,
+    otherPendingCount: Int,
 ) {
+    val focused = focusedBookingReference != null
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.inverseSurface),
@@ -244,12 +266,16 @@ private fun PaymentTotalCard(
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Total em aberto",
+                    text = if (focused) "Pagamento selecionado" else "Total em aberto",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
                 )
                 Text(
-                    text = "$bookingCount marcação${if (bookingCount == 1) "" else "ões"} pendente${if (bookingCount == 1) "" else "s"}",
+                    text = if (focused) {
+                        buildFocusedPaymentSubtitle(focusedBookingReference, otherPendingCount)
+                    } else {
+                        "$bookingCount marcação${if (bookingCount == 1) "" else "ões"} pendente${if (bookingCount == 1) "" else "s"}"
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
                 )
@@ -263,6 +289,16 @@ private fun PaymentTotalCard(
             )
         }
     }
+}
+
+private fun buildFocusedPaymentSubtitle(
+    focusedBookingReference: String?,
+    otherPendingCount: Int,
+): String {
+    val reference = focusedBookingReference?.takeIf { it.isNotBlank() }?.let { "Referência $it" }
+        ?: "Marcação selecionada"
+    if (otherPendingCount <= 0) return reference
+    return "$reference - +$otherPendingCount pendente${if (otherPendingCount == 1) "" else "s"}"
 }
 
 @Composable

@@ -97,7 +97,7 @@ fun CartScreen(
     contentPadding: PaddingValues,
     onRateService: (String) -> Unit = {},
     onRequestSignIn: () -> Unit = {},
-    onOpenPayment: () -> Unit = {},
+    onOpenPayment: (String) -> Unit = {},
 ) {
     val viewModel: CartBookingsViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -359,7 +359,7 @@ private fun BookingsContent(
     onRetry: () -> Unit,
     onRetryBusinessInfo: () -> Unit,
     onRequestSignIn: () -> Unit,
-    onOpenPayment: () -> Unit,
+    onOpenPayment: (String) -> Unit,
     onRateService: (String) -> Unit,
     onRequestReschedule: (BookingSummaryUi) -> Unit,
     onDismissReschedule: (String) -> Unit,
@@ -455,7 +455,7 @@ private fun BookingsContent(
                             rescheduleAnchorDate = rescheduleAnchorDate,
                             minimumRescheduleMonthAnchor = minimumRescheduleMonthAnchor,
                             onRetryBusinessInfo = onRetryBusinessInfo,
-                            onOpenPayment = onOpenPayment,
+                            onOpenPayment = { onOpenPayment(booking.id) },
                             onRateService = { onRateService(booking.id) },
                             onRequestReschedule = { onRequestReschedule(booking) },
                             onDismissReschedule = { onDismissReschedule(booking.id) },

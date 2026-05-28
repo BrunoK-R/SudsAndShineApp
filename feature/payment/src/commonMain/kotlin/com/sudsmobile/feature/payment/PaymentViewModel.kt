@@ -48,9 +48,15 @@ internal sealed interface PaymentUiState {
     data object Loading : PaymentUiState
     data object Unauthenticated : PaymentUiState
     data object Empty : PaymentUiState
+    data class TargetUnavailable(
+        val title: String,
+        val message: String,
+    ) : PaymentUiState
     data class Loaded(
         val bookings: List<PaymentBookingUi>,
         val totalDue: String,
+        val focusedBookingReference: String? = null,
+        val otherPendingCount: Int = 0,
     ) : PaymentUiState
     data class Error(val message: String, val retryable: Boolean) : PaymentUiState
 }
@@ -83,12 +89,18 @@ internal class PaymentViewModel(
 
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
+    private var loadedTargetReservationId: String? = null
 
-    fun refreshForSession(force: Boolean = false) {
+    fun refreshForSession(
+        targetReservationId: String? = null,
+        force: Boolean = false,
+    ) {
+        val targetId = targetReservationId.normalizedTargetReservationId()
         when (val session = sessionState.value) {
             AuthSessionState.Restoring -> {
                 loadedUid = null
                 loadedRevision = null
+                loadedTargetReservationId = null
                 _uiState.value = PaymentUiState.Loading
             }
             is AuthSessionState.RestoreFailed -> {
@@ -103,15 +115,23 @@ internal class PaymentViewModel(
                 val uid = session.session.user.uid
                 val revision = bookingRevision.value
                 val hasReusableState = _uiState.value is PaymentUiState.Loaded ||
-                    _uiState.value is PaymentUiState.Empty
-                if (!force && loadedUid == uid && loadedRevision == revision && hasReusableState) return
-                loadPayments()
+                    _uiState.value is PaymentUiState.Empty ||
+                    _uiState.value is PaymentUiState.TargetUnavailable
+                if (
+                    !force &&
+                    loadedUid == uid &&
+                    loadedRevision == revision &&
+                    loadedTargetReservationId == targetId &&
+                    hasReusableState
+                ) return
+                loadPayments(targetId)
             }
         }
     }
 
-    fun loadPayments() {
+    fun loadPayments(targetReservationId: String? = null) {
         if (_uiState.value is PaymentUiState.Loading) return
+        val targetId = targetReservationId.normalizedTargetReservationId()
 
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
@@ -137,7 +157,7 @@ internal class PaymentViewModel(
         viewModelScope.launch {
             _uiState.value = PaymentUiState.Loading
             val nextState = when (val result = bookingRepository.getMyBookings()) {
-                is BookingHistoryResult.Success -> result.history.toPaymentUiState()
+                is BookingHistoryResult.Success -> result.history.toPaymentUiState(targetId)
                 is BookingHistoryResult.Failure -> result.error.toPaymentUiState()
             }
 
@@ -158,6 +178,7 @@ internal class PaymentViewModel(
                     if (currentSessionState.session.user.uid == requestedUid) {
                         loadedUid = requestedUid
                         loadedRevision = requestedRevision
+                        loadedTargetReservationId = targetId
                         _uiState.value = nextState
                     } else {
                         clearLoadedSession()
@@ -181,10 +202,29 @@ internal class PaymentViewModel(
         }
     }
 
-    private fun BookingHistory.toPaymentUiState(): PaymentUiState {
+    private fun BookingHistory.toPaymentUiState(targetReservationId: String?): PaymentUiState {
         val bookings = reservations
             .mapNotNull { it.toPaymentBookingUiOrNull() }
             .sortedBy { it.date + it.time }
+
+        if (targetReservationId != null) {
+            val targetReservation = reservations.firstOrNull { it.id == targetReservationId }
+                ?: return PaymentUiState.TargetUnavailable(
+                    title = "Pagamento não encontrado",
+                    message = "Não encontrámos esta marcação na sua conta.",
+                )
+            val targetBooking = targetReservation.toPaymentBookingUiOrNull()
+                ?: return PaymentUiState.TargetUnavailable(
+                    title = "Sem valor pendente",
+                    message = "Esta marcação já não tem pagamento em aberto.",
+                )
+            return PaymentUiState.Loaded(
+                bookings = listOf(targetBooking),
+                totalDue = targetBooking.priceCents.toEuroLabel(),
+                focusedBookingReference = targetBooking.reference,
+                otherPendingCount = (bookings.size - 1).coerceAtLeast(0),
+            )
+        }
 
         if (bookings.isEmpty()) return PaymentUiState.Empty
 
@@ -206,8 +246,13 @@ internal class PaymentViewModel(
     private fun clearLoadedSession() {
         loadedUid = null
         loadedRevision = null
+        loadedTargetReservationId = null
     }
 }
+
+private fun String?.normalizedTargetReservationId(): String? = this
+    ?.trim()
+    ?.takeIf { it.isNotBlank() }
 
 internal fun PaymentBusinessInfoUiState.infoOrDefault(): PaymentBusinessInfoUi {
     return when (this) {

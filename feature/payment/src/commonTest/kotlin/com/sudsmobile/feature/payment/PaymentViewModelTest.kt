@@ -159,6 +159,89 @@ class PaymentViewModelTest {
     }
 
     @Test
+    fun loadPaymentsWithTargetReservationFocusesMatchingPayableReservation() = runTest {
+        val viewModel = PaymentViewModel(
+            bookingRepository = FakePaymentBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "payable-1",
+                                reservationCode = "SS-FOCUS",
+                                slotStartIso = "2026-05-22T10:00:00.000Z",
+                                priceCents = 3400,
+                            ),
+                            historyReservation(
+                                id = "payable-2",
+                                reservationCode = "SS-OTHER",
+                                slotStartIso = "2026-05-23T11:00:00.000Z",
+                                priceCents = 2500,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakePaymentAuthRepository(authenticated = true),
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments(" payable-1 ")
+        runCurrent()
+
+        val loaded = assertIs<PaymentUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("34,00€", loaded.totalDue)
+        assertEquals("payable-1", loaded.bookings.single().id)
+        assertEquals("SS-FOCUS", loaded.focusedBookingReference)
+        assertEquals(1, loaded.otherPendingCount)
+    }
+
+    @Test
+    fun loadPaymentsWithTargetReservationMapsPaidReservationToUnavailableState() = runTest {
+        val viewModel = PaymentViewModel(
+            bookingRepository = FakePaymentBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "paid-1",
+                                paymentStatus = "paid",
+                                priceCents = 3400,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakePaymentAuthRepository(authenticated = true),
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments("paid-1")
+        runCurrent()
+
+        val unavailable = assertIs<PaymentUiState.TargetUnavailable>(viewModel.uiState.value)
+        assertEquals("Sem valor pendente", unavailable.title)
+        assertEquals("Esta marcação já não tem pagamento em aberto.", unavailable.message)
+    }
+
+    @Test
+    fun loadPaymentsWithTargetReservationMapsMissingReservationToUnavailableState() = runTest {
+        val viewModel = PaymentViewModel(
+            bookingRepository = FakePaymentBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            authRepository = FakePaymentAuthRepository(authenticated = true),
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments("missing-1")
+        runCurrent()
+
+        val unavailable = assertIs<PaymentUiState.TargetUnavailable>(viewModel.uiState.value)
+        assertEquals("Pagamento não encontrado", unavailable.title)
+        assertEquals("Não encontrámos esta marcação na sua conta.", unavailable.message)
+    }
+
+    @Test
     fun loadPaymentsMapsAuthenticatedEmptyState() = runTest {
         val viewModel = PaymentViewModel(
             bookingRepository = FakePaymentBookingRepository(
