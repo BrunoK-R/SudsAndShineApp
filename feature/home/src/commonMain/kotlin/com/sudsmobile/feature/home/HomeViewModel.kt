@@ -57,6 +57,7 @@ internal data class HomeBookingUi(
     val service: String,
     val date: String,
     val time: String,
+    val location: String,
     val vehicle: String,
     val price: String,
     val statusLabel: String,
@@ -201,17 +202,17 @@ internal class HomeViewModel(
         viewModelScope.launch {
             _uiState.value = HomeUiState.Loading
             val catalog = serviceCatalogRepository.getServiceCatalog().toFeaturedServices()
-            val businessStats = businessInfoRepository.getBusinessInfo().toHomeStats()
+            val businessInfo = businessInfoRepository.getBusinessInfo().toHomeStats()
             if (authRepository.sessionState.value == AuthSessionState.Unauthenticated) {
                 loadedSessionKey = GuestSessionKey
                 _uiState.value = HomeUiState.Unauthenticated(
                     identity = GuestIdentity,
                     featuredServices = catalog.services,
-                    stats = businessStats.stats,
+                    stats = businessInfo.stats,
                     warningMessage = catalog.warningMessage,
                     warningRetryable = catalog.warningRetryable,
-                    statsWarningMessage = businessStats.warningMessage,
-                    statsWarningRetryable = businessStats.warningRetryable,
+                    statsWarningMessage = businessInfo.warningMessage,
+                    statsWarningRetryable = businessInfo.warningRetryable,
                 )
             }
         }
@@ -227,12 +228,12 @@ internal class HomeViewModel(
             val nextState = coroutineScope {
                 val catalogDeferred = async { serviceCatalogRepository.getServiceCatalog().toFeaturedServices() }
                 val historyDeferred = async { bookingRepository.getMyBookings() }
-                val businessStatsDeferred = async { businessInfoRepository.getBusinessInfo().toHomeStats() }
+                val businessInfoDeferred = async { businessInfoRepository.getBusinessInfo().toHomeStats() }
                 buildAuthenticatedState(
                     identity = user.toHomeIdentity(),
                     catalog = catalogDeferred.await(),
                     historyResult = historyDeferred.await(),
-                    businessStats = businessStatsDeferred.await(),
+                    businessInfo = businessInfoDeferred.await(),
                 )
             }
 
@@ -340,8 +341,9 @@ private data class FeaturedServicesResult(
     val warningRetryable: Boolean = false,
 )
 
-private data class HomeStatsResult(
+private data class HomeBusinessInfoResult(
     val stats: List<HomeStatUi>,
+    val location: String,
     val warningMessage: String? = null,
     val warningRetryable: Boolean = false,
 )
@@ -350,18 +352,18 @@ private fun buildAuthenticatedState(
     identity: HomeIdentityUi,
     catalog: FeaturedServicesResult,
     historyResult: BookingHistoryResult,
-    businessStats: HomeStatsResult,
+    businessInfo: HomeBusinessInfoResult,
 ): HomeUiState {
     return when (historyResult) {
         is BookingHistoryResult.Success -> historyResult.history.toHomeState(
             identity = identity,
             catalog = catalog,
-            businessStats = businessStats,
+            businessInfo = businessInfo,
         )
         is BookingHistoryResult.Failure -> historyResult.error.toHomeErrorState(
             identity = identity,
             catalog = catalog,
-            businessStats = businessStats,
+            businessInfo = businessInfo,
         )
     }
 }
@@ -369,7 +371,7 @@ private fun buildAuthenticatedState(
 private fun BookingHistory.toHomeState(
     identity: HomeIdentityUi,
     catalog: FeaturedServicesResult,
-    businessStats: HomeStatsResult,
+    businessInfo: HomeBusinessInfoResult,
 ): HomeUiState {
     val validReservations = reservations.filter { it.id.isNotBlank() && it.slotStartIso.isNotBlank() }
     val completedWashCount = validReservations.count { it.isCompletedReservation() }
@@ -377,18 +379,18 @@ private fun BookingHistory.toHomeState(
     val nextBooking = validReservations
         .filter { it.upcoming && !it.isCancelledReservation() }
         .minByOrNull { it.slotStartIso }
-        ?.toHomeBookingUi()
+        ?.toHomeBookingUi(location = businessInfo.location)
 
     return if (validReservations.isEmpty()) {
         HomeUiState.Empty(
             identity = identity,
             loyalty = loyaltyProgress,
             featuredServices = catalog.services,
-            stats = businessStats.stats,
+            stats = businessInfo.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
-            statsWarningMessage = businessStats.warningMessage,
-            statsWarningRetryable = businessStats.warningRetryable,
+            statsWarningMessage = businessInfo.warningMessage,
+            statsWarningRetryable = businessInfo.warningRetryable,
         )
     } else {
         HomeUiState.Loaded(
@@ -396,11 +398,11 @@ private fun BookingHistory.toHomeState(
             nextBooking = nextBooking,
             loyalty = loyaltyProgress,
             featuredServices = catalog.services,
-            stats = businessStats.stats,
+            stats = businessInfo.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
-            statsWarningMessage = businessStats.warningMessage,
-            statsWarningRetryable = businessStats.warningRetryable,
+            statsWarningMessage = businessInfo.warningMessage,
+            statsWarningRetryable = businessInfo.warningRetryable,
         )
     }
 }
@@ -408,28 +410,28 @@ private fun BookingHistory.toHomeState(
 private fun BookingHistoryError.toHomeErrorState(
     identity: HomeIdentityUi,
     catalog: FeaturedServicesResult,
-    businessStats: HomeStatsResult,
+    businessInfo: HomeBusinessInfoResult,
 ): HomeUiState {
     return when (this) {
         is BookingHistoryError.Unauthenticated -> HomeUiState.Unauthenticated(
             identity = GuestIdentity,
             featuredServices = catalog.services,
-            stats = businessStats.stats,
+            stats = businessInfo.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
-            statsWarningMessage = businessStats.warningMessage,
-            statsWarningRetryable = businessStats.warningRetryable,
+            statsWarningMessage = businessInfo.warningMessage,
+            statsWarningRetryable = businessInfo.warningRetryable,
         )
         is BookingHistoryError.Permission -> HomeUiState.Error(
             identity = identity,
             message = message,
             retryable = false,
             featuredServices = catalog.services,
-            stats = businessStats.stats,
+            stats = businessInfo.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
-            statsWarningMessage = businessStats.warningMessage,
-            statsWarningRetryable = businessStats.warningRetryable,
+            statsWarningMessage = businessInfo.warningMessage,
+            statsWarningRetryable = businessInfo.warningRetryable,
         )
         is BookingHistoryError.Unavailable,
         is BookingHistoryError.Backend -> HomeUiState.Error(
@@ -437,11 +439,11 @@ private fun BookingHistoryError.toHomeErrorState(
             message = message,
             retryable = true,
             featuredServices = catalog.services,
-            stats = businessStats.stats,
+            stats = businessInfo.stats,
             warningMessage = catalog.warningMessage,
             warningRetryable = catalog.warningRetryable,
-            statsWarningMessage = businessStats.warningMessage,
-            statsWarningRetryable = businessStats.warningRetryable,
+            statsWarningMessage = businessInfo.warningMessage,
+            statsWarningRetryable = businessInfo.warningRetryable,
         )
     }
 }
@@ -479,12 +481,13 @@ private fun ServiceCatalogService.toHomeFeaturedServiceOrNull(): HomeFeaturedSer
     )
 }
 
-private fun BookingHistoryReservation.toHomeBookingUi(): HomeBookingUi {
+private fun BookingHistoryReservation.toHomeBookingUi(location: String): HomeBookingUi {
     return HomeBookingUi(
         id = id,
         service = serviceName.ifBlank { "Serviço" },
         date = slotStartIso.toDateLabel(),
         time = slotStartIso.toTimeLabel(),
+        location = location,
         vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         statusLabel = status.toStatusLabel(),
@@ -529,11 +532,15 @@ private fun String.toServiceIcon(): ImageVector = when (lowercase()) {
     else -> Icons.Filled.DirectionsCar
 }
 
-private fun BusinessInfoResult.toHomeStats(): HomeStatsResult {
+private fun BusinessInfoResult.toHomeStats(): HomeBusinessInfoResult {
     return when (this) {
-        is BusinessInfoResult.Success -> HomeStatsResult(stats = info.toHomeStats())
-        is BusinessInfoResult.Failure -> HomeStatsResult(
+        is BusinessInfoResult.Success -> HomeBusinessInfoResult(
+            stats = info.toHomeStats(),
+            location = info.toHomeLocationLabel(),
+        )
+        is BusinessInfoResult.Failure -> HomeBusinessInfoResult(
             stats = DefaultHomeStats,
+            location = DefaultBusinessInfo.toHomeLocationLabel(),
             warningMessage = error.message,
             warningRetryable = error.isRetryable(),
         )
@@ -545,6 +552,14 @@ private fun BusinessInfo.toHomeStats(): List<HomeStatUi> {
         .mapIndexedNotNull { index, stat -> stat.toHomeStatOrNull(index) }
         .ifEmpty { DefaultHomeStats }
         .take(MaxHomeStats)
+}
+
+private fun BusinessInfo.toHomeLocationLabel(): String {
+    return listOf(addressLine1, addressLine2)
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .joinToString(separator = ", ")
+        .ifBlank { DefaultBusinessInfo.addressLine1 }
 }
 
 private fun BusinessStat.toHomeStatOrNull(index: Int): HomeStatUi? {

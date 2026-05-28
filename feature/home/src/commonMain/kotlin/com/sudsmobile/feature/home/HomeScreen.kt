@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -359,6 +360,7 @@ private fun UpcomingBookingCard(
             DetailRow(booking.icon, booking.service, true)
             DetailRow(Icons.Filled.CalendarMonth, booking.date)
             DetailRow(Icons.Filled.AccessTime, booking.time)
+            DetailRow(Icons.Filled.Place, booking.location)
             DetailRow(Icons.Filled.DirectionsCar, booking.vehicle)
             DetailRow(Icons.Filled.Star, booking.price, true)
             OutlinedButton(

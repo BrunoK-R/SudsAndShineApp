@@ -146,6 +146,14 @@ class HomeViewModelTest {
                     ),
                 ),
             ),
+            businessInfoRepository = FakeHomeBusinessInfoRepository(
+                BusinessInfoResult.Success(
+                    businessInfo(
+                        addressLine1 = "Suds Norte",
+                        addressLine2 = "Piso -1",
+                    ),
+                ),
+            ),
         )
 
         viewModel.refreshForSession()
@@ -156,6 +164,7 @@ class HomeViewModelTest {
         assertEquals("upcoming-next", loaded.nextBooking?.id)
         assertEquals("22 de maio, 2026", loaded.nextBooking?.date)
         assertEquals("10:00", loaded.nextBooking?.time)
+        assertEquals("Suds Norte, Piso -1", loaded.nextBooking?.location)
         assertEquals("BMW 320d", loaded.nextBooking?.vehicle)
         assertEquals(3, loaded.loyalty.completedWashes)
         assertEquals(7, loaded.loyalty.remainingWashes)
@@ -179,6 +188,39 @@ class HomeViewModelTest {
         assertEquals(DefaultBusinessInfo.stats.map { it.value }, empty.stats.map { it.value })
         assertEquals("Dados institucionais indisponíveis.", empty.statsWarningMessage)
         assertEquals(true, empty.statsWarningRetryable)
+    }
+
+    @Test
+    fun authenticatedHomeKeepsFallbackBookingLocationWhenBusinessInfoFails() = runTest {
+        val viewModel = homeViewModel(
+            bookingRepository = FakeHomeBookingRepository(
+                historyResult = BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            homeReservation(
+                                id = "upcoming-1",
+                                slotStartIso = "2026-05-22T10:00:00.000Z",
+                                upcoming = true,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            businessInfoRepository = FakeHomeBusinessInfoRepository(
+                BusinessInfoResult.Failure(BusinessInfoError.Unavailable("Dados institucionais indisponíveis.")),
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val loaded = assertIs<HomeUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(
+            "${DefaultBusinessInfo.addressLine1}, ${DefaultBusinessInfo.addressLine2}",
+            loaded.nextBooking?.location,
+        )
+        assertEquals("Dados institucionais indisponíveis.", loaded.statsWarningMessage)
+        assertEquals(true, loaded.statsWarningRetryable)
     }
 
     @Test
@@ -440,13 +482,15 @@ private fun service(
 
 private fun businessInfo(
     stats: List<BusinessStat> = DefaultBusinessInfo.stats,
+    addressLine1: String = DefaultBusinessInfo.addressLine1,
+    addressLine2: String = DefaultBusinessInfo.addressLine2,
 ): BusinessInfo = BusinessInfo(
     phone = DefaultBusinessInfo.phone,
     phoneUri = DefaultBusinessInfo.phoneUri,
     email = DefaultBusinessInfo.email,
     emailUri = DefaultBusinessInfo.emailUri,
-    addressLine1 = DefaultBusinessInfo.addressLine1,
-    addressLine2 = DefaultBusinessInfo.addressLine2,
+    addressLine1 = addressLine1,
+    addressLine2 = addressLine2,
     mapsUri = DefaultBusinessInfo.mapsUri,
     whatsappUri = DefaultBusinessInfo.whatsappUri,
     openingHours = listOf(
