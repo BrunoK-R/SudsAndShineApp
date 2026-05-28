@@ -47,6 +47,7 @@ internal data class ProfileHistoryItemUi(
     val paymentStatus: String,
     val extras: List<ProfileHistoryExtraUi>,
     val status: ProfileHistoryStatusUi,
+    val rebookServiceId: String?,
     val reviewed: Boolean,
     val reviewable: Boolean,
     val reviewRating: Int?,
@@ -205,6 +206,7 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         paymentStatus = bookingPaymentStatus().toHistoryPaymentLabel(),
         extras = extras.toHistoryExtraUi(),
         status = status.toHistoryStatusUi(),
+        rebookServiceId = serviceId.normalizedRebookServiceId(),
         reviewed = reviewed,
         reviewable = isReviewableReservation() && !reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
@@ -213,6 +215,8 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         auditNotes = auditNotes(),
     )
 }
+
+private fun String.normalizedRebookServiceId(): String? = trim().takeIf { it.isNotBlank() }
 
 private fun List<BookingReservationExtra>.toHistoryExtraUi(): List<ProfileHistoryExtraUi> {
     return mapNotNull { extra ->

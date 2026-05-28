@@ -60,6 +60,7 @@ fun HistoryScreen(
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit = {},
     onRateService: (String) -> Unit = {},
+    onBookAgain: (String) -> Unit = {},
 ) {
     val viewModel: ProfileHistoryViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -77,6 +78,7 @@ fun HistoryScreen(
         onRetry = viewModel::loadHistory,
         onRequestSignIn = onRequestSignIn,
         onRateService = onRateService,
+        onBookAgain = onBookAgain,
     )
 }
 
@@ -88,6 +90,7 @@ private fun HistoryScreenContent(
     onRetry: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRateService: (String) -> Unit,
+    onBookAgain: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -145,6 +148,9 @@ private fun HistoryScreenContent(
                             HistoryItemCard(
                                 item = item,
                                 onRateService = { onRateService(item.id) },
+                                onBookAgain = item.rebookServiceId?.let { serviceId ->
+                                    { onBookAgain(serviceId) }
+                                },
                             )
                         }
                     }
@@ -269,6 +275,7 @@ private fun HistorySummaryStat(
 private fun HistoryItemCard(
     item: ProfileHistoryItemUi,
     onRateService: () -> Unit,
+    onBookAgain: (() -> Unit)?,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -340,6 +347,10 @@ private fun HistoryItemCard(
                 )
             } else if (item.reviewable) {
                 HistoryReviewAction(onRateService = onRateService)
+            }
+
+            if (onBookAgain != null) {
+                HistoryBookAgainAction(onBookAgain = onBookAgain)
             }
         }
     }
@@ -494,6 +505,60 @@ private fun HistoryReviewAction(onRateService: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Text(
                 text = "Avaliar serviço",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HistoryBookAgainAction(onBookAgain: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CalendarMonth,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "Reservar novamente",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Usar o mesmo serviço como ponto de partida.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        OutlinedButton(
+            onClick = onBookAgain,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiary,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CalendarMonth,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Marcar outra lavagem",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
             )

@@ -166,6 +166,7 @@ class ProfileHistoryViewModelTest {
         assertEquals(5, loaded.items.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), loaded.items.first().reviewTags)
         assertEquals("Ficou impecável. Voltava a reservar.", loaded.items.first().reviewComment)
+        assertEquals("premium", loaded.items.first().rebookServiceId)
         assertEquals(true, loaded.items[1].reviewable)
     }
 
@@ -211,6 +212,42 @@ class ProfileHistoryViewModelTest {
             ),
             item.extras,
         )
+    }
+
+    @Test
+    fun loadHistoryMapsRebookActionOnlyWhenServiceIdIsPresent() = runTest {
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "completed-1",
+                                serviceId = " premium ",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                upcoming = false,
+                                priceCents = 3200,
+                            ),
+                            historyReservation(
+                                id = "completed-2",
+                                serviceId = " ",
+                                slotStartIso = "2026-05-19T10:00:00.000Z",
+                                upcoming = false,
+                                priceCents = 2500,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeProfileHistoryAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadHistory()
+        runCurrent()
+
+        val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("premium", loaded.items[0].rebookServiceId)
+        assertEquals(null, loaded.items[1].rebookServiceId)
     }
 
     @Test
@@ -476,6 +513,7 @@ private fun authenticatedSession(uid: String = "uid-1"): AuthSessionState.Authen
 private fun historyReservation(
     id: String,
     reservationCode: String = "SS-$id",
+    serviceId: String = "premium",
     slotStartIso: String,
     upcoming: Boolean,
     status: String = if (upcoming) "pending" else "completed",
@@ -494,7 +532,7 @@ private fun historyReservation(
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = reservationCode,
-    serviceId = "premium",
+    serviceId = serviceId,
     serviceName = "Lavagem Premium",
     slotStartIso = slotStartIso,
     slotEndIso = slotStartIso,

@@ -212,6 +212,7 @@ fun MainNavigation(
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,
                     onRateService = { reservationId -> navController.navigate(Routes.rating(reservationId)) },
+                    onBookAgain = { serviceId -> navigateToBookingFromLeaf(serviceId) },
                 )
             }
             composable(Routes.Contact) {
