@@ -17,6 +17,7 @@ import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.booking.bookingPaymentStatus
 import com.sudsmobile.data.booking.isCompletedReservation
+import com.sudsmobile.data.booking.isReviewableReservation
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +48,7 @@ internal data class ProfileHistoryItemUi(
     val extras: List<ProfileHistoryExtraUi>,
     val status: ProfileHistoryStatusUi,
     val reviewed: Boolean,
+    val reviewable: Boolean,
     val reviewRating: Int?,
     val reviewTags: List<String>,
     val reviewComment: String,
@@ -204,6 +206,7 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         extras = extras.toHistoryExtraUi(),
         status = status.toHistoryStatusUi(),
         reviewed = reviewed,
+        reviewable = isReviewableReservation() && !reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
         reviewTags = reviewTags.sanitizedReviewTags(),
         reviewComment = reviewComment.sanitizedReviewComment(),

@@ -59,6 +59,7 @@ fun HistoryScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit = {},
+    onRateService: (String) -> Unit = {},
 ) {
     val viewModel: ProfileHistoryViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -75,6 +76,7 @@ fun HistoryScreen(
         onBack = onBack,
         onRetry = viewModel::loadHistory,
         onRequestSignIn = onRequestSignIn,
+        onRateService = onRateService,
     )
 }
 
@@ -85,6 +87,7 @@ private fun HistoryScreenContent(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onRequestSignIn: () -> Unit,
+    onRateService: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -139,7 +142,10 @@ private fun HistoryScreenContent(
 
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         uiState.items.forEach { item ->
-                            HistoryItemCard(item = item)
+                            HistoryItemCard(
+                                item = item,
+                                onRateService = { onRateService(item.id) },
+                            )
                         }
                     }
                 }
@@ -260,7 +266,10 @@ private fun HistorySummaryStat(
 }
 
 @Composable
-private fun HistoryItemCard(item: ProfileHistoryItemUi) {
+private fun HistoryItemCard(
+    item: ProfileHistoryItemUi,
+    onRateService: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -329,6 +338,8 @@ private fun HistoryItemCard(item: ProfileHistoryItemUi) {
                     tags = item.reviewTags,
                     comment = item.reviewComment,
                 )
+            } else if (item.reviewable) {
+                HistoryReviewAction(onRateService = onRateService)
             }
         }
     }
@@ -431,6 +442,60 @@ private fun HistoryReviewSummary(
                 text = comment,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HistoryReviewAction(onRateService: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "Avaliação pendente",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Partilhe como correu esta lavagem concluída.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        OutlinedButton(
+            onClick = onRateService,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiary,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Avaliar serviço",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
             )
         }
     }

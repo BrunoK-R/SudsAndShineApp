@@ -162,9 +162,11 @@ class ProfileHistoryViewModelTest {
         assertEquals("SS-completed-1", loaded.items.first().reference)
         assertEquals("BMW 320d", loaded.items.first().vehicle)
         assertEquals(true, loaded.items.first().reviewed)
+        assertEquals(false, loaded.items.first().reviewable)
         assertEquals(5, loaded.items.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), loaded.items.first().reviewTags)
         assertEquals("Ficou impecável. Voltava a reservar.", loaded.items.first().reviewComment)
+        assertEquals(true, loaded.items[1].reviewable)
     }
 
     @Test

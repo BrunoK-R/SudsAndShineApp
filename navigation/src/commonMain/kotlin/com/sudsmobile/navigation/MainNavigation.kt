@@ -211,6 +211,7 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,
+                    onRateService = { reservationId -> navController.navigate(Routes.rating(reservationId)) },
                 )
             }
             composable(Routes.Contact) {
