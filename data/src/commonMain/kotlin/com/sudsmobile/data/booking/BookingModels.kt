@@ -92,6 +92,7 @@ data class BookingHistoryReservation(
     val reviewed: Boolean = false,
     val reviewRating: Int? = null,
     val reviewTags: List<String> = emptyList(),
+    val reviewComment: String = "",
     val extras: List<BookingReservationExtra> = emptyList(),
     val createdAtIso: String = "",
     val updatedAtIso: String = "",

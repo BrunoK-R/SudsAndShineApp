@@ -121,6 +121,7 @@ class ProfileHistoryViewModelTest {
                                 reviewed = true,
                                 reviewRating = 5,
                                 reviewTags = listOf(" Qualidade ", "qualidade", "Rápido"),
+                                reviewComment = "  Ficou impecável.\nVoltava a reservar.  ",
                             ),
                             historyReservation(
                                 id = "completed-2",
@@ -160,6 +161,7 @@ class ProfileHistoryViewModelTest {
         assertEquals(true, loaded.items.first().reviewed)
         assertEquals(5, loaded.items.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), loaded.items.first().reviewTags)
+        assertEquals("Ficou impecável. Voltava a reservar.", loaded.items.first().reviewComment)
     }
 
     @Test
@@ -432,6 +434,7 @@ private fun historyReservation(
     reviewed: Boolean = false,
     reviewRating: Int? = null,
     reviewTags: List<String> = emptyList(),
+    reviewComment: String = "",
     rescheduledAtIso: String? = null,
     previousSlotStartIso: String? = null,
     previousSlotEndIso: String? = null,
@@ -451,6 +454,7 @@ private fun historyReservation(
     reviewed = reviewed,
     reviewRating = reviewRating,
     reviewTags = reviewTags,
+    reviewComment = reviewComment,
     rescheduledAtIso = rescheduledAtIso,
     previousSlotStartIso = previousSlotStartIso,
     previousSlotEndIso = previousSlotEndIso,

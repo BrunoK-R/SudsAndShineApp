@@ -685,6 +685,7 @@ private fun BookingSummaryCard(
                 ReviewedBookingRow(
                     rating = booking.reviewRating,
                     tags = booking.reviewTags,
+                    comment = booking.reviewComment,
                     modifier = Modifier.padding(top = 14.dp),
                 )
             } else if (showRatingAction) {
@@ -1659,6 +1660,7 @@ private val rescheduleMonthNames = listOf(
 private fun ReviewedBookingRow(
     rating: Int?,
     tags: List<String>,
+    comment: String,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1694,6 +1696,13 @@ private fun ReviewedBookingRow(
         if (tags.isNotEmpty()) {
             Text(
                 text = tags.joinToString(separator = " • "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (comment.isNotBlank()) {
+            Text(
+                text = comment,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

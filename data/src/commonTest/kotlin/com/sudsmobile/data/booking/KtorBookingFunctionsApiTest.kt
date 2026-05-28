@@ -243,6 +243,7 @@ class KtorBookingFunctionsApiTest {
                         "reviewed": true,
                         "reviewRating": 5,
                         "reviewTags": ["Qualidade", "Rápido"],
+                        "reviewComment": "Ficou impecável.",
                         "createdAt": "2026-05-18T08:00:00.000Z",
                         "updatedAt": "2026-05-19T12:15:00.000Z",
                         "rescheduledAt": "2026-05-19T12:15:00.000Z",
@@ -274,6 +275,7 @@ class KtorBookingFunctionsApiTest {
         assertEquals(true, success.history.reservations.first().reviewed)
         assertEquals(5, success.history.reservations.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), success.history.reservations.first().reviewTags)
+        assertEquals("Ficou impecável.", success.history.reservations.first().reviewComment)
         assertEquals("2026-05-18T08:00:00.000Z", success.history.reservations.first().createdAtIso)
         assertEquals("2026-05-19T12:15:00.000Z", success.history.reservations.first().updatedAtIso)
         assertEquals("2026-05-19T12:15:00.000Z", success.history.reservations.first().rescheduledAtIso)

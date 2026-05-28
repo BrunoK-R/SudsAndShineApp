@@ -323,6 +323,7 @@ private fun HistoryItemCard(item: ProfileHistoryItemUi) {
                 HistoryReviewSummary(
                     rating = item.reviewRating,
                     tags = item.reviewTags,
+                    comment = item.reviewComment,
                 )
             }
         }
@@ -333,6 +334,7 @@ private fun HistoryItemCard(item: ProfileHistoryItemUi) {
 private fun HistoryReviewSummary(
     rating: Int?,
     tags: List<String>,
+    comment: String,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -364,6 +366,13 @@ private fun HistoryReviewSummary(
         if (tags.isNotEmpty()) {
             Text(
                 text = tags.joinToString(separator = " • "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (comment.isNotBlank()) {
+            Text(
+                text = comment,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

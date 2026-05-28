@@ -184,6 +184,7 @@ class CartBookingsViewModelTest {
                                 reviewed = true,
                                 reviewRating = 5,
                                 reviewTags = listOf(" Qualidade ", "qualidade", "Rápido"),
+                                reviewComment = "  Ficou impecável.\nVoltava a reservar.  ",
                             ),
                         ),
                     ),
@@ -200,6 +201,7 @@ class CartBookingsViewModelTest {
         assertEquals(true, loaded.completed.single().reviewed)
         assertEquals(5, loaded.completed.single().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), loaded.completed.single().reviewTags)
+        assertEquals("Ficou impecável. Voltava a reservar.", loaded.completed.single().reviewComment)
     }
 
     @Test
@@ -753,6 +755,7 @@ private fun historyReservation(
     reviewed: Boolean = false,
     reviewRating: Int? = null,
     reviewTags: List<String> = emptyList(),
+    reviewComment: String = "",
     status: String = if (upcoming) "pending" else "completed",
     paymentStatus: String = "",
     cancelledAtIso: String? = null,
@@ -776,6 +779,7 @@ private fun historyReservation(
     reviewed = reviewed,
     reviewRating = reviewRating,
     reviewTags = reviewTags,
+    reviewComment = reviewComment,
     cancelledAtIso = cancelledAtIso,
     rescheduledAtIso = rescheduledAtIso,
     previousSlotStartIso = previousSlotStartIso,

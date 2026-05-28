@@ -42,6 +42,7 @@ internal data class ProfileHistoryItemUi(
     val reviewed: Boolean,
     val reviewRating: Int?,
     val reviewTags: List<String>,
+    val reviewComment: String,
     val auditNotes: List<ProfileHistoryAuditNoteUi>,
 )
 
@@ -189,6 +190,7 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         reviewed = reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
         reviewTags = reviewTags.sanitizedReviewTags(),
+        reviewComment = reviewComment.sanitizedReviewComment(),
         auditNotes = auditNotes(),
     )
 }
@@ -198,6 +200,12 @@ private fun List<String>.sanitizedReviewTags(): List<String> {
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase() }
         .take(8)
+}
+
+private fun String.sanitizedReviewComment(): String {
+    val normalized = trim().replace(Regex("\\s+"), " ")
+    if (normalized.length <= 360) return normalized
+    return normalized.take(357).trimEnd() + "..."
 }
 
 private fun BookingHistoryReservation.auditNotes(): List<ProfileHistoryAuditNoteUi> {
