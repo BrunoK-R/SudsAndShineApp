@@ -177,6 +177,8 @@ class ProductsBookingViewModel(
 
     private val _submitState = MutableStateFlow<BookingSubmitUiState>(BookingSubmitUiState.Idle)
     val submitState: StateFlow<BookingSubmitUiState> = _submitState.asStateFlow()
+    private var pendingSubmitRequest: BookingCreateRequest? = null
+    private var submitRequestInFlight: Boolean = false
 
     private val _vehiclesState = MutableStateFlow<BookingVehiclesUiState>(BookingVehiclesUiState.Idle)
     val vehiclesState: StateFlow<BookingVehiclesUiState> = _vehiclesState.asStateFlow()
@@ -509,10 +511,11 @@ class ProductsBookingViewModel(
     }
 
     fun submitBooking(draft: ProductsBookingDraft?) {
-        if (_submitState.value is BookingSubmitUiState.Loading) return
+        if (submitRequestInFlight) return
 
         val request = draft?.toCreateRequest()
         if (request == null) {
+            pendingSubmitRequest = null
             _submitState.value = BookingSubmitUiState.Error(
                 message = "Complete os dados da marcação antes de confirmar.",
                 retryable = false,
@@ -521,23 +524,96 @@ class ProductsBookingViewModel(
             return
         }
 
+        submitCreateRequest(request)
+    }
+
+    fun refreshSubmitForSession() {
+        val request = pendingSubmitRequest ?: return
+        if (_submitState.value !is BookingSubmitUiState.Loading) return
+        submitCreateRequest(request)
+    }
+
+    private fun submitCreateRequest(request: BookingCreateRequest) {
+        if (submitRequestInFlight) return
+
+        when (val currentSessionState = authRepository.sessionState.value) {
+            AuthSessionState.Restoring -> {
+                pendingSubmitRequest = request
+                _submitState.value = BookingSubmitUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                pendingSubmitRequest = null
+                _submitState.value = currentSessionState.error.toSubmitUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                if (request.requiresAuthenticatedSession()) {
+                    pendingSubmitRequest = null
+                    _submitState.value = unauthenticatedSubmitState()
+                    return
+                }
+                launchSubmitRequest(request = request, expectedUid = null)
+            }
+            is AuthSessionState.Authenticated -> {
+                launchSubmitRequest(
+                    request = request,
+                    expectedUid = currentSessionState.session.user.uid,
+                )
+            }
+        }
+    }
+
+    private fun launchSubmitRequest(request: BookingCreateRequest, expectedUid: String?) {
+        pendingSubmitRequest = null
+        submitRequestInFlight = true
         viewModelScope.launch {
-            _submitState.value = BookingSubmitUiState.Loading
-            _submitState.value = when (val result = bookingRepository.createBooking(request)) {
-                is BookingCreateResult.Success -> BookingSubmitUiState.Success(result.receipt)
-                is BookingCreateResult.Failure -> result.error.toUiState()
+            try {
+                _submitState.value = BookingSubmitUiState.Loading
+                when (val currentSessionState = authRepository.sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        pendingSubmitRequest = request
+                        _submitState.value = BookingSubmitUiState.Loading
+                        return@launch
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        _submitState.value = currentSessionState.error.toSubmitUiState()
+                        return@launch
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        if (expectedUid != null || request.requiresAuthenticatedSession()) {
+                            _submitState.value = unauthenticatedSubmitState()
+                            return@launch
+                        }
+                    }
+                    is AuthSessionState.Authenticated -> {
+                        if (expectedUid != null && currentSessionState.session.user.uid != expectedUid) {
+                            _submitState.value = changedSessionSubmitState()
+                            return@launch
+                        }
+                    }
+                }
+
+                _submitState.value = when (val result = bookingRepository.createBooking(request)) {
+                    is BookingCreateResult.Success -> BookingSubmitUiState.Success(result.receipt)
+                    is BookingCreateResult.Failure -> result.error.toUiState()
+                }
+            } finally {
+                submitRequestInFlight = false
             }
         }
     }
 
     fun clearSubmitError() {
         if (_submitState.value is BookingSubmitUiState.Error) {
+            pendingSubmitRequest = null
             _submitState.value = BookingSubmitUiState.Idle
         }
     }
 
     fun consumeSuccess() {
         if (_submitState.value is BookingSubmitUiState.Success) {
+            pendingSubmitRequest = null
             _submitState.value = BookingSubmitUiState.Idle
         }
     }
@@ -567,6 +643,34 @@ class ProductsBookingViewModel(
                 resolution = BookingSubmitResolution.None,
             )
         }
+    }
+
+    private fun AuthError.toSubmitUiState(): BookingSubmitUiState.Error {
+        return BookingSubmitUiState.Error(
+            message = message,
+            retryable = isRetryableSessionError(),
+            resolution = if (isRetryableSessionError()) {
+                BookingSubmitResolution.Retry
+            } else {
+                BookingSubmitResolution.SignIn
+            },
+        )
+    }
+
+    private fun unauthenticatedSubmitState(): BookingSubmitUiState.Error {
+        return BookingSubmitUiState.Error(
+            message = "Inicie sessão para confirmar esta marcação com os dados guardados.",
+            retryable = false,
+            resolution = BookingSubmitResolution.SignIn,
+        )
+    }
+
+    private fun changedSessionSubmitState(): BookingSubmitUiState.Error {
+        return BookingSubmitUiState.Error(
+            message = "A sessão mudou antes de confirmarmos a marcação. Reveja os dados antes de continuar.",
+            retryable = true,
+            resolution = BookingSubmitResolution.Retry,
+        )
     }
 
     private fun BookingAvailabilityError.toUiState(): BookingAvailabilityUiState.Error {
@@ -813,6 +917,10 @@ internal fun ProductsBookingDraft.toCreateRequest(): BookingCreateRequest? {
         gdprConsent = gdprConsent,
         notes = notes,
     )
+}
+
+private fun BookingCreateRequest.requiresAuthenticatedSession(): Boolean {
+    return !loyaltyRewardCode.isNullOrBlank() || !userVehicleId.isNullOrBlank()
 }
 
 private fun buildSlotIso(dateId: String, time: String): String? {

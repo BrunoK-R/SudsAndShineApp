@@ -174,6 +174,7 @@ fun ProductsScreen(
         onRefreshRewardsForSession = viewModel::refreshRewardsForSession,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
+        onRefreshSubmitForSession = viewModel::refreshSubmitForSession,
         onClearSubmitError = viewModel::clearSubmitError,
         onSubmitSuccessConsumed = viewModel::consumeSuccess,
         onBack = onBack,
@@ -210,6 +211,7 @@ private fun ProductsScreenContent(
     onRefreshRewardsForSession: () -> Unit,
     onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
+    onRefreshSubmitForSession: () -> Unit,
     onClearSubmitError: () -> Unit,
     onSubmitSuccessConsumed: () -> Unit,
     onBack: () -> Unit = {},
@@ -345,6 +347,7 @@ private fun ProductsScreenContent(
     LaunchedEffect(currentStep, sessionState, bookingRevision) {
         if (currentStep == BookingStep.Confirmation) {
             onRefreshRewardsForSession()
+            onRefreshSubmitForSession()
         }
     }
 

@@ -694,6 +694,126 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun submitBookingWaitsForRestoringSessionBeforeRepositoryCall() = runTest {
+        val authRepository = FakeProductsAuthRepository(initialState = AuthSessionState.Restoring)
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+        )
+
+        viewModel.submitBooking(validDraft())
+        runCurrent()
+
+        assertIs<BookingSubmitUiState.Loading>(viewModel.submitState.value)
+        assertEquals(0, repository.createCalls)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshSubmitForSession()
+        runCurrent()
+
+        assertIs<BookingSubmitUiState.Success>(viewModel.submitState.value)
+        assertEquals(1, repository.createCalls)
+    }
+
+    @Test
+    fun submitBookingMapsRestoreFailureWithoutRepositoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProductsAuthRepository(
+                initialState = AuthSessionState.RestoreFailed(
+                    AuthError.Unavailable("Sessão indisponível."),
+                ),
+            ),
+        )
+
+        viewModel.submitBooking(validDraft())
+        runCurrent()
+
+        val error = assertIs<BookingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(BookingSubmitResolution.Retry, error.resolution)
+        assertEquals(0, repository.createCalls)
+    }
+
+    @Test
+    fun submitBookingRequiresSignInForSavedVehicleWhenUnauthenticated() = runTest {
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProductsAuthRepository(authenticated = false),
+        )
+
+        viewModel.submitBooking(
+            validDraft().copy(
+                userVehicleId = "vehicle-1",
+                vehicleLabel = "BMW Serie 1",
+            ),
+        )
+        runCurrent()
+
+        val error = assertIs<BookingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals(BookingSubmitResolution.SignIn, error.resolution)
+        assertEquals(false, error.retryable)
+        assertEquals(0, repository.createCalls)
+    }
+
+    @Test
+    fun submitBookingDefersIfSessionStartsRestoringBeforeCreateRuns() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+        )
+
+        viewModel.submitBooking(validDraft())
+        authRepository.setSessionState(AuthSessionState.Restoring)
+        runCurrent()
+
+        assertIs<BookingSubmitUiState.Loading>(viewModel.submitState.value)
+        assertEquals(0, repository.createCalls)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshSubmitForSession()
+        runCurrent()
+
+        assertIs<BookingSubmitUiState.Success>(viewModel.submitState.value)
+        assertEquals(1, repository.createCalls)
+    }
+
+    @Test
+    fun submitBookingRejectsSessionUserChangeBeforeCreateRuns() = runTest {
+        val authRepository = FakeProductsAuthRepository(initialState = authenticatedSession(uid = "uid-1"))
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+        )
+
+        viewModel.submitBooking(validDraft())
+        authRepository.authenticate(uid = "uid-2")
+        runCurrent()
+
+        val error = assertIs<BookingSubmitUiState.Error>(viewModel.submitState.value)
+        assertEquals(BookingSubmitResolution.Retry, error.resolution)
+        assertEquals(true, error.retryable)
+        assertEquals(0, repository.createCalls)
+    }
+
+    @Test
     fun submitBookingMapsConflictToChangeSlotResolution() = runTest {
         val viewModel = productsBookingViewModel(
             bookingRepository = FakeBookingRepository(
@@ -791,6 +911,8 @@ private class FakeBookingRepository(
         private set
     var loyaltyCalls: Int = 0
         private set
+    var createCalls: Int = 0
+        private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
         lastAvailabilityRequest = request
@@ -798,6 +920,7 @@ private class FakeBookingRepository(
     }
 
     override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        createCalls += 1
         return createResult
     }
 
