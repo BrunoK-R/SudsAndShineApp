@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.blog
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -70,6 +71,106 @@ class LoyaltyViewModelTest {
 
         assertIs<LoyaltyUiState.Unauthenticated>(viewModel.uiState.value)
         assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun loadRewardsShowsLoadingWhileSessionIsRestoringWithoutRepositoryCall() = runTest {
+        val repository = FakeLoyaltyBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = loyaltyViewModel(
+            authRepository = FakeLoyaltyAuthRepository(initialState = AuthSessionState.Restoring),
+            bookingRepository = repository,
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        assertIs<LoyaltyUiState.Loading>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun loadRewardsMapsRestoreFailureWithoutRepositoryCall() = runTest {
+        val repository = FakeLoyaltyBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = loyaltyViewModel(
+            authRepository = FakeLoyaltyAuthRepository(
+                initialState = AuthSessionState.RestoreFailed(
+                    AuthError.Unavailable("Sessão indisponível."),
+                ),
+            ),
+            bookingRepository = repository,
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        val error = assertIs<LoyaltyUiState.Error>(viewModel.uiState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun loadRewardsKeepsRestoringStateWhenSessionChangesDuringLoad() = runTest {
+        val authRepository = FakeLoyaltyAuthRepository()
+        val repository = FakeLoyaltyBookingRepository(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        loyaltyReservation(
+                            id = "stamp-1",
+                            slotStartIso = "2026-05-18T10:00:00.000Z",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val viewModel = loyaltyViewModel(
+            authRepository = authRepository,
+            bookingRepository = repository,
+        )
+
+        viewModel.loadRewards()
+        authRepository.setSessionState(AuthSessionState.Restoring)
+        runCurrent()
+
+        assertIs<LoyaltyUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+    }
+
+    @Test
+    fun loadRewardsMapsRestoreFailureWhenSessionChangesDuringLoad() = runTest {
+        val authRepository = FakeLoyaltyAuthRepository()
+        val repository = FakeLoyaltyBookingRepository(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        loyaltyReservation(
+                            id = "stamp-1",
+                            slotStartIso = "2026-05-18T10:00:00.000Z",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val viewModel = loyaltyViewModel(
+            authRepository = authRepository,
+            bookingRepository = repository,
+        )
+
+        viewModel.loadRewards()
+        authRepository.setSessionState(
+            AuthSessionState.RestoreFailed(AuthError.Backend("Sessão expirada.")),
+        )
+        runCurrent()
+
+        val error = assertIs<LoyaltyUiState.Error>(viewModel.uiState.value)
+        assertEquals("Sessão expirada.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(1, repository.historyCalls)
     }
 
     @Test
@@ -414,6 +515,112 @@ class LoyaltyViewModelTest {
         assertEquals("Recompensas indisponíveis.", error.message)
         assertEquals(true, error.retryable)
     }
+
+    @Test
+    fun redeemRewardMapsRestoreFailureWithoutRepositoryCall() = runTest {
+        val authRepository = FakeLoyaltyAuthRepository()
+        val repository = FakeLoyaltyBookingRepository(
+            historyResult = BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = (1..10).map {
+                        loyaltyReservation(
+                            id = "stamp-$it",
+                            slotStartIso = "2026-05-${it.twoDigits()}T09:00:00.000Z",
+                        )
+                    },
+                    loyalty = loyaltySummary(
+                        totalWashes = 10,
+                        currentWashes = 10,
+                        remainingWashes = 0,
+                        progress = 1f,
+                        rewardReady = true,
+                        completedRewards = 1,
+                        claimedRewards = 0,
+                        availableRewards = 1,
+                    ),
+                ),
+            ),
+        )
+        val viewModel = loyaltyViewModel(
+            authRepository = authRepository,
+            bookingRepository = repository,
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+        authRepository.setSessionState(
+            AuthSessionState.RestoreFailed(AuthError.Permission("Inicie sessão novamente.")),
+        )
+        viewModel.redeemReward()
+        runCurrent()
+
+        val error = assertIs<LoyaltyUiState.Error>(viewModel.uiState.value)
+        assertEquals("Inicie sessão novamente.", error.message)
+        assertEquals(false, error.retryable)
+        assertEquals(0, repository.redemptionCalls)
+    }
+
+    @Test
+    fun redeemRewardMapsRestoreFailureWhenSessionChangesDuringRedemption() = runTest {
+        val authRepository = FakeLoyaltyAuthRepository()
+        val repository = FakeLoyaltyBookingRepository(
+            historyResult = BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = (1..10).map {
+                        loyaltyReservation(
+                            id = "stamp-$it",
+                            slotStartIso = "2026-05-${it.twoDigits()}T09:00:00.000Z",
+                        )
+                    },
+                    loyalty = loyaltySummary(
+                        totalWashes = 10,
+                        currentWashes = 10,
+                        remainingWashes = 0,
+                        progress = 1f,
+                        rewardReady = true,
+                        completedRewards = 1,
+                        claimedRewards = 0,
+                        availableRewards = 1,
+                    ),
+                ),
+            ),
+            redemptionResult = BookingRewardRedemptionResult.Success(
+                BookingRewardRedemptionReceipt(
+                    redemptionId = "reward-0001",
+                    rewardCode = "SS-FREE-UID1-0001",
+                    rewardNumber = 1,
+                    status = "issued",
+                    loyalty = loyaltySummary(
+                        totalWashes = 10,
+                        currentWashes = 0,
+                        remainingWashes = 10,
+                        progress = 0f,
+                        rewardReady = false,
+                        completedRewards = 1,
+                        claimedRewards = 1,
+                        availableRewards = 0,
+                    ),
+                ),
+            ),
+        )
+        val viewModel = loyaltyViewModel(
+            authRepository = authRepository,
+            bookingRepository = repository,
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+        viewModel.redeemReward()
+        authRepository.setSessionState(
+            AuthSessionState.RestoreFailed(AuthError.Unavailable("Sessão indisponível.")),
+        )
+        runCurrent()
+
+        val error = assertIs<LoyaltyUiState.Error>(viewModel.uiState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(1, repository.redemptionCalls)
+    }
 }
 
 private fun loyaltyViewModel(
@@ -464,10 +671,11 @@ private class FakeLoyaltyBookingRepository(
 }
 
 private class FakeLoyaltyAuthRepository(
-    authenticated: Boolean,
+    authenticated: Boolean = true,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
+        initialState ?: if (authenticated) authenticatedSession() else AuthSessionState.Unauthenticated,
     )
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
 
@@ -496,6 +704,10 @@ private class FakeLoyaltyAuthRepository(
 
     override fun signOut() {
         mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+
+    fun setSessionState(state: AuthSessionState) {
+        mutableSessionState.value = state
     }
 }
 
