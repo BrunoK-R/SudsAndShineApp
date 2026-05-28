@@ -80,6 +80,25 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun normalizesSavedVehicleBeforeCallingApiWithAuthenticatedSession() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.createBooking(
+            validRequest().copy(
+                userVehicleId = " vehicle-1 ",
+                vehicleLabel = "  BMW 320d  ",
+            ),
+        )
+
+        assertIs<BookingCreateResult.Success>(result)
+        assertEquals(1, api.calls)
+        assertEquals("vehicle-1", api.lastRequest?.userVehicleId)
+        assertEquals("BMW 320d", api.lastRequest?.vehicleLabel)
+        assertEquals("id-token-1", api.lastIdToken)
+    }
+
+    @Test
     fun normalizesSelectedExtraIdsBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
@@ -114,6 +133,19 @@ class FirebaseBookingRepositoryTest {
 
         assertIs<BookingCreateResult.Failure>(result)
         assertIs<BookingCreateError.Unauthenticated>(result.error)
+        assertEquals(0, api.calls)
+    }
+
+    @Test
+    fun rejectsSavedVehicleWhenUnauthenticatedBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.createBooking(validRequest().copy(userVehicleId = "vehicle-1"))
+
+        assertIs<BookingCreateResult.Failure>(result)
+        val error = assertIs<BookingCreateError.Unauthenticated>(result.error)
+        assertEquals("Inicie sessão para usar este veículo guardado.", error.message)
         assertEquals(0, api.calls)
     }
 

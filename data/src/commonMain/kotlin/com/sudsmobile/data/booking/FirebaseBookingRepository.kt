@@ -24,10 +24,19 @@ class FirebaseBookingRepository(
         }
 
         val session = authRepository.currentSession()
-        if (!normalizedRequest.loyaltyRewardCode.isNullOrBlank() && session == null) {
-            return BookingCreateResult.Failure(
-                BookingCreateError.Unauthenticated("Inicie sessão para aplicar esta recompensa."),
-            )
+        if (session == null) {
+            val unauthenticatedMessage = when {
+                !normalizedRequest.loyaltyRewardCode.isNullOrBlank() ->
+                    "Inicie sessão para aplicar esta recompensa."
+                !normalizedRequest.userVehicleId.isNullOrBlank() ->
+                    "Inicie sessão para usar este veículo guardado."
+                else -> null
+            }
+            if (unauthenticatedMessage != null) {
+                return BookingCreateResult.Failure(
+                    BookingCreateError.Unauthenticated(unauthenticatedMessage),
+                )
+            }
         }
 
         return api.createReservation(normalizedRequest, session?.idToken)
