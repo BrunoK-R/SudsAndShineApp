@@ -39,6 +39,9 @@ internal data class ProfileHistoryItemUi(
     val price: String,
     val priceCents: Int?,
     val status: ProfileHistoryStatusUi,
+    val reviewed: Boolean,
+    val reviewRating: Int?,
+    val reviewTags: List<String>,
     val auditNotes: List<ProfileHistoryAuditNoteUi>,
 )
 
@@ -183,8 +186,18 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         priceCents = priceCents,
         status = status.toHistoryStatusUi(),
+        reviewed = reviewed,
+        reviewRating = reviewRating?.takeIf { it in 1..5 },
+        reviewTags = reviewTags.sanitizedReviewTags(),
         auditNotes = auditNotes(),
     )
+}
+
+private fun List<String>.sanitizedReviewTags(): List<String> {
+    return map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase() }
+        .take(8)
 }
 
 private fun BookingHistoryReservation.auditNotes(): List<ProfileHistoryAuditNoteUi> {

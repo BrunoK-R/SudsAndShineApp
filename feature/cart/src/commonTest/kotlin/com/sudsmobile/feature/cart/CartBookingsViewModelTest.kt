@@ -183,6 +183,7 @@ class CartBookingsViewModelTest {
                                 priceCents = 3200,
                                 reviewed = true,
                                 reviewRating = 5,
+                                reviewTags = listOf(" Qualidade ", "qualidade", "Rápido"),
                             ),
                         ),
                     ),
@@ -198,6 +199,7 @@ class CartBookingsViewModelTest {
         val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
         assertEquals(true, loaded.completed.single().reviewed)
         assertEquals(5, loaded.completed.single().reviewRating)
+        assertEquals(listOf("Qualidade", "Rápido"), loaded.completed.single().reviewTags)
     }
 
     @Test
@@ -750,6 +752,7 @@ private fun historyReservation(
     vehicleLabel: String? = null,
     reviewed: Boolean = false,
     reviewRating: Int? = null,
+    reviewTags: List<String> = emptyList(),
     status: String = if (upcoming) "pending" else "completed",
     paymentStatus: String = "",
     cancelledAtIso: String? = null,
@@ -772,6 +775,7 @@ private fun historyReservation(
     upcoming = upcoming,
     reviewed = reviewed,
     reviewRating = reviewRating,
+    reviewTags = reviewTags,
     cancelledAtIso = cancelledAtIso,
     rescheduledAtIso = rescheduledAtIso,
     previousSlotStartIso = previousSlotStartIso,

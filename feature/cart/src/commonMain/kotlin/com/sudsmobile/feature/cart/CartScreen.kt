@@ -684,6 +684,7 @@ private fun BookingSummaryCard(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ReviewedBookingRow(
                     rating = booking.reviewRating,
+                    tags = booking.reviewTags,
                     modifier = Modifier.padding(top = 14.dp),
                 )
             } else if (showRatingAction) {
@@ -1657,32 +1658,45 @@ private val rescheduleMonthNames = listOf(
 @Composable
 private fun ReviewedBookingRow(
     rating: Int?,
+    tags: List<String>,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = "Serviço avaliado",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            (1..5).forEach { star ->
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = if (rating != null && star <= rating) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.outlineVariant
-                    },
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Serviço avaliado",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                (1..5).forEach { star ->
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (rating != null && star <= rating) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        },
+                    )
+                }
             }
+        }
+        if (tags.isNotEmpty()) {
+            Text(
+                text = tags.joinToString(separator = " • "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

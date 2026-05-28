@@ -68,6 +68,7 @@ internal data class BookingSummaryUi(
     val showLocation: Boolean,
     val reviewed: Boolean,
     val reviewRating: Int?,
+    val reviewTags: List<String>,
     val reviewable: Boolean,
     val cancelable: Boolean,
     val paymentLabel: String,
@@ -442,12 +443,20 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         showLocation = upcoming,
         reviewed = reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
+        reviewTags = reviewTags.sanitizedReviewTags(),
         reviewable = isReviewableReservation(),
         cancelable = isCancelableReservation(),
         paymentLabel = bookingPaymentStatus().toPaymentLabel(),
         requiresPayment = requiresPayment(),
         auditNotes = auditNotes(),
     )
+}
+
+private fun List<String>.sanitizedReviewTags(): List<String> {
+    return map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase() }
+        .take(8)
 }
 
 private fun BookingHistoryReservation.auditNotes(): List<BookingAuditNoteUi> {

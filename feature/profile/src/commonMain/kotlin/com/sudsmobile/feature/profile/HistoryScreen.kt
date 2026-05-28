@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -317,6 +318,55 @@ private fun HistoryItemCard(item: ProfileHistoryItemUi) {
             if (item.auditNotes.isNotEmpty()) {
                 HistoryAuditNotes(notes = item.auditNotes)
             }
+
+            if (item.reviewed) {
+                HistoryReviewSummary(
+                    rating = item.reviewRating,
+                    tags = item.reviewTags,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryReviewSummary(
+    rating: Int?,
+    tags: List<String>,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Avaliação enviada",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                (1..5).forEach { star ->
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (rating != null && star <= rating) {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        },
+                    )
+                }
+            }
+        }
+        if (tags.isNotEmpty()) {
+            Text(
+                text = tags.joinToString(separator = " • "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

@@ -118,6 +118,9 @@ class ProfileHistoryViewModelTest {
                                 upcoming = false,
                                 priceCents = 3200,
                                 vehicleLabel = "BMW 320d",
+                                reviewed = true,
+                                reviewRating = 5,
+                                reviewTags = listOf(" Qualidade ", "qualidade", "Rápido"),
                             ),
                             historyReservation(
                                 id = "completed-2",
@@ -154,6 +157,9 @@ class ProfileHistoryViewModelTest {
         assertEquals(listOf("completed-1", "completed-2"), loaded.items.map { it.id })
         assertEquals("18 de maio, 2026", loaded.items.first().date)
         assertEquals("BMW 320d", loaded.items.first().vehicle)
+        assertEquals(true, loaded.items.first().reviewed)
+        assertEquals(5, loaded.items.first().reviewRating)
+        assertEquals(listOf("Qualidade", "Rápido"), loaded.items.first().reviewTags)
     }
 
     @Test
@@ -423,6 +429,9 @@ private fun historyReservation(
     status: String = if (upcoming) "pending" else "completed",
     priceCents: Int?,
     vehicleLabel: String? = null,
+    reviewed: Boolean = false,
+    reviewRating: Int? = null,
+    reviewTags: List<String> = emptyList(),
     rescheduledAtIso: String? = null,
     previousSlotStartIso: String? = null,
     previousSlotEndIso: String? = null,
@@ -439,6 +448,9 @@ private fun historyReservation(
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,
     upcoming = upcoming,
+    reviewed = reviewed,
+    reviewRating = reviewRating,
+    reviewTags = reviewTags,
     rescheduledAtIso = rescheduledAtIso,
     previousSlotStartIso = previousSlotStartIso,
     previousSlotEndIso = previousSlotEndIso,
