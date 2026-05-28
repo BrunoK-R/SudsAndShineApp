@@ -129,7 +129,7 @@ fun ProductsScreen(
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
-    onOpenPayment: () -> Unit = {},
+    onOpenPayment: (String?) -> Unit = {},
     onRequestSignIn: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
 ) {
@@ -215,7 +215,7 @@ private fun ProductsScreenContent(
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
-    onOpenPayment: () -> Unit = {},
+    onOpenPayment: (String?) -> Unit = {},
     onRequestSignIn: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
 ) {
@@ -237,6 +237,7 @@ private fun ProductsScreenContent(
     var appliedContactName by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedContactEmail by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedContactPhone by rememberSaveable { mutableStateOf<String?>(null) }
+    var reservationId by rememberSaveable { mutableStateOf<String?>(null) }
     var reservationCode by rememberSaveable { mutableStateOf<String?>(null) }
     var successLoyaltyRewardApplied by rememberSaveable { mutableStateOf(false) }
     var successLoyaltyRewardCode by rememberSaveable { mutableStateOf<String?>(null) }
@@ -303,6 +304,7 @@ private fun ProductsScreenContent(
     LaunchedEffect(submitState) {
         val state = submitState
         if (state is BookingSubmitUiState.Success) {
+            reservationId = state.receipt.reservationId.takeIf { it.isNotBlank() }
             reservationCode = state.receipt.reservationCode
             successLoyaltyRewardApplied = state.receipt.loyaltyRewardApplied
             successLoyaltyRewardCode = state.receipt.loyaltyRewardCode
@@ -669,6 +671,7 @@ private fun ProductsScreenContent(
                         date = selectedDate,
                         time = selectedTime,
                         businessInfoState = businessInfoState,
+                        reservationId = reservationId,
                         reservationCode = reservationCode,
                         loyaltyRewardApplied = successLoyaltyRewardApplied,
                         loyaltyRewardCode = successLoyaltyRewardCode,
@@ -1794,6 +1797,7 @@ private fun BookingSuccessContent(
     date: BookingAvailabilityDay?,
     time: String?,
     businessInfoState: BookingBusinessInfoUiState,
+    reservationId: String?,
     reservationCode: String?,
     loyaltyRewardApplied: Boolean,
     loyaltyRewardCode: String?,
@@ -1801,7 +1805,7 @@ private fun BookingSuccessContent(
     onAddToCalendar: () -> Unit,
     onViewBooking: () -> Unit,
     onHome: () -> Unit,
-    onOpenPayment: () -> Unit,
+    onOpenPayment: (String?) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -1891,7 +1895,7 @@ private fun BookingSuccessContent(
             LoyaltyRewardAppliedCard(rewardCode = loyaltyRewardCode)
             Spacer(Modifier.height(16.dp))
         } else if (paymentStatus.requiresPaymentAction()) {
-            PaymentPendingCard(onOpenPayment = onOpenPayment)
+            PaymentPendingCard(onOpenPayment = { onOpenPayment(reservationId) })
             Spacer(Modifier.height(16.dp))
         }
 

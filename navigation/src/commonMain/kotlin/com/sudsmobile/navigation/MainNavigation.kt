@@ -142,7 +142,14 @@ fun MainNavigation(
                             restoreState = true
                         }
                     },
-                    onOpenPayment = { navController.navigate(Routes.Payment) },
+                    onOpenPayment = { reservationId ->
+                        navController.navigate(
+                            reservationId
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let(Routes::payment)
+                                ?: Routes.Payment,
+                        )
+                    },
                     onRequestSignIn = onRequestSignIn,
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
                 )
