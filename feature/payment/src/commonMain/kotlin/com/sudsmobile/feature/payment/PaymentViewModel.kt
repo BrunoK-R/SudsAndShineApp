@@ -92,16 +92,11 @@ internal class PaymentViewModel(
                 _uiState.value = PaymentUiState.Loading
             }
             is AuthSessionState.RestoreFailed -> {
-                loadedUid = null
-                loadedRevision = null
-                _uiState.value = PaymentUiState.Error(
-                    message = session.error.message,
-                    retryable = session.error.isRetryable(),
-                )
+                clearLoadedSession()
+                _uiState.value = session.error.toPaymentUiState()
             }
             AuthSessionState.Unauthenticated -> {
-                loadedUid = null
-                loadedRevision = null
+                clearLoadedSession()
                 _uiState.value = PaymentUiState.Unauthenticated
             }
             is AuthSessionState.Authenticated -> {
@@ -118,12 +113,23 @@ internal class PaymentViewModel(
     fun loadPayments() {
         if (_uiState.value is PaymentUiState.Loading) return
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            loadedRevision = null
-            _uiState.value = PaymentUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = PaymentUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toPaymentUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = PaymentUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val requestedUid = session.session.user.uid
@@ -135,15 +141,29 @@ internal class PaymentViewModel(
                 is BookingHistoryResult.Failure -> result.error.toPaymentUiState()
             }
 
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedUid = requestedUid
-                loadedRevision = requestedRevision
-                _uiState.value = nextState
-            } else {
-                loadedUid = null
-                loadedRevision = null
-                _uiState.value = PaymentUiState.Unauthenticated
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    clearLoadedSession()
+                    _uiState.value = PaymentUiState.Loading
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    clearLoadedSession()
+                    _uiState.value = currentSessionState.error.toPaymentUiState()
+                }
+                AuthSessionState.Unauthenticated -> {
+                    clearLoadedSession()
+                    _uiState.value = PaymentUiState.Unauthenticated
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid == requestedUid) {
+                        loadedUid = requestedUid
+                        loadedRevision = requestedRevision
+                        _uiState.value = nextState
+                    } else {
+                        clearLoadedSession()
+                        _uiState.value = PaymentUiState.Unauthenticated
+                    }
+                }
             }
         }
     }
@@ -181,6 +201,11 @@ internal class PaymentViewModel(
             is BookingHistoryError.Unavailable,
             is BookingHistoryError.Backend -> PaymentUiState.Error(message = message, retryable = true)
         }
+    }
+
+    private fun clearLoadedSession() {
+        loadedUid = null
+        loadedRevision = null
     }
 }
 
@@ -236,6 +261,13 @@ private fun BookingPaymentStatus.toPaymentStatusLabel(): String = when (this) {
 
 private fun AuthError.isRetryable(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
+}
+
+private fun AuthError.toPaymentUiState(): PaymentUiState.Error {
+    return PaymentUiState.Error(
+        message = message,
+        retryable = isRetryable(),
+    )
 }
 
 private fun String.toVehicleLabel(): String = when (lowercase()) {

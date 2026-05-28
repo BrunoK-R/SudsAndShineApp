@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.payment
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -23,6 +24,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,6 +64,50 @@ class PaymentViewModelTest {
         runCurrent()
 
         assertIs<PaymentUiState.Unauthenticated>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun loadPaymentsWaitsWhileSessionIsRestoring() = runTest {
+        val repository = FakePaymentBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = PaymentViewModel(
+            bookingRepository = repository,
+            authRepository = FakePaymentAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.Restoring,
+            ),
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments()
+        runCurrent()
+
+        assertIs<PaymentUiState.Loading>(viewModel.uiState.value)
+        assertEquals(0, repository.historyCalls)
+    }
+
+    @Test
+    fun loadPaymentsMapsRestoreFailureWithoutRepositoryCall() = runTest {
+        val repository = FakePaymentBookingRepository(
+            BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = PaymentViewModel(
+            bookingRepository = repository,
+            authRepository = FakePaymentAuthRepository(
+                authenticated = false,
+                initialState = AuthSessionState.RestoreFailed(AuthError.Unavailable("Sessão indisponível.")),
+            ),
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments()
+        runCurrent()
+
+        val error = assertIs<PaymentUiState.Error>(viewModel.uiState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
         assertEquals(0, repository.historyCalls)
     }
 
@@ -153,6 +199,54 @@ class PaymentViewModelTest {
     }
 
     @Test
+    fun loadPaymentsKeepsRestoringStateWhenSessionChangesDuringHistoryLoad() = runTest {
+        val repository = DeferredPaymentBookingRepository()
+        val authRepository = FakePaymentAuthRepository(authenticated = true)
+        val viewModel = PaymentViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments()
+        runCurrent()
+        authRepository.setSessionState(AuthSessionState.Restoring)
+        repository.result.complete(
+            BookingHistoryResult.Success(BookingHistory(listOf(historyReservation()))),
+        )
+        runCurrent()
+
+        assertIs<PaymentUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+    }
+
+    @Test
+    fun loadPaymentsMapsRestoreFailureWhenSessionChangesDuringHistoryLoad() = runTest {
+        val repository = DeferredPaymentBookingRepository()
+        val authRepository = FakePaymentAuthRepository(authenticated = true)
+        val viewModel = PaymentViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments()
+        runCurrent()
+        authRepository.setSessionState(
+            AuthSessionState.RestoreFailed(AuthError.Backend("Falha ao validar sessão.")),
+        )
+        repository.result.complete(
+            BookingHistoryResult.Success(BookingHistory(listOf(historyReservation()))),
+        )
+        runCurrent()
+
+        val error = assertIs<PaymentUiState.Error>(viewModel.uiState.value)
+        assertEquals("Falha ao validar sessão.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(1, repository.historyCalls)
+    }
+
+    @Test
     fun loadBusinessInfoKeepsFallbackForBackendFailure() = runTest {
         val viewModel = PaymentViewModel(
             bookingRepository = FakePaymentBookingRepository(BookingHistoryResult.Success(BookingHistory(emptyList()))),
@@ -168,6 +262,25 @@ class PaymentViewModelTest {
         val error = assertIs<PaymentBusinessInfoUiState.Error>(viewModel.businessInfoState.value)
         assertEquals(DefaultBusinessInfo.phone, error.fallbackInfo.phone)
         assertEquals(true, error.retryable)
+    }
+}
+
+private class DeferredPaymentBookingRepository : BookingRepository {
+    val result = CompletableDeferred<BookingHistoryResult>()
+    var historyCalls = 0
+        private set
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        error("Not used")
+    }
+
+    override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        historyCalls += 1
+        return result.await()
     }
 }
 
@@ -192,17 +305,23 @@ private class FakePaymentBookingRepository(
 
 private class FakePaymentAuthRepository(
     authenticated: Boolean,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
-    override val sessionState: StateFlow<AuthSessionState> = MutableStateFlow(
-        if (authenticated) {
+    private val mutableSessionState = MutableStateFlow(
+        initialState ?: if (authenticated) {
             AuthSessionState.Authenticated(session())
         } else {
             AuthSessionState.Unauthenticated
         },
     )
+    override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
+
+    fun setSessionState(nextState: AuthSessionState) {
+        mutableSessionState.value = nextState
+    }
 
     override suspend fun currentSession(): AuthSession? {
-        return (sessionState.value as? AuthSessionState.Authenticated)?.session
+        return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
