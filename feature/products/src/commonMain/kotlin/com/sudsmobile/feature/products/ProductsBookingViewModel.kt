@@ -2,6 +2,7 @@ package com.sudsmobile.feature.products
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.BookingAvailabilityError
@@ -181,10 +182,12 @@ class ProductsBookingViewModel(
     val vehiclesState: StateFlow<BookingVehiclesUiState> = _vehiclesState.asStateFlow()
     private var loadedVehiclesUid: String? = null
     private var loadedVehiclesRevision: Long? = null
+    private var vehiclesRequestInFlight: Boolean = false
 
     private val _contactProfileState = MutableStateFlow<BookingContactProfileUiState>(BookingContactProfileUiState.Idle)
     val contactProfileState: StateFlow<BookingContactProfileUiState> = _contactProfileState.asStateFlow()
     private var loadedContactProfileUid: String? = null
+    private var contactProfileRequestInFlight: Boolean = false
 
     private val _businessInfoState = MutableStateFlow<BookingBusinessInfoUiState>(BookingBusinessInfoUiState.Idle)
     val businessInfoState: StateFlow<BookingBusinessInfoUiState> = _businessInfoState.asStateFlow()
@@ -193,6 +196,7 @@ class ProductsBookingViewModel(
     val rewardsState: StateFlow<BookingRewardsUiState> = _rewardsState.asStateFlow()
     private var loadedRewardsUid: String? = null
     private var loadedRewardsRevision: Long? = null
+    private var rewardsRequestInFlight: Boolean = false
 
     fun loadBusinessInfo(force: Boolean = false) {
         if (_businessInfoState.value is BookingBusinessInfoUiState.Loading) return
@@ -208,12 +212,23 @@ class ProductsBookingViewModel(
     }
 
     fun refreshRewardsForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedRewardsUid = null
-            loadedRewardsRevision = null
-            _rewardsState.value = BookingRewardsUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedRewards()
+                _rewardsState.value = BookingRewardsUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedRewards()
+                _rewardsState.value = currentSessionState.error.toRewardsUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedRewards()
+                _rewardsState.value = BookingRewardsUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val uid = session.session.user.uid
@@ -226,43 +241,85 @@ class ProductsBookingViewModel(
     }
 
     fun loadRewards() {
-        if (_rewardsState.value is BookingRewardsUiState.Loading) return
+        if (rewardsRequestInFlight) return
 
-        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedRewardsUid = null
-            loadedRewardsRevision = null
-            _rewardsState.value = BookingRewardsUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = authRepository.sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedRewards()
+                _rewardsState.value = BookingRewardsUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedRewards()
+                _rewardsState.value = currentSessionState.error.toRewardsUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedRewards()
+                _rewardsState.value = BookingRewardsUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val requestedUid = session.session.user.uid
         val requestedRevision = bookingRevision.value
+        rewardsRequestInFlight = true
         viewModelScope.launch {
-            _rewardsState.value = BookingRewardsUiState.Loading
-            val nextState = when (val result = bookingRepository.getMyLoyalty()) {
-                is BookingLoyaltyResult.Success -> result.loyalty.toBookingRewardsUiState()
-                is BookingLoyaltyResult.Failure -> result.error.toBookingRewardsUiState()
-            }
-            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedRewardsUid = requestedUid
-                loadedRewardsRevision = requestedRevision
-                _rewardsState.value = nextState
-            } else {
-                loadedRewardsUid = null
-                loadedRewardsRevision = null
-                _rewardsState.value = BookingRewardsUiState.Unauthenticated
+            try {
+                _rewardsState.value = BookingRewardsUiState.Loading
+                val nextState = when (val result = bookingRepository.getMyLoyalty()) {
+                    is BookingLoyaltyResult.Success -> result.loyalty.toBookingRewardsUiState()
+                    is BookingLoyaltyResult.Failure -> result.error.toBookingRewardsUiState()
+                }
+                when (val currentSessionState = authRepository.sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedRewards()
+                        _rewardsState.value = BookingRewardsUiState.Loading
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedRewards()
+                        _rewardsState.value = currentSessionState.error.toRewardsUiState()
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        clearLoadedRewards()
+                        _rewardsState.value = BookingRewardsUiState.Unauthenticated
+                    }
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedRewardsUid = requestedUid
+                            loadedRewardsRevision = requestedRevision
+                            _rewardsState.value = nextState
+                        } else {
+                            clearLoadedRewards()
+                            _rewardsState.value = BookingRewardsUiState.Unauthenticated
+                        }
+                    }
+                }
+            } finally {
+                rewardsRequestInFlight = false
             }
         }
     }
 
     fun refreshContactProfileForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedContactProfileUid = null
-            _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedContactProfile()
+                _contactProfileState.value = BookingContactProfileUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedContactProfile()
+                _contactProfileState.value = currentSessionState.error.toContactProfileUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedContactProfile()
+                _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val uid = session.session.user.uid
@@ -276,40 +333,83 @@ class ProductsBookingViewModel(
     }
 
     fun loadContactProfile() {
-        if (_contactProfileState.value is BookingContactProfileUiState.Loading) return
+        if (contactProfileRequestInFlight) return
 
-        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedContactProfileUid = null
-            _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = authRepository.sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedContactProfile()
+                _contactProfileState.value = BookingContactProfileUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedContactProfile()
+                _contactProfileState.value = currentSessionState.error.toContactProfileUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedContactProfile()
+                _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val requestedUid = session.session.user.uid
+        contactProfileRequestInFlight = true
         viewModelScope.launch {
-            _contactProfileState.value = BookingContactProfileUiState.Loading
-            val nextState = when (val result = userProfileRepository.getMyProfile()) {
-                is UserProfileResult.Success -> result.profile.toContactProfileUiState()
-                is UserProfileResult.Failure -> result.error.toContactProfileUiState()
-            }
-            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedContactProfileUid = requestedUid
-                _contactProfileState.value = nextState
-            } else {
-                loadedContactProfileUid = null
-                _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+            try {
+                _contactProfileState.value = BookingContactProfileUiState.Loading
+                val nextState = when (val result = userProfileRepository.getMyProfile()) {
+                    is UserProfileResult.Success -> result.profile.toContactProfileUiState()
+                    is UserProfileResult.Failure -> result.error.toContactProfileUiState()
+                }
+                when (val currentSessionState = authRepository.sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedContactProfile()
+                        _contactProfileState.value = BookingContactProfileUiState.Loading
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedContactProfile()
+                        _contactProfileState.value = currentSessionState.error.toContactProfileUiState()
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        clearLoadedContactProfile()
+                        _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+                    }
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedContactProfileUid = requestedUid
+                            _contactProfileState.value = nextState
+                        } else {
+                            clearLoadedContactProfile()
+                            _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
+                        }
+                    }
+                }
+            } finally {
+                contactProfileRequestInFlight = false
             }
         }
     }
 
     fun refreshVehiclesForSession() {
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedVehiclesUid = null
-            loadedVehiclesRevision = null
-            _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedVehicles()
+                _vehiclesState.value = BookingVehiclesUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedVehicles()
+                _vehiclesState.value = currentSessionState.error.toVehiclesUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedVehicles()
+                _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val uid = session.session.user.uid
@@ -322,33 +422,63 @@ class ProductsBookingViewModel(
     }
 
     fun loadVehicles() {
-        if (_vehiclesState.value is BookingVehiclesUiState.Loading) return
+        if (vehiclesRequestInFlight) return
 
-        val session = authRepository.sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedVehiclesUid = null
-            loadedVehiclesRevision = null
-            _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
-            return
+        val session = when (val currentSessionState = authRepository.sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedVehicles()
+                _vehiclesState.value = BookingVehiclesUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedVehicles()
+                _vehiclesState.value = currentSessionState.error.toVehiclesUiState()
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedVehicles()
+                _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
         }
 
         val requestedUid = session.session.user.uid
         val requestedRevision = vehicleRevision.value
+        vehiclesRequestInFlight = true
         viewModelScope.launch {
-            _vehiclesState.value = BookingVehiclesUiState.Loading
-            val nextState = when (val result = userVehicleRepository.getMyVehicles()) {
-                is UserVehicleListResult.Success -> result.vehicles.toVehiclesUiState()
-                is UserVehicleListResult.Failure -> result.error.toVehiclesUiState()
-            }
-            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedVehiclesUid = requestedUid
-                loadedVehiclesRevision = requestedRevision
-                _vehiclesState.value = nextState
-            } else {
-                loadedVehiclesUid = null
-                loadedVehiclesRevision = null
-                _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+            try {
+                _vehiclesState.value = BookingVehiclesUiState.Loading
+                val nextState = when (val result = userVehicleRepository.getMyVehicles()) {
+                    is UserVehicleListResult.Success -> result.vehicles.toVehiclesUiState()
+                    is UserVehicleListResult.Failure -> result.error.toVehiclesUiState()
+                }
+                when (val currentSessionState = authRepository.sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedVehicles()
+                        _vehiclesState.value = BookingVehiclesUiState.Loading
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedVehicles()
+                        _vehiclesState.value = currentSessionState.error.toVehiclesUiState()
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        clearLoadedVehicles()
+                        _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+                    }
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedVehiclesUid = requestedUid
+                            loadedVehiclesRevision = requestedRevision
+                            _vehiclesState.value = nextState
+                        } else {
+                            clearLoadedVehicles()
+                            _vehiclesState.value = BookingVehiclesUiState.Unauthenticated
+                        }
+                    }
+                }
+            } finally {
+                vehiclesRequestInFlight = false
             }
         }
     }
@@ -493,6 +623,20 @@ class ProductsBookingViewModel(
             is UserVehicleError.Backend -> BookingVehiclesUiState.Error(message = message, retryable = true)
         }
     }
+
+    private fun clearLoadedRewards() {
+        loadedRewardsUid = null
+        loadedRewardsRevision = null
+    }
+
+    private fun clearLoadedContactProfile() {
+        loadedContactProfileUid = null
+    }
+
+    private fun clearLoadedVehicles() {
+        loadedVehiclesUid = null
+        loadedVehiclesRevision = null
+    }
 }
 
 private fun BookingLoyalty.toBookingRewardsUiState(): BookingRewardsUiState {
@@ -509,6 +653,22 @@ private fun BookingLoyaltyError.toBookingRewardsUiState(): BookingRewardsUiState
         is BookingLoyaltyError.Unavailable,
         is BookingLoyaltyError.Backend -> BookingRewardsUiState.Error(message = message, retryable = true)
     }
+}
+
+private fun AuthError.toRewardsUiState(): BookingRewardsUiState.Error {
+    return BookingRewardsUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.toContactProfileUiState(): BookingContactProfileUiState.Error {
+    return BookingContactProfileUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.toVehiclesUiState(): BookingVehiclesUiState.Error {
+    return BookingVehiclesUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.isRetryableSessionError(): Boolean {
+    return this is AuthError.Unavailable || this is AuthError.Backend
 }
 
 private fun BookingLoyaltyRedemption.toBookingRewardCodeUiOrNull(): BookingRewardCodeUi? {

@@ -33,6 +33,7 @@ import com.sudsmobile.data.profile.UserProfileRepository
 import com.sudsmobile.data.profile.UserProfileResult
 import com.sudsmobile.data.profile.UserProfileSaveRequest
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -128,6 +129,46 @@ class ProductsBookingViewModelTest {
         runCurrent()
 
         assertIs<BookingVehiclesUiState.Unauthenticated>(viewModel.vehiclesState.value)
+        assertEquals(0, vehicleRepository.listCalls)
+    }
+
+    @Test
+    fun loadVehiclesWaitsWhileSessionIsRestoringWithoutRepositoryCall() = runTest {
+        val vehicleRepository = FakeProductsVehicleRepository(
+            listResult = UserVehicleListResult.Success(listOf(userVehicle())),
+        )
+        val viewModel = productsBookingViewModel(
+            authRepository = FakeProductsAuthRepository(initialState = AuthSessionState.Restoring),
+            vehicleRepository = vehicleRepository,
+        )
+
+        viewModel.loadVehicles()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Loading>(viewModel.vehiclesState.value)
+        assertEquals(0, vehicleRepository.listCalls)
+    }
+
+    @Test
+    fun loadVehiclesMapsRestoreFailureToRetryableState() = runTest {
+        val vehicleRepository = FakeProductsVehicleRepository(
+            listResult = UserVehicleListResult.Success(listOf(userVehicle())),
+        )
+        val viewModel = productsBookingViewModel(
+            authRepository = FakeProductsAuthRepository(
+                initialState = AuthSessionState.RestoreFailed(
+                    AuthError.Unavailable("Sessão indisponível."),
+                ),
+            ),
+            vehicleRepository = vehicleRepository,
+        )
+
+        viewModel.loadVehicles()
+        runCurrent()
+
+        val error = assertIs<BookingVehiclesUiState.Error>(viewModel.vehiclesState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
         assertEquals(0, vehicleRepository.listCalls)
     }
 
@@ -250,6 +291,46 @@ class ProductsBookingViewModelTest {
         runCurrent()
 
         assertIs<BookingContactProfileUiState.Unauthenticated>(viewModel.contactProfileState.value)
+        assertEquals(0, profileRepository.getCalls)
+    }
+
+    @Test
+    fun loadContactProfileWaitsWhileSessionIsRestoringWithoutRepositoryCall() = runTest {
+        val profileRepository = FakeProductsProfileRepository(
+            profileResult = UserProfileResult.Success(userProfile()),
+        )
+        val viewModel = productsBookingViewModel(
+            authRepository = FakeProductsAuthRepository(initialState = AuthSessionState.Restoring),
+            profileRepository = profileRepository,
+        )
+
+        viewModel.loadContactProfile()
+        runCurrent()
+
+        assertIs<BookingContactProfileUiState.Loading>(viewModel.contactProfileState.value)
+        assertEquals(0, profileRepository.getCalls)
+    }
+
+    @Test
+    fun loadContactProfileMapsRestoreFailureToRetryableState() = runTest {
+        val profileRepository = FakeProductsProfileRepository(
+            profileResult = UserProfileResult.Success(userProfile()),
+        )
+        val viewModel = productsBookingViewModel(
+            authRepository = FakeProductsAuthRepository(
+                initialState = AuthSessionState.RestoreFailed(
+                    AuthError.Backend("Falha ao validar sessão."),
+                ),
+            ),
+            profileRepository = profileRepository,
+        )
+
+        viewModel.loadContactProfile()
+        runCurrent()
+
+        val error = assertIs<BookingContactProfileUiState.Error>(viewModel.contactProfileState.value)
+        assertEquals("Falha ao validar sessão.", error.message)
+        assertEquals(true, error.retryable)
         assertEquals(0, profileRepository.getCalls)
     }
 
@@ -398,6 +479,48 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun loadRewardsWaitsWhileSessionIsRestoringWithoutRepositoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            loyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty()),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProductsAuthRepository(initialState = AuthSessionState.Restoring),
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        assertIs<BookingRewardsUiState.Loading>(viewModel.rewardsState.value)
+        assertEquals(0, repository.loyaltyCalls)
+    }
+
+    @Test
+    fun loadRewardsMapsRestoreFailureToRetryableState() = runTest {
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            loyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty()),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProductsAuthRepository(
+                initialState = AuthSessionState.RestoreFailed(
+                    AuthError.Unavailable("Sessão indisponível."),
+                ),
+            ),
+        )
+
+        viewModel.loadRewards()
+        runCurrent()
+
+        val error = assertIs<BookingRewardsUiState.Error>(viewModel.rewardsState.value)
+        assertEquals("Sessão indisponível.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(0, repository.loyaltyCalls)
+    }
+
+    @Test
     fun loadRewardsShowsOnlyIssuedRewardCodes() = runTest {
         val viewModel = productsBookingViewModel(
             bookingRepository = FakeBookingRepository(
@@ -489,6 +612,85 @@ class ProductsBookingViewModelTest {
         val error = assertIs<BookingRewardsUiState.Error>(viewModel.rewardsState.value)
         assertEquals("Não foi possível carregar recompensas.", error.message)
         assertEquals(true, error.retryable)
+    }
+
+    @Test
+    fun userSpecificLoadsKeepRestoringStateWhenSessionChangesDuringRequests() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val vehicleRepository = FakeProductsVehicleRepository(
+            listResult = UserVehicleListResult.Success(listOf(userVehicle())),
+        )
+        val profileRepository = FakeProductsProfileRepository(
+            profileResult = UserProfileResult.Success(userProfile()),
+        )
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            loyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty(redemptions = listOf(bookingRedemption()))),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+            vehicleRepository = vehicleRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.loadVehicles()
+        viewModel.loadContactProfile()
+        viewModel.loadRewards()
+        authRepository.setSessionState(AuthSessionState.Restoring)
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Loading>(viewModel.vehiclesState.value)
+        assertIs<BookingContactProfileUiState.Loading>(viewModel.contactProfileState.value)
+        assertIs<BookingRewardsUiState.Loading>(viewModel.rewardsState.value)
+        assertEquals(1, vehicleRepository.listCalls)
+        assertEquals(1, profileRepository.getCalls)
+        assertEquals(1, repository.loyaltyCalls)
+    }
+
+    @Test
+    fun userSpecificRefreshesLoadAfterRestoringSessionCompletes() = runTest {
+        val authRepository = FakeProductsAuthRepository(initialState = AuthSessionState.Restoring)
+        val vehicleRepository = FakeProductsVehicleRepository(
+            listResult = UserVehicleListResult.Success(listOf(userVehicle())),
+        )
+        val profileRepository = FakeProductsProfileRepository(
+            profileResult = UserProfileResult.Success(userProfile()),
+        )
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            loyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty(redemptions = listOf(bookingRedemption()))),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+            vehicleRepository = vehicleRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.refreshVehiclesForSession()
+        viewModel.refreshContactProfileForSession()
+        viewModel.refreshRewardsForSession()
+
+        assertIs<BookingVehiclesUiState.Loading>(viewModel.vehiclesState.value)
+        assertIs<BookingContactProfileUiState.Loading>(viewModel.contactProfileState.value)
+        assertIs<BookingRewardsUiState.Loading>(viewModel.rewardsState.value)
+        assertEquals(0, vehicleRepository.listCalls)
+        assertEquals(0, profileRepository.getCalls)
+        assertEquals(0, repository.loyaltyCalls)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshVehiclesForSession()
+        viewModel.refreshContactProfileForSession()
+        viewModel.refreshRewardsForSession()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Loaded>(viewModel.vehiclesState.value)
+        assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+        assertIs<BookingRewardsUiState.Loaded>(viewModel.rewardsState.value)
+        assertEquals(1, vehicleRepository.listCalls)
+        assertEquals(1, profileRepository.getCalls)
+        assertEquals(1, repository.loyaltyCalls)
     }
 
     @Test
@@ -662,10 +864,11 @@ private class FakeProductsBusinessInfoRepository(
 }
 
 private class FakeProductsAuthRepository(
-    authenticated: Boolean,
+    authenticated: Boolean = true,
+    initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) {
+        initialState ?: if (authenticated) {
             authenticatedSession()
         } else {
             AuthSessionState.Unauthenticated
@@ -679,6 +882,10 @@ private class FakeProductsAuthRepository(
 
     fun authenticate(uid: String = "uid-1") {
         mutableSessionState.value = authenticatedSession(uid)
+    }
+
+    fun setSessionState(state: AuthSessionState) {
+        mutableSessionState.value = state
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {

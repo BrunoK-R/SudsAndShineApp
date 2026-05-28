@@ -1092,6 +1092,8 @@ private fun LoyaltyRewardCodeCard(
     onRequestSignIn: () -> Unit,
 ) {
     val authenticated = sessionState is AuthSessionState.Authenticated
+    val restoringSession = sessionState == AuthSessionState.Restoring
+    val restoreErrorMessage = (sessionState as? AuthSessionState.RestoreFailed)?.error?.message
 
     ConfirmationCard(title = "Recompensa") {
         Row(
@@ -1105,7 +1107,7 @@ private fun LoyaltyRewardCodeCard(
                 contentColor = MaterialTheme.colorScheme.tertiary,
             ) {
                 Icon(
-                    imageVector = if (authenticated) Icons.Filled.CardGiftcard else Icons.Filled.Lock,
+                    imageVector = if (authenticated || restoringSession) Icons.Filled.CardGiftcard else Icons.Filled.Lock,
                     contentDescription = null,
                     modifier = Modifier.padding(10.dp),
                 )
@@ -1116,94 +1118,111 @@ private fun LoyaltyRewardCodeCard(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = if (authenticated) {
-                        "Aplicar código de lavagem grátis"
-                    } else {
-                        "Entre para aplicar recompensas"
+                    text = when {
+                        authenticated -> "Aplicar código de lavagem grátis"
+                        restoringSession -> "A validar sessão"
+                        else -> "Entre para aplicar recompensas"
                     },
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = if (authenticated) {
-                        "O código é validado na sua conta ao confirmar a marcação."
-                    } else {
-                        "As recompensas emitidas ficam associadas à sua conta e só podem ser usadas uma vez."
+                    text = when {
+                        authenticated -> "O código é validado na sua conta ao confirmar a marcação."
+                        restoringSession -> "Estamos a confirmar se há recompensas associadas à sua conta."
+                        else -> "As recompensas emitidas ficam associadas à sua conta e só podem ser usadas uma vez."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                if (authenticated) {
-                    BookingRewardCodesContent(
-                        rewardsState = rewardsState,
-                        selectedCode = rewardCode,
-                        onRewardCodeSelected = { selectedCode ->
-                            onRewardCodeChange(
-                                if (rewardCode.equals(selectedCode, ignoreCase = true)) {
-                                    ""
-                                } else {
-                                    selectedCode
-                                },
-                            )
-                        },
-                        onRetryRewards = onRetryRewards,
+                when {
+                    authenticated -> {
+                        BookingRewardCodesContent(
+                            rewardsState = rewardsState,
+                            selectedCode = rewardCode,
+                            onRewardCodeSelected = { selectedCode ->
+                                onRewardCodeChange(
+                                    if (rewardCode.equals(selectedCode, ignoreCase = true)) {
+                                        ""
+                                    } else {
+                                        selectedCode
+                                    },
+                                )
+                            },
+                            onRetryRewards = onRetryRewards,
+                        )
+
+                        OutlinedTextField(
+                            value = rewardCode,
+                            onValueChange = { input ->
+                                onRewardCodeChange(input.take(80).uppercase())
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = {
+                                Text(
+                                    text = "Código manual ou selecionado",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            },
+                            placeholder = {
+                                Text(
+                                    text = "SS-FREE-XXXX-0001",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Characters,
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.tertiary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                focusedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        )
+                    }
+
+                    restoringSession -> BookingRewardStateRow(
+                        title = "Sessão em validação",
+                        body = "Vamos mostrar os códigos assim que a sessão terminar de carregar.",
+                        loading = true,
                     )
 
-                    OutlinedTextField(
-                        value = rewardCode,
-                        onValueChange = { input ->
-                            onRewardCodeChange(input.take(80).uppercase())
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = {
-                            Text(
-                                text = "Código manual ou selecionado",
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                text = "SS-FREE-XXXX-0001",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Characters,
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.tertiary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            focusedLabelColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
+                    restoreErrorMessage != null -> BookingRewardStateRow(
+                        title = "Não foi possível validar sessão",
+                        body = restoreErrorMessage,
+                        actionLabel = "Entrar",
+                        onAction = onRequestSignIn,
                     )
-                } else {
-                    OutlinedButton(
-                        onClick = onRequestSignIn,
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.tertiary,
-                        ),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Lock,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Entrar", style = MaterialTheme.typography.labelLarge)
+
+                    else -> {
+                        OutlinedButton(
+                            onClick = onRequestSignIn,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.tertiary,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Entrar", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 }
             }
