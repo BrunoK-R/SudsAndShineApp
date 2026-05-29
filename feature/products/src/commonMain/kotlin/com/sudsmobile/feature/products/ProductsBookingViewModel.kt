@@ -185,7 +185,9 @@ class ProductsBookingViewModel(
     val vehiclesState: StateFlow<BookingVehiclesUiState> = _vehiclesState.asStateFlow()
     private var loadedVehiclesUid: String? = null
     private var loadedVehiclesRevision: Long? = null
-    private var vehiclesRequestInFlight: Boolean = false
+    private var vehiclesRequestSequence: Long = 0
+    private var activeVehiclesRequestUid: String? = null
+    private var activeVehiclesRequestRevision: Long? = null
 
     private val _contactProfileState = MutableStateFlow<BookingContactProfileUiState>(BookingContactProfileUiState.Idle)
     val contactProfileState: StateFlow<BookingContactProfileUiState> = _contactProfileState.asStateFlow()
@@ -425,8 +427,6 @@ class ProductsBookingViewModel(
     }
 
     fun loadVehicles() {
-        if (vehiclesRequestInFlight) return
-
         val session = when (val currentSessionState = authRepository.sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedVehicles()
@@ -448,7 +448,13 @@ class ProductsBookingViewModel(
 
         val requestedUid = session.session.user.uid
         val requestedRevision = vehicleRevision.value
-        vehiclesRequestInFlight = true
+        val sameRequestInFlight = activeVehiclesRequestUid == requestedUid &&
+            activeVehiclesRequestRevision == requestedRevision
+        if (sameRequestInFlight) return
+
+        val requestSequence = ++vehiclesRequestSequence
+        activeVehiclesRequestUid = requestedUid
+        activeVehiclesRequestRevision = requestedRevision
         viewModelScope.launch {
             try {
                 _vehiclesState.value = BookingVehiclesUiState.Loading
@@ -456,6 +462,8 @@ class ProductsBookingViewModel(
                     is UserVehicleListResult.Success -> result.vehicles.toVehiclesUiState()
                     is UserVehicleListResult.Failure -> result.error.toVehiclesUiState()
                 }
+                if (requestSequence != vehiclesRequestSequence) return@launch
+
                 when (val currentSessionState = authRepository.sessionState.value) {
                     AuthSessionState.Restoring -> {
                         clearLoadedVehicles()
@@ -481,7 +489,10 @@ class ProductsBookingViewModel(
                     }
                 }
             } finally {
-                vehiclesRequestInFlight = false
+                if (requestSequence == vehiclesRequestSequence) {
+                    activeVehiclesRequestUid = null
+                    activeVehiclesRequestRevision = null
+                }
             }
         }
     }

@@ -316,6 +316,47 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun loadVehiclesKeepsLatestRevisionWhenOlderRequestCompletesLast() = runTest {
+        val vehicleChangeNotifier = MutableUserVehicleChangeNotifier()
+        val firstResult = CompletableDeferred<UserVehicleListResult>()
+        val secondResult = CompletableDeferred<UserVehicleListResult>()
+        val vehicleRepository = DeferredProductsVehicleRepository(firstResult, secondResult)
+        val viewModel = productsBookingViewModel(
+            vehicleRepository = vehicleRepository,
+            userVehicleChangeNotifier = vehicleChangeNotifier,
+        )
+
+        viewModel.loadVehicles()
+        runCurrent()
+
+        assertIs<BookingVehiclesUiState.Loading>(viewModel.vehiclesState.value)
+        assertEquals(1, vehicleRepository.listCalls)
+
+        vehicleChangeNotifier.notifyVehiclesChanged()
+        viewModel.refreshVehiclesForSession()
+        runCurrent()
+
+        assertEquals(2, vehicleRepository.listCalls)
+
+        secondResult.complete(
+            UserVehicleListResult.Success(listOf(userVehicle(id = "vehicle-2", brand = "Mercedes"))),
+        )
+        runCurrent()
+
+        val loaded = assertIs<BookingVehiclesUiState.Loaded>(viewModel.vehiclesState.value)
+        assertEquals("saved:vehicle-2", loaded.vehicles.single().id)
+        assertEquals("Mercedes 320d", loaded.vehicles.single().name)
+
+        firstResult.complete(
+            UserVehicleListResult.Success(listOf(userVehicle(id = "vehicle-1", brand = "BMW"))),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<BookingVehiclesUiState.Loaded>(viewModel.vehiclesState.value)
+        assertEquals("saved:vehicle-2", stillLoaded.vehicles.single().id)
+    }
+
+    @Test
     fun loadContactProfileRequiresAuthenticatedSession() = runTest {
         val profileRepository = FakeProductsProfileRepository(
             profileResult = UserProfileResult.Success(userProfile()),
@@ -1001,6 +1042,31 @@ private class FakeProductsVehicleRepository(
     override suspend fun getMyVehicles(): UserVehicleListResult {
         listCalls += 1
         return listResult
+    }
+
+    override suspend fun createVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun updateVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun deleteVehicle(vehicleId: String): UserVehicleDeleteResult {
+        error("Not used")
+    }
+}
+
+private class DeferredProductsVehicleRepository(
+    vararg results: CompletableDeferred<UserVehicleListResult>,
+) : UserVehicleRepository {
+    private val pendingResults = results.toMutableList()
+    var listCalls: Int = 0
+        private set
+
+    override suspend fun getMyVehicles(): UserVehicleListResult {
+        listCalls += 1
+        return pendingResults.removeAt(0).await()
     }
 
     override suspend fun createVehicle(request: UserVehicleSaveRequest): UserVehicleMutationResult {
