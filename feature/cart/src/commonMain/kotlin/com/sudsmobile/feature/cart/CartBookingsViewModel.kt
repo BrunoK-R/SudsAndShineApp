@@ -176,6 +176,7 @@ internal class CartBookingsViewModel(
     val rescheduleState: StateFlow<BookingRescheduleUiState> = _rescheduleState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
+    private var rescheduleAvailabilityRequestRevision: Long = 0
 
     fun loadBusinessInfo(force: Boolean = false) {
         if (_businessInfoState.value is CartBusinessInfoUiState.Loading) return
@@ -331,18 +332,15 @@ internal class CartBookingsViewModel(
     }
 
     fun loadRescheduleAvailability(serviceDurationMinutes: Int, anchorDate: String? = null) {
-        if (_rescheduleAvailabilityState.value is BookingRescheduleAvailabilityUiState.Loading) return
+        val requestRevision = ++rescheduleAvailabilityRequestRevision
+        val request = BookingAvailabilityRequest(
+            anchorDate = anchorDate,
+            serviceDurationMinutes = serviceDurationMinutes,
+        )
 
+        _rescheduleAvailabilityState.value = BookingRescheduleAvailabilityUiState.Loading
         viewModelScope.launch {
-            _rescheduleAvailabilityState.value = BookingRescheduleAvailabilityUiState.Loading
-            _rescheduleAvailabilityState.value = when (
-                val result = bookingRepository.getAvailability(
-                    BookingAvailabilityRequest(
-                        anchorDate = anchorDate,
-                        serviceDurationMinutes = serviceDurationMinutes,
-                    ),
-                )
-            ) {
+            val nextState = when (val result = bookingRepository.getAvailability(request)) {
                 is BookingAvailabilityResult.Success -> {
                     if (result.month.days.any { it.available }) {
                         BookingRescheduleAvailabilityUiState.Loaded(result.month)
@@ -351,6 +349,9 @@ internal class CartBookingsViewModel(
                     }
                 }
                 is BookingAvailabilityResult.Failure -> result.error.toRescheduleAvailabilityState()
+            }
+            if (requestRevision == rescheduleAvailabilityRequestRevision) {
+                _rescheduleAvailabilityState.value = nextState
             }
         }
     }

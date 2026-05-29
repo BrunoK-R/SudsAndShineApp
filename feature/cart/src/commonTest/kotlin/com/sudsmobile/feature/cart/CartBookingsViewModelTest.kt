@@ -41,6 +41,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -513,6 +514,51 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun loadRescheduleAvailabilityAcceptsNewMonthWhilePreviousRequestIsLoading() = runTest {
+        val firstResult = CompletableDeferred<BookingAvailabilityResult>()
+        val secondResult = CompletableDeferred<BookingAvailabilityResult>()
+        val repository = DeferredAvailabilityBookingRepository(firstResult, secondResult)
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.loadRescheduleAvailability(serviceDurationMinutes = 30, anchorDate = "2026-05-01")
+        runCurrent()
+
+        assertIs<BookingRescheduleAvailabilityUiState.Loading>(viewModel.rescheduleAvailabilityState.value)
+        assertEquals("2026-05-01", repository.requests.single().anchorDate)
+
+        viewModel.loadRescheduleAvailability(serviceDurationMinutes = 45, anchorDate = "2026-06-01")
+        runCurrent()
+
+        assertEquals(2, repository.requests.size)
+        assertEquals("2026-06-01", repository.requests[1].anchorDate)
+        assertEquals(45, repository.requests[1].serviceDurationMinutes)
+
+        secondResult.complete(
+            BookingAvailabilityResult.Success(availabilityMonth(monthTitle = "junho 2026", dayId = "2026-06-22")),
+        )
+        runCurrent()
+
+        val loaded = assertIs<BookingRescheduleAvailabilityUiState.Loaded>(
+            viewModel.rescheduleAvailabilityState.value,
+        )
+        assertEquals("junho 2026", loaded.month.monthTitle)
+
+        firstResult.complete(
+            BookingAvailabilityResult.Success(availabilityMonth(monthTitle = "maio 2026", dayId = "2026-05-22")),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<BookingRescheduleAvailabilityUiState.Loaded>(
+            viewModel.rescheduleAvailabilityState.value,
+        )
+        assertEquals("junho 2026", stillLoaded.month.monthTitle)
+    }
+
+    @Test
     fun rescheduleBookingBuildsRequestAndPublishesSuccessState() = runTest {
         val repository = FakeBookingRepository(
             historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
@@ -834,6 +880,26 @@ private class FakeBookingRepository(
     }
 }
 
+private class DeferredAvailabilityBookingRepository(
+    vararg results: CompletableDeferred<BookingAvailabilityResult>,
+) : BookingRepository {
+    private val pendingResults = results.toMutableList()
+    val requests: MutableList<BookingAvailabilityRequest> = mutableListOf()
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        requests += request
+        return pendingResults.removeAt(0).await()
+    }
+
+    override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        error("Not used")
+    }
+}
+
 private class FakeBusinessInfoRepository(
     private var result: BusinessInfoResult = BusinessInfoResult.Success(businessInfo()),
 ) : BusinessInfoRepository {
@@ -968,13 +1034,16 @@ private fun businessInfo(
     ),
 )
 
-private fun availabilityMonth(): BookingAvailabilityMonth = BookingAvailabilityMonth(
-    monthTitle = "maio 2026",
+private fun availabilityMonth(
+    monthTitle: String = "maio 2026",
+    dayId: String = "2026-05-22",
+): BookingAvailabilityMonth = BookingAvailabilityMonth(
+    monthTitle = monthTitle,
     leadingEmptyCells = 4,
     days = listOf(
         BookingAvailabilityDay(
-            id = "2026-05-22",
-            dayOfMonth = 22,
+            id = dayId,
+            dayOfMonth = dayId.substringAfterLast("-").toIntOrNull() ?: 22,
             dateLabel = "Sexta, 22 maio",
             summaryLabel = "Sex",
             available = true,
