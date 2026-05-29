@@ -74,10 +74,11 @@ fun VehiclesScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val mutationState by viewModel.mutationState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
     var showEditor by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf(VehicleDraftUi()) }
 
-    LaunchedEffect(sessionState) {
+    LaunchedEffect(sessionState, vehicleRevision) {
         viewModel.refreshForSession()
     }
 
