@@ -17,6 +17,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -130,6 +131,49 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun registerProfileFailureClearsRetryWhenSessionSwitches() = runTest {
+        val authRepository = FakeRegistrationAuthRepository()
+        val profileRepository = FakeRegistrationProfileRepository(
+            mutationResult = UserProfileMutationResult.Failure(
+                UserProfileError.Backend("Perfil indisponível."),
+            ),
+        )
+        val viewModel = authViewModel(
+            authRepository = authRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.register(
+            displayName = "Bruno Ribeiro",
+            email = "bruno@example.com",
+            phoneNumber = "913005855",
+            password = "secret123",
+            acceptsTerms = true,
+        )
+        runCurrent()
+
+        assertIs<AuthUiState.RegistrationProfileError>(viewModel.uiState.value)
+
+        authRepository.replaceSession(
+            registrationSession(
+                uid = "uid-2",
+                email = "maria@example.com",
+                displayName = "Maria Sousa",
+                phoneNumber = "914000000",
+            ),
+        )
+        runCurrent()
+
+        val authenticated = assertIs<AuthUiState.Authenticated>(viewModel.uiState.value)
+        assertEquals("uid-2", authenticated.user.uid)
+
+        viewModel.retryRegistrationProfileSave()
+        runCurrent()
+
+        assertEquals(1, profileRepository.updateCalls)
+    }
+
+    @Test
     fun registerTermsValidationDoesNotCreateAccountOrProfile() = runTest {
         val authRepository = FakeRegistrationAuthRepository()
         val profileRepository = FakeRegistrationProfileRepository(
@@ -153,6 +197,107 @@ class AuthViewModelTest {
         assertEquals(0, authRepository.registerCalls)
         assertEquals(0, profileRepository.updateCalls)
     }
+
+    @Test
+    fun registerProfileSaveSkipsRepositoryWhenSessionChangesBeforeSync() = runTest {
+        val authRepository = FakeRegistrationAuthRepository(
+            sessionStateAfterRegister = AuthSessionState.Unauthenticated,
+        )
+        val profileRepository = FakeRegistrationProfileRepository(
+            mutationResult = UserProfileMutationResult.Success(registrationProfile()),
+        )
+        val viewModel = authViewModel(
+            authRepository = authRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.register(
+            displayName = "Bruno Ribeiro",
+            email = "bruno@example.com",
+            phoneNumber = "913005855",
+            password = "secret123",
+            acceptsTerms = true,
+        )
+        runCurrent()
+
+        assertIs<AuthUiState.Idle>(viewModel.uiState.value)
+        assertEquals(0, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun registerProfileSaveSuccessDoesNotAuthenticateAfterSignOut() = runTest {
+        val authRepository = FakeRegistrationAuthRepository()
+        val profileRepository = SuspendedRegistrationProfileRepository()
+        val viewModel = authViewModel(
+            authRepository = authRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.register(
+            displayName = "Bruno Ribeiro",
+            email = "bruno@example.com",
+            phoneNumber = "913005855",
+            password = "secret123",
+            acceptsTerms = true,
+        )
+        runCurrent()
+
+        assertEquals(1, profileRepository.updateCalls)
+
+        authRepository.signOut()
+        runCurrent()
+        profileRepository.complete(
+            UserProfileMutationResult.Success(
+                registrationProfile(displayName = "Bruno Ribeiro", phoneNumber = "913005855"),
+            ),
+        )
+        runCurrent()
+
+        assertIs<AuthUiState.Idle>(viewModel.uiState.value)
+
+        viewModel.retryRegistrationProfileSave()
+        runCurrent()
+
+        assertEquals(1, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun registerProfileSaveSuccessKeepsCurrentSessionAfterUserSwitch() = runTest {
+        val authRepository = FakeRegistrationAuthRepository()
+        val profileRepository = SuspendedRegistrationProfileRepository()
+        val viewModel = authViewModel(
+            authRepository = authRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.register(
+            displayName = "Bruno Ribeiro",
+            email = "bruno@example.com",
+            phoneNumber = "913005855",
+            password = "secret123",
+            acceptsTerms = true,
+        )
+        runCurrent()
+
+        val switchedSession = registrationSession(
+            uid = "uid-2",
+            email = "maria@example.com",
+            displayName = "Maria Sousa",
+            phoneNumber = "914000000",
+        )
+        authRepository.replaceSession(switchedSession)
+        runCurrent()
+        profileRepository.complete(
+            UserProfileMutationResult.Success(
+                registrationProfile(displayName = "Bruno Ribeiro", phoneNumber = "913005855"),
+            ),
+        )
+        runCurrent()
+
+        val authenticated = assertIs<AuthUiState.Authenticated>(viewModel.uiState.value)
+        assertEquals("uid-2", authenticated.user.uid)
+        assertEquals("Maria Sousa", authenticated.user.displayName)
+    }
 }
 
 private fun authViewModel(
@@ -165,7 +310,9 @@ private fun authViewModel(
     profileRepository = profileRepository,
 )
 
-private class FakeRegistrationAuthRepository : AuthRepository {
+private class FakeRegistrationAuthRepository(
+    private val sessionStateAfterRegister: AuthSessionState? = null,
+) : AuthRepository {
     private val mutableSessionState = MutableStateFlow<AuthSessionState>(AuthSessionState.Unauthenticated)
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
     var registerCalls: Int = 0
@@ -197,7 +344,7 @@ private class FakeRegistrationAuthRepository : AuthRepository {
             displayName = displayName.trim(),
             phoneNumber = phoneNumber.trim(),
         )
-        mutableSessionState.value = AuthSessionState.Authenticated(session)
+        mutableSessionState.value = sessionStateAfterRegister ?: AuthSessionState.Authenticated(session)
         return AuthResult.Success(session)
     }
 
@@ -207,6 +354,10 @@ private class FakeRegistrationAuthRepository : AuthRepository {
 
     override fun signOut() {
         mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+
+    fun replaceSession(session: AuthSession) {
+        mutableSessionState.value = AuthSessionState.Authenticated(session)
     }
 }
 
@@ -229,13 +380,33 @@ private class FakeRegistrationProfileRepository(
     }
 }
 
+private class SuspendedRegistrationProfileRepository : UserProfileRepository {
+    private val pendingResult = CompletableDeferred<UserProfileMutationResult>()
+    var updateCalls: Int = 0
+        private set
+
+    override suspend fun getMyProfile(): UserProfileResult {
+        error("Not used")
+    }
+
+    override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
+        updateCalls += 1
+        return pendingResult.await()
+    }
+
+    fun complete(result: UserProfileMutationResult) {
+        pendingResult.complete(result)
+    }
+}
+
 private fun registrationSession(
+    uid: String = "uid-1",
     email: String,
     displayName: String,
     phoneNumber: String,
 ): AuthSession = AuthSession(
     user = AuthUser(
-        uid = "uid-1",
+        uid = uid,
         email = email,
         displayName = displayName,
         phoneNumber = phoneNumber,

@@ -6,6 +6,7 @@ import com.sudsmobile.data.auth.AuthActionResult
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
+import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
 import com.sudsmobile.data.profile.UserProfile
@@ -38,6 +39,7 @@ class AuthViewModel(
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
     private var registrationProfileSyncActive: Boolean = false
+    private var registrationProfileSyncGeneration: Long = 0L
     private var pendingRegistrationProfile: PendingRegistrationProfile? = null
 
     init {
@@ -52,6 +54,11 @@ class AuthViewModel(
                     is AuthSessionState.Authenticated -> {
                         if (!registrationProfileSyncActive) {
                             _uiState.value = AuthUiState.Authenticated(sessionState.session.user)
+                        } else if (_uiState.value is AuthUiState.RegistrationProfileError &&
+                            pendingRegistrationProfile?.user?.uid != sessionState.session.user.uid
+                        ) {
+                            clearRegistrationProfileSync()
+                            _uiState.value = AuthUiState.Authenticated(sessionState.session.user)
                         }
                     }
                     is AuthSessionState.RestoreFailed -> {
@@ -61,13 +68,16 @@ class AuthViewModel(
                     }
                     AuthSessionState.Unauthenticated -> {
                         if (!registrationProfileSyncActive) {
-                            pendingRegistrationProfile = null
+                            clearRegistrationProfileSync()
                             if (_uiState.value == AuthUiState.Loading ||
                                 _uiState.value is AuthUiState.Authenticated ||
                                 _uiState.value is AuthUiState.RegistrationProfileError
                             ) {
                                 _uiState.value = AuthUiState.Idle
                             }
+                        } else if (_uiState.value is AuthUiState.RegistrationProfileError) {
+                            clearRegistrationProfileSync()
+                            _uiState.value = AuthUiState.Idle
                         }
                     }
                 }
@@ -78,8 +88,7 @@ class AuthViewModel(
     fun signIn(email: String, password: String) {
         if (_uiState.value is AuthUiState.Loading) return
 
-        registrationProfileSyncActive = false
-        pendingRegistrationProfile = null
+        clearRegistrationProfileSync()
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             _uiState.value = when (val result = authRepository.signIn(email, password)) {
@@ -106,8 +115,7 @@ class AuthViewModel(
             return
         }
 
-        registrationProfileSyncActive = true
-        pendingRegistrationProfile = null
+        val syncGeneration = beginRegistrationProfileSync()
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             when (
@@ -125,10 +133,10 @@ class AuthViewModel(
                         phoneNumber = phoneNumber.trim(),
                     )
                     pendingRegistrationProfile = pendingProfile
-                    saveRegistrationProfile(pendingProfile)
+                    saveRegistrationProfile(pendingProfile, syncGeneration)
                 }
                 is AuthResult.Failure -> {
-                    registrationProfileSyncActive = false
+                    clearRegistrationProfileSync()
                     _uiState.value = result.error.toUiState()
                 }
             }
@@ -139,8 +147,9 @@ class AuthViewModel(
         if (_uiState.value is AuthUiState.Loading) return
 
         val pendingProfile = pendingRegistrationProfile ?: return
+        val syncGeneration = continueRegistrationProfileSync()
         viewModelScope.launch {
-            saveRegistrationProfile(pendingProfile)
+            saveRegistrationProfile(pendingProfile, syncGeneration)
         }
     }
 
@@ -148,16 +157,19 @@ class AuthViewModel(
         val user = pendingRegistrationProfile?.user
             ?: (_uiState.value as? AuthUiState.RegistrationProfileError)?.user
             ?: return
-        pendingRegistrationProfile = null
-        registrationProfileSyncActive = false
-        _uiState.value = AuthUiState.Authenticated(user)
+        val currentUser = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session?.user
+        clearRegistrationProfileSync()
+        _uiState.value = when {
+            currentUser?.uid == user.uid -> AuthUiState.Authenticated(user)
+            currentUser != null -> AuthUiState.Authenticated(currentUser)
+            else -> AuthUiState.Idle
+        }
     }
 
     fun sendPasswordReset(email: String) {
         if (_uiState.value is AuthUiState.Loading) return
 
-        registrationProfileSyncActive = false
-        pendingRegistrationProfile = null
+        clearRegistrationProfileSync()
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             _uiState.value = when (val result = authRepository.sendPasswordReset(email)) {
@@ -175,8 +187,22 @@ class AuthViewModel(
         }
     }
 
-    private suspend fun saveRegistrationProfile(pendingProfile: PendingRegistrationProfile) {
+    private suspend fun saveRegistrationProfile(
+        pendingProfile: PendingRegistrationProfile,
+        syncGeneration: Long,
+    ) {
+        if (syncGeneration != registrationProfileSyncGeneration) return
+
         _uiState.value = AuthUiState.Loading
+        val sessionBeforeSave = authRepository.currentSession()
+        if (
+            syncGeneration != registrationProfileSyncGeneration ||
+            !pendingProfile.matches(sessionBeforeSave)
+        ) {
+            finishRegistrationProfileSyncWithCurrentSession(sessionBeforeSave, syncGeneration)
+            return
+        }
+
         when (
             val result = profileRepository.updateMyProfile(
                 UserProfileSaveRequest(
@@ -188,13 +214,32 @@ class AuthViewModel(
             )
         ) {
             is UserProfileMutationResult.Success -> {
+                val sessionAfterSave = authRepository.currentSession()
+                if (
+                    syncGeneration != registrationProfileSyncGeneration ||
+                    !pendingProfile.matches(sessionAfterSave)
+                ) {
+                    finishRegistrationProfileSyncWithCurrentSession(sessionAfterSave, syncGeneration)
+                    return
+                }
+
                 pendingRegistrationProfile = null
                 registrationProfileSyncActive = false
+                registrationProfileSyncGeneration += 1
                 _uiState.value = AuthUiState.Authenticated(
-                    pendingProfile.user.withSavedProfile(result.profile),
+                    requireNotNull(sessionAfterSave).user.withSavedProfile(result.profile),
                 )
             }
             is UserProfileMutationResult.Failure -> {
+                val sessionAfterSave = authRepository.currentSession()
+                if (
+                    syncGeneration != registrationProfileSyncGeneration ||
+                    !pendingProfile.matches(sessionAfterSave)
+                ) {
+                    finishRegistrationProfileSyncWithCurrentSession(sessionAfterSave, syncGeneration)
+                    return
+                }
+
                 _uiState.value = AuthUiState.RegistrationProfileError(
                     user = pendingProfile.user,
                     message = result.error.message,
@@ -202,6 +247,37 @@ class AuthViewModel(
                 )
             }
         }
+    }
+
+    private fun beginRegistrationProfileSync(): Long {
+        registrationProfileSyncGeneration += 1
+        registrationProfileSyncActive = true
+        pendingRegistrationProfile = null
+        return registrationProfileSyncGeneration
+    }
+
+    private fun continueRegistrationProfileSync(): Long {
+        registrationProfileSyncGeneration += 1
+        registrationProfileSyncActive = true
+        return registrationProfileSyncGeneration
+    }
+
+    private fun clearRegistrationProfileSync() {
+        pendingRegistrationProfile = null
+        registrationProfileSyncActive = false
+        registrationProfileSyncGeneration += 1
+    }
+
+    private fun finishRegistrationProfileSyncWithCurrentSession(
+        currentSession: AuthSession?,
+        syncGeneration: Long,
+    ) {
+        if (syncGeneration != registrationProfileSyncGeneration) return
+
+        pendingRegistrationProfile = null
+        registrationProfileSyncActive = false
+        registrationProfileSyncGeneration += 1
+        _uiState.value = currentSession?.let { AuthUiState.Authenticated(it.user) } ?: AuthUiState.Idle
     }
 
     private fun AuthError.toUiState(): AuthUiState.Error {
@@ -221,6 +297,10 @@ private data class PendingRegistrationProfile(
     val displayName: String,
     val phoneNumber: String,
 )
+
+private fun PendingRegistrationProfile.matches(session: AuthSession?): Boolean {
+    return session?.user?.uid == user.uid
+}
 
 private fun AuthUser.withSavedProfile(profile: UserProfile): AuthUser = copy(
     displayName = profile.displayName.ifBlank { displayName },
