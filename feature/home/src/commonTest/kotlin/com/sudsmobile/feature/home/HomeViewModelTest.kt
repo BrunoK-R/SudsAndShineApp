@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.home
 
 import com.sudsmobile.data.auth.AuthActionResult
+import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
@@ -33,6 +34,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -343,6 +345,130 @@ class HomeViewModelTest {
         assertIs<HomeUiState.Empty>(viewModel.uiState.value)
         assertEquals(2, bookingRepository.historyCalls)
     }
+
+    @Test
+    fun authenticatedHomeKeepsLatestRevisionWhenRequestsCompleteOutOfOrder() = runTest {
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val bookingRepository = DeferredHomeBookingRepository()
+        val viewModel = homeViewModel(
+            bookingRepository = bookingRepository,
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<HomeUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, bookingRepository.historyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, bookingRepository.historyCalls)
+
+        bookingRepository.requests[1].complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        homeReservation(
+                            id = "new-booking",
+                            slotStartIso = "2026-06-02T10:00:00.000Z",
+                            upcoming = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val loaded = assertIs<HomeUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("new-booking", loaded.nextBooking?.id)
+
+        bookingRepository.requests[0].complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        homeReservation(
+                            id = "stale-booking",
+                            slotStartIso = "2026-05-30T10:00:00.000Z",
+                            upcoming = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<HomeUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("new-booking", stillLoaded.nextBooking?.id)
+    }
+
+    @Test
+    fun authenticatedHomeKeepsRestoringStateWhenSessionChangesDuringLoad() = runTest {
+        val bookingRepository = DeferredHomeBookingRepository()
+        val authRepository = FakeHomeAuthRepository(authenticated = true)
+        val viewModel = homeViewModel(
+            authRepository = authRepository,
+            bookingRepository = bookingRepository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+        authRepository.setSessionState(AuthSessionState.Restoring)
+        bookingRepository.requests.single().complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        homeReservation(
+                            id = "pending-booking",
+                            slotStartIso = "2026-06-02T10:00:00.000Z",
+                            upcoming = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        assertIs<HomeUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, bookingRepository.historyCalls)
+    }
+
+    @Test
+    fun authenticatedHomeMapsRestoreFailureWhenSessionChangesDuringLoad() = runTest {
+        val bookingRepository = DeferredHomeBookingRepository()
+        val authRepository = FakeHomeAuthRepository(authenticated = true)
+        val viewModel = homeViewModel(
+            authRepository = authRepository,
+            bookingRepository = bookingRepository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+        authRepository.setSessionState(
+            AuthSessionState.RestoreFailed(AuthError.Backend("Falha ao validar sessão.")),
+        )
+        bookingRepository.requests.single().complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        homeReservation(
+                            id = "pending-booking",
+                            slotStartIso = "2026-06-02T10:00:00.000Z",
+                            upcoming = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val error = assertIs<HomeUiState.Error>(viewModel.uiState.value)
+        assertEquals("Falha ao validar sessão.", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(1, bookingRepository.historyCalls)
+    }
 }
 
 private fun homeViewModel(
@@ -385,6 +511,27 @@ private class FakeHomeBookingRepository(
     }
 }
 
+private class DeferredHomeBookingRepository : BookingRepository {
+    val requests = mutableListOf<CompletableDeferred<BookingHistoryResult>>()
+    var historyCalls: Int = 0
+        private set
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        error("Not used")
+    }
+
+    override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        historyCalls += 1
+        val request = CompletableDeferred<BookingHistoryResult>()
+        requests += request
+        return request.await()
+    }
+}
+
 private class FakeHomeCatalogRepository(
     private val result: ServiceCatalogResult,
 ) : ServiceCatalogRepository {
@@ -423,6 +570,10 @@ private class FakeHomeAuthRepository(
 
     fun authenticate(uid: String = "uid-1") {
         mutableSessionState.value = authenticatedSession(uid)
+    }
+
+    fun setSessionState(nextState: AuthSessionState) {
+        mutableSessionState.value = nextState
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {

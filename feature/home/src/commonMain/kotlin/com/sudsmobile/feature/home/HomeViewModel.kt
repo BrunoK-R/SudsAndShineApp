@@ -146,25 +146,20 @@ internal class HomeViewModel(
 
     private var loadedSessionKey: String? = null
     private var loadedRevision: Long? = null
+    private var loadingSessionKey: String? = null
+    private var loadingRevision: Long? = null
+    private var homeRequestSequence: Long = 0
 
     fun refreshForSession(force: Boolean = false) {
         when (val sessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
-                loadedSessionKey = null
-                loadedRevision = null
+                clearLoadedSession()
                 _uiState.value = HomeUiState.Loading
             }
 
             is AuthSessionState.RestoreFailed -> {
-                loadedSessionKey = null
-                loadedRevision = null
-                _uiState.value = HomeUiState.Error(
-                    identity = GuestIdentity,
-                    message = sessionState.error.message,
-                    retryable = sessionState.error.isRetryable(),
-                    featuredServices = emptyList(),
-                    stats = DefaultHomeStats,
-                )
+                clearLoadedSession()
+                _uiState.value = sessionState.error.toHomeSessionErrorState()
             }
 
             AuthSessionState.Unauthenticated -> {
@@ -193,27 +188,57 @@ internal class HomeViewModel(
     }
 
     fun retry() {
-        loadedSessionKey = null
-        loadedRevision = null
+        clearLoadedSession()
         refreshForSession(force = true)
     }
 
     private fun loadGuestHome() {
+        if (loadingSessionKey == GuestSessionKey && loadingRevision == null) return
+
+        val requestSequence = ++homeRequestSequence
+        loadingSessionKey = GuestSessionKey
+        loadingRevision = null
         viewModelScope.launch {
-            _uiState.value = HomeUiState.Loading
-            val catalog = serviceCatalogRepository.getServiceCatalog().toFeaturedServices()
-            val businessInfo = businessInfoRepository.getBusinessInfo().toHomeStats()
-            if (authRepository.sessionState.value == AuthSessionState.Unauthenticated) {
-                loadedSessionKey = GuestSessionKey
-                _uiState.value = HomeUiState.Unauthenticated(
-                    identity = GuestIdentity,
-                    featuredServices = catalog.services,
-                    stats = businessInfo.stats,
-                    warningMessage = catalog.warningMessage,
-                    warningRetryable = catalog.warningRetryable,
-                    statsWarningMessage = businessInfo.warningMessage,
-                    statsWarningRetryable = businessInfo.warningRetryable,
-                )
+            try {
+                _uiState.value = HomeUiState.Loading
+                val catalog = serviceCatalogRepository.getServiceCatalog().toFeaturedServices()
+                val businessInfo = businessInfoRepository.getBusinessInfo().toHomeStats()
+                if (requestSequence != homeRequestSequence) return@launch
+
+                when (val currentSessionState = authRepository.sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedSession()
+                        _uiState.value = HomeUiState.Loading
+                    }
+
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedSession()
+                        _uiState.value = currentSessionState.error.toHomeSessionErrorState()
+                    }
+
+                    AuthSessionState.Unauthenticated -> {
+                        loadedSessionKey = GuestSessionKey
+                        loadedRevision = null
+                        _uiState.value = HomeUiState.Unauthenticated(
+                            identity = GuestIdentity,
+                            featuredServices = catalog.services,
+                            stats = businessInfo.stats,
+                            warningMessage = catalog.warningMessage,
+                            warningRetryable = catalog.warningRetryable,
+                            statsWarningMessage = businessInfo.warningMessage,
+                            statsWarningRetryable = businessInfo.warningRetryable,
+                        )
+                    }
+
+                    is AuthSessionState.Authenticated -> {
+                        clearLoadedSession()
+                        _uiState.value = HomeUiState.Loading
+                    }
+                }
+            } finally {
+                if (requestSequence == homeRequestSequence) {
+                    clearLoadingRequest()
+                }
             }
         }
     }
@@ -223,38 +248,72 @@ internal class HomeViewModel(
         requestedUid: String,
         requestedRevision: Long,
     ) {
-        viewModelScope.launch {
-            _uiState.value = HomeUiState.Loading
-            val nextState = coroutineScope {
-                val catalogDeferred = async { serviceCatalogRepository.getServiceCatalog().toFeaturedServices() }
-                val historyDeferred = async { bookingRepository.getMyBookings() }
-                val businessInfoDeferred = async { businessInfoRepository.getBusinessInfo().toHomeStats() }
-                buildAuthenticatedState(
-                    identity = user.toHomeIdentity(),
-                    catalog = catalogDeferred.await(),
-                    historyResult = historyDeferred.await(),
-                    businessInfo = businessInfoDeferred.await(),
-                )
-            }
+        if (loadingSessionKey == requestedUid && loadingRevision == requestedRevision) return
 
-            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)
-                ?.session
-                ?.user
-                ?.uid
-            if (currentUid == requestedUid) {
-                loadedSessionKey = requestedUid
-                loadedRevision = requestedRevision
-                _uiState.value = nextState
-            } else {
-                loadedSessionKey = null
-                loadedRevision = null
-                _uiState.value = HomeUiState.Unauthenticated(
-                    identity = GuestIdentity,
-                    featuredServices = emptyList(),
-                    stats = DefaultHomeStats,
-                )
+        val requestSequence = ++homeRequestSequence
+        loadingSessionKey = requestedUid
+        loadingRevision = requestedRevision
+        viewModelScope.launch {
+            try {
+                _uiState.value = HomeUiState.Loading
+                val nextState = coroutineScope {
+                    val catalogDeferred = async { serviceCatalogRepository.getServiceCatalog().toFeaturedServices() }
+                    val historyDeferred = async { bookingRepository.getMyBookings() }
+                    val businessInfoDeferred = async { businessInfoRepository.getBusinessInfo().toHomeStats() }
+                    buildAuthenticatedState(
+                        identity = user.toHomeIdentity(),
+                        catalog = catalogDeferred.await(),
+                        historyResult = historyDeferred.await(),
+                        businessInfo = businessInfoDeferred.await(),
+                    )
+                }
+                if (requestSequence != homeRequestSequence) return@launch
+
+                when (val currentSessionState = authRepository.sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedSession()
+                        _uiState.value = HomeUiState.Loading
+                    }
+
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedSession()
+                        _uiState.value = currentSessionState.error.toHomeSessionErrorState()
+                    }
+
+                    AuthSessionState.Unauthenticated -> {
+                        clearLoadedSession()
+                        _uiState.value = guestFallbackHome()
+                    }
+
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedSessionKey = requestedUid
+                            loadedRevision = requestedRevision
+                            _uiState.value = nextState
+                        } else {
+                            clearLoadedSession()
+                            _uiState.value = guestFallbackHome()
+                        }
+                    }
+                }
+            } finally {
+                if (requestSequence == homeRequestSequence) {
+                    clearLoadingRequest()
+                }
             }
         }
+    }
+
+    private fun clearLoadedSession() {
+        loadedSessionKey = null
+        loadedRevision = null
+        clearLoadingRequest()
+        homeRequestSequence += 1
+    }
+
+    private fun clearLoadingRequest() {
+        loadingSessionKey = null
+        loadingRevision = null
     }
 }
 
@@ -507,6 +566,20 @@ private fun AuthUser.toHomeIdentity(): HomeIdentityUi {
 private fun AuthError.isRetryable(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
 }
+
+private fun AuthError.toHomeSessionErrorState(): HomeUiState.Error = HomeUiState.Error(
+    identity = GuestIdentity,
+    message = message,
+    retryable = isRetryable(),
+    featuredServices = emptyList(),
+    stats = DefaultHomeStats,
+)
+
+private fun guestFallbackHome(): HomeUiState.Unauthenticated = HomeUiState.Unauthenticated(
+    identity = GuestIdentity,
+    featuredServices = emptyList(),
+    stats = DefaultHomeStats,
+)
 
 private fun BusinessInfoError.isRetryable(): Boolean {
     return this is BusinessInfoError.Unavailable || this is BusinessInfoError.Backend
