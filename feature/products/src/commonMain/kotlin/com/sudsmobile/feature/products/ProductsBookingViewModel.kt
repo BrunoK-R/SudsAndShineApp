@@ -192,7 +192,8 @@ class ProductsBookingViewModel(
     private val _contactProfileState = MutableStateFlow<BookingContactProfileUiState>(BookingContactProfileUiState.Idle)
     val contactProfileState: StateFlow<BookingContactProfileUiState> = _contactProfileState.asStateFlow()
     private var loadedContactProfileUid: String? = null
-    private var contactProfileRequestInFlight: Boolean = false
+    private var contactProfileRequestSequence: Long = 0
+    private var activeContactProfileRequestUid: String? = null
 
     private val _businessInfoState = MutableStateFlow<BookingBusinessInfoUiState>(BookingBusinessInfoUiState.Idle)
     val businessInfoState: StateFlow<BookingBusinessInfoUiState> = _businessInfoState.asStateFlow()
@@ -315,17 +316,17 @@ class ProductsBookingViewModel(
     fun refreshContactProfileForSession() {
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
-                clearLoadedContactProfile()
+                invalidateContactProfileRequest()
                 _contactProfileState.value = BookingContactProfileUiState.Loading
                 return
             }
             is AuthSessionState.RestoreFailed -> {
-                clearLoadedContactProfile()
+                invalidateContactProfileRequest()
                 _contactProfileState.value = currentSessionState.error.toContactProfileUiState()
                 return
             }
             AuthSessionState.Unauthenticated -> {
-                clearLoadedContactProfile()
+                invalidateContactProfileRequest()
                 _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
                 return
             }
@@ -343,21 +344,19 @@ class ProductsBookingViewModel(
     }
 
     fun loadContactProfile() {
-        if (contactProfileRequestInFlight) return
-
         val session = when (val currentSessionState = authRepository.sessionState.value) {
             AuthSessionState.Restoring -> {
-                clearLoadedContactProfile()
+                invalidateContactProfileRequest()
                 _contactProfileState.value = BookingContactProfileUiState.Loading
                 return
             }
             is AuthSessionState.RestoreFailed -> {
-                clearLoadedContactProfile()
+                invalidateContactProfileRequest()
                 _contactProfileState.value = currentSessionState.error.toContactProfileUiState()
                 return
             }
             AuthSessionState.Unauthenticated -> {
-                clearLoadedContactProfile()
+                invalidateContactProfileRequest()
                 _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
                 return
             }
@@ -365,7 +364,10 @@ class ProductsBookingViewModel(
         }
 
         val requestedUid = session.session.user.uid
-        contactProfileRequestInFlight = true
+        if (activeContactProfileRequestUid == requestedUid) return
+
+        val requestSequence = ++contactProfileRequestSequence
+        activeContactProfileRequestUid = requestedUid
         viewModelScope.launch {
             try {
                 _contactProfileState.value = BookingContactProfileUiState.Loading
@@ -373,17 +375,19 @@ class ProductsBookingViewModel(
                     is UserProfileResult.Success -> result.profile.toContactProfileUiState()
                     is UserProfileResult.Failure -> result.error.toContactProfileUiState()
                 }
+                if (requestSequence != contactProfileRequestSequence) return@launch
+
                 when (val currentSessionState = authRepository.sessionState.value) {
                     AuthSessionState.Restoring -> {
-                        clearLoadedContactProfile()
+                        invalidateContactProfileRequest()
                         _contactProfileState.value = BookingContactProfileUiState.Loading
                     }
                     is AuthSessionState.RestoreFailed -> {
-                        clearLoadedContactProfile()
+                        invalidateContactProfileRequest()
                         _contactProfileState.value = currentSessionState.error.toContactProfileUiState()
                     }
                     AuthSessionState.Unauthenticated -> {
-                        clearLoadedContactProfile()
+                        invalidateContactProfileRequest()
                         _contactProfileState.value = BookingContactProfileUiState.Unauthenticated
                     }
                     is AuthSessionState.Authenticated -> {
@@ -397,7 +401,9 @@ class ProductsBookingViewModel(
                     }
                 }
             } finally {
-                contactProfileRequestInFlight = false
+                if (requestSequence == contactProfileRequestSequence) {
+                    activeContactProfileRequestUid = null
+                }
             }
         }
     }
@@ -752,6 +758,12 @@ class ProductsBookingViewModel(
 
     private fun clearLoadedContactProfile() {
         loadedContactProfileUid = null
+    }
+
+    private fun invalidateContactProfileRequest() {
+        contactProfileRequestSequence += 1
+        activeContactProfileRequestUid = null
+        clearLoadedContactProfile()
     }
 
     private fun clearLoadedVehicles() {

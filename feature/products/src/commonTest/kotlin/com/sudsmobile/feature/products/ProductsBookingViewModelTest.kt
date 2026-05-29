@@ -463,6 +463,83 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun refreshContactProfileLoadsNewUserWhenOlderRequestIsInFlight() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val firstResult = CompletableDeferred<UserProfileResult>()
+        val secondResult = CompletableDeferred<UserProfileResult>()
+        val profileRepository = DeferredProductsProfileRepository(firstResult, secondResult)
+        val viewModel = productsBookingViewModel(
+            authRepository = authRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.loadContactProfile()
+        runCurrent()
+
+        assertIs<BookingContactProfileUiState.Loading>(viewModel.contactProfileState.value)
+        assertEquals(1, profileRepository.getCalls)
+
+        authRepository.authenticate(uid = "uid-2")
+        viewModel.refreshContactProfileForSession()
+        runCurrent()
+
+        assertEquals(2, profileRepository.getCalls)
+
+        secondResult.complete(UserProfileResult.Success(userProfile(uid = "uid-2", email = "ana@example.com")))
+        runCurrent()
+
+        val loaded = assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+        assertEquals("uid-2", loaded.profile.uid)
+        assertEquals("ana@example.com", loaded.profile.email)
+
+        firstResult.complete(UserProfileResult.Success(userProfile(uid = "uid-1", email = "bruno@example.com")))
+        runCurrent()
+
+        val stillLoaded = assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+        assertEquals("uid-2", stillLoaded.profile.uid)
+        assertEquals("ana@example.com", stillLoaded.profile.email)
+    }
+
+    @Test
+    fun refreshContactProfileInvalidatesInFlightRequestAfterSignOut() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val firstResult = CompletableDeferred<UserProfileResult>()
+        val secondResult = CompletableDeferred<UserProfileResult>()
+        val profileRepository = DeferredProductsProfileRepository(firstResult, secondResult)
+        val viewModel = productsBookingViewModel(
+            authRepository = authRepository,
+            profileRepository = profileRepository,
+        )
+
+        viewModel.loadContactProfile()
+        runCurrent()
+
+        authRepository.signOut()
+        viewModel.refreshContactProfileForSession()
+        runCurrent()
+
+        assertIs<BookingContactProfileUiState.Unauthenticated>(viewModel.contactProfileState.value)
+
+        authRepository.authenticate(uid = "uid-1")
+        viewModel.refreshContactProfileForSession()
+        runCurrent()
+
+        assertEquals(2, profileRepository.getCalls)
+
+        secondResult.complete(UserProfileResult.Success(userProfile(uid = "uid-1", phoneNumber = "+351900000002")))
+        runCurrent()
+
+        val loaded = assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+        assertEquals("+351900000002", loaded.profile.phoneNumber)
+
+        firstResult.complete(UserProfileResult.Success(userProfile(uid = "uid-1", phoneNumber = "+351900000001")))
+        runCurrent()
+
+        val stillLoaded = assertIs<BookingContactProfileUiState.Loaded>(viewModel.contactProfileState.value)
+        assertEquals("+351900000002", stillLoaded.profile.phoneNumber)
+    }
+
+    @Test
     fun loadContactProfileMapsBackendErrorToRetryableState() = runTest {
         val viewModel = productsBookingViewModel(
             profileRepository = FakeProductsProfileRepository(
@@ -1123,6 +1200,23 @@ private class FakeProductsProfileRepository(
     override suspend fun getMyProfile(): UserProfileResult {
         getCalls += 1
         return profileResult
+    }
+
+    override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
+        error("Not used")
+    }
+}
+
+private class DeferredProductsProfileRepository(
+    vararg results: CompletableDeferred<UserProfileResult>,
+) : UserProfileRepository {
+    private val pendingResults = results.toMutableList()
+    var getCalls: Int = 0
+        private set
+
+    override suspend fun getMyProfile(): UserProfileResult {
+        getCalls += 1
+        return pendingResults.removeAt(0).await()
     }
 
     override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
