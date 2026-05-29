@@ -61,16 +61,21 @@ internal class ContactViewModel(
 ) : ViewModel() {
     private val _businessInfoState = MutableStateFlow<ContactBusinessInfoUiState>(ContactBusinessInfoUiState.Idle)
     val businessInfoState: StateFlow<ContactBusinessInfoUiState> = _businessInfoState.asStateFlow()
+    private var businessInfoRequestSequence: Long = 0
 
     fun loadBusinessInfo(force: Boolean = false) {
-        if (_businessInfoState.value is ContactBusinessInfoUiState.Loading) return
+        if (!force && _businessInfoState.value is ContactBusinessInfoUiState.Loading) return
         if (!force && _businessInfoState.value is ContactBusinessInfoUiState.Loaded) return
 
+        val requestSequence = ++businessInfoRequestSequence
+        _businessInfoState.value = ContactBusinessInfoUiState.Loading
         viewModelScope.launch {
-            _businessInfoState.value = ContactBusinessInfoUiState.Loading
-            _businessInfoState.value = when (val result = businessInfoRepository.getBusinessInfo()) {
+            val nextState = when (val result = businessInfoRepository.getBusinessInfo()) {
                 is BusinessInfoResult.Success -> ContactBusinessInfoUiState.Loaded(result.info.toContactUi())
                 is BusinessInfoResult.Failure -> result.error.toContactErrorState()
+            }
+            if (requestSequence == businessInfoRequestSequence) {
+                _businessInfoState.value = nextState
             }
         }
     }

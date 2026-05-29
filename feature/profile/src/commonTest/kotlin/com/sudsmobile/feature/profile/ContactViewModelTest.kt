@@ -13,6 +13,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -98,6 +99,38 @@ class ContactViewModelTest {
         assertEquals("244 000 222", forced.info.phone)
         assertEquals(2, repository.calls)
     }
+
+    @Test
+    fun forcedBusinessInfoRefreshKeepsLatestResponse() = runTest {
+        val oldResult = CompletableDeferred<BusinessInfoResult>()
+        val newResult = CompletableDeferred<BusinessInfoResult>()
+        val repository = DeferredBusinessInfoRepository(oldResult, newResult)
+        val viewModel = ContactViewModel(repository)
+
+        viewModel.loadBusinessInfo()
+        runCurrent()
+        viewModel.loadBusinessInfo(force = true)
+        runCurrent()
+
+        assertIs<ContactBusinessInfoUiState.Loading>(viewModel.businessInfoState.value)
+        assertEquals(2, repository.calls)
+
+        newResult.complete(
+            BusinessInfoResult.Success(customBusinessInfo(phone = "244 000 222")),
+        )
+        runCurrent()
+
+        val latest = assertIs<ContactBusinessInfoUiState.Loaded>(viewModel.businessInfoState.value)
+        assertEquals("244 000 222", latest.info.phone)
+
+        oldResult.complete(
+            BusinessInfoResult.Success(customBusinessInfo(phone = "244 000 111")),
+        )
+        runCurrent()
+
+        val stillLatest = assertIs<ContactBusinessInfoUiState.Loaded>(viewModel.businessInfoState.value)
+        assertEquals("244 000 222", stillLatest.info.phone)
+    }
 }
 
 private class FakeBusinessInfoRepository(
@@ -114,6 +147,19 @@ private class FakeBusinessInfoRepository(
         } else {
             BusinessInfoResult.Success(customBusinessInfo())
         }
+    }
+}
+
+private class DeferredBusinessInfoRepository(
+    vararg results: CompletableDeferred<BusinessInfoResult>,
+) : BusinessInfoRepository {
+    private val pendingResults = results.toMutableList()
+    var calls: Int = 0
+        private set
+
+    override suspend fun getBusinessInfo(): BusinessInfoResult {
+        calls += 1
+        return pendingResults.removeAt(0).await()
     }
 }
 

@@ -196,6 +196,7 @@ class ProductsBookingViewModel(
 
     private val _businessInfoState = MutableStateFlow<BookingBusinessInfoUiState>(BookingBusinessInfoUiState.Idle)
     val businessInfoState: StateFlow<BookingBusinessInfoUiState> = _businessInfoState.asStateFlow()
+    private var businessInfoRequestSequence: Long = 0
 
     private val _rewardsState = MutableStateFlow<BookingRewardsUiState>(BookingRewardsUiState.Idle)
     val rewardsState: StateFlow<BookingRewardsUiState> = _rewardsState.asStateFlow()
@@ -204,14 +205,18 @@ class ProductsBookingViewModel(
     private var rewardsRequestInFlight: Boolean = false
 
     fun loadBusinessInfo(force: Boolean = false) {
-        if (_businessInfoState.value is BookingBusinessInfoUiState.Loading) return
+        if (!force && _businessInfoState.value is BookingBusinessInfoUiState.Loading) return
         if (!force && _businessInfoState.value is BookingBusinessInfoUiState.Loaded) return
 
+        val requestSequence = ++businessInfoRequestSequence
+        _businessInfoState.value = BookingBusinessInfoUiState.Loading
         viewModelScope.launch {
-            _businessInfoState.value = BookingBusinessInfoUiState.Loading
-            _businessInfoState.value = when (val result = businessInfoRepository.getBusinessInfo()) {
+            val nextState = when (val result = businessInfoRepository.getBusinessInfo()) {
                 is BusinessInfoResult.Success -> BookingBusinessInfoUiState.Loaded(result.info.toBookingBusinessInfoUi())
                 is BusinessInfoResult.Failure -> result.error.toBookingBusinessInfoState()
+            }
+            if (requestSequence == businessInfoRequestSequence) {
+                _businessInfoState.value = nextState
             }
         }
     }

@@ -540,6 +540,38 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun forcedBusinessInfoRefreshKeepsLatestBookingSummaryResponse() = runTest {
+        val oldResult = CompletableDeferred<BusinessInfoResult>()
+        val newResult = CompletableDeferred<BusinessInfoResult>()
+        val businessRepository = DeferredProductsBusinessInfoRepository(oldResult, newResult)
+        val viewModel = productsBookingViewModel(businessRepository = businessRepository)
+
+        viewModel.loadBusinessInfo()
+        runCurrent()
+        viewModel.loadBusinessInfo(force = true)
+        runCurrent()
+
+        assertIs<BookingBusinessInfoUiState.Loading>(viewModel.businessInfoState.value)
+        assertEquals(2, businessRepository.calls)
+
+        newResult.complete(
+            BusinessInfoResult.Success(businessInfo(phone = "244 000 222")),
+        )
+        runCurrent()
+
+        val latest = assertIs<BookingBusinessInfoUiState.Loaded>(viewModel.businessInfoState.value)
+        assertEquals("244 000 222", latest.info.phone)
+
+        oldResult.complete(
+            BusinessInfoResult.Success(businessInfo(phone = "244 000 111")),
+        )
+        runCurrent()
+
+        val stillLatest = assertIs<BookingBusinessInfoUiState.Loaded>(viewModel.businessInfoState.value)
+        assertEquals("244 000 222", stillLatest.info.phone)
+    }
+
+    @Test
     fun loadRewardsRequiresAuthenticatedSession() = runTest {
         val repository = FakeBookingRepository(
             availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
@@ -1107,6 +1139,19 @@ private class FakeProductsBusinessInfoRepository(
     override suspend fun getBusinessInfo(): BusinessInfoResult {
         calls += 1
         return result
+    }
+}
+
+private class DeferredProductsBusinessInfoRepository(
+    vararg results: CompletableDeferred<BusinessInfoResult>,
+) : BusinessInfoRepository {
+    private val pendingResults = results.toMutableList()
+    var calls: Int = 0
+        private set
+
+    override suspend fun getBusinessInfo(): BusinessInfoResult {
+        calls += 1
+        return pendingResults.removeAt(0).await()
     }
 }
 
