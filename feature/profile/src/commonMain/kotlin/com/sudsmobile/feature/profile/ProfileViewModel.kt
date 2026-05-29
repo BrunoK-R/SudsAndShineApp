@@ -95,12 +95,14 @@ internal class ProfileViewModel(
     private var loadedUid: String? = null
     private var loadedBookingRevision: Long? = null
     private var loadedVehicleRevision: Long? = null
+    private var loadingStatsUid: String? = null
+    private var loadingStatsBookingRevision: Long? = null
+    private var loadingStatsVehicleRevision: Long? = null
+    private var statsRequestSequence: Long = 0
     private var loadedPreferencesUid: String? = null
     private var loadedProfileRevision: Long? = null
 
     fun loadStats() {
-        if (_statsState.value is ProfileStatsUiState.Loading) return
-
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedStats()
@@ -122,27 +124,58 @@ internal class ProfileViewModel(
         val requestedUid = session.session.user.uid
         val requestedBookingRevision = bookingRevision.value
         val requestedVehicleRevision = vehicleRevision.value
+        val sameRequestInFlight = loadingStatsUid == requestedUid &&
+            loadingStatsBookingRevision == requestedBookingRevision &&
+            loadingStatsVehicleRevision == requestedVehicleRevision
+        if (sameRequestInFlight) return
+
+        val requestSequence = ++statsRequestSequence
+        loadingStatsUid = requestedUid
+        loadingStatsBookingRevision = requestedBookingRevision
+        loadingStatsVehicleRevision = requestedVehicleRevision
 
         viewModelScope.launch {
-            _statsState.value = ProfileStatsUiState.Loading
-            val nextState = coroutineScope {
-                val historyDeferred = async { bookingRepository.getMyBookings() }
-                val vehiclesDeferred = async { userVehicleRepository.getMyVehicles() }
-                buildProfileStatsState(
-                    historyResult = historyDeferred.await(),
-                    vehiclesResult = vehiclesDeferred.await(),
-                )
-            }
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedUid = requestedUid
-                loadedBookingRevision = requestedBookingRevision
-                loadedVehicleRevision = requestedVehicleRevision
-                _statsState.value = nextState
-            } else {
-                loadedUid = null
-                loadedBookingRevision = null
-                loadedVehicleRevision = null
+            try {
+                _statsState.value = ProfileStatsUiState.Loading
+                val nextState = coroutineScope {
+                    val historyDeferred = async { bookingRepository.getMyBookings() }
+                    val vehiclesDeferred = async { userVehicleRepository.getMyVehicles() }
+                    buildProfileStatsState(
+                        historyResult = historyDeferred.await(),
+                        vehiclesResult = vehiclesDeferred.await(),
+                    )
+                }
+                if (requestSequence != statsRequestSequence) return@launch
+
+                when (val currentSessionState = sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedStats()
+                        _statsState.value = ProfileStatsUiState.Loading
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedStats()
+                        _statsState.value = currentSessionState.error.toProfileStatsErrorState()
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        clearLoadedStats()
+                        _statsState.value = ProfileStatsUiState.Unauthenticated
+                    }
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedUid = requestedUid
+                            loadedBookingRevision = requestedBookingRevision
+                            loadedVehicleRevision = requestedVehicleRevision
+                            _statsState.value = nextState
+                        } else {
+                            clearLoadedStats()
+                            _statsState.value = ProfileStatsUiState.Unauthenticated
+                        }
+                    }
+                }
+            } finally {
+                if (requestSequence == statsRequestSequence) {
+                    clearLoadingStatsRequest()
+                }
             }
         }
     }
@@ -345,6 +378,14 @@ internal class ProfileViewModel(
         loadedUid = null
         loadedBookingRevision = null
         loadedVehicleRevision = null
+        clearLoadingStatsRequest()
+        statsRequestSequence += 1
+    }
+
+    private fun clearLoadingStatsRequest() {
+        loadingStatsUid = null
+        loadingStatsBookingRevision = null
+        loadingStatsVehicleRevision = null
     }
 
     private fun clearLoadedPreferences() {

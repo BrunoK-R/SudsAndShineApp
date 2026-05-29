@@ -315,6 +315,66 @@ class ProfileViewModelTest {
     }
 
     @Test
+    fun refreshForSessionKeepsLatestStatsRevisionWhenStatsLoadIsInFlight() = runTest {
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val oldResult = CompletableDeferred<BookingHistoryResult>()
+        val latestResult = CompletableDeferred<BookingHistoryResult>()
+        val bookingRepository = DeferredProfileStatsBookingRepository(oldResult, latestResult)
+        val vehicleRepository = ProfileStatsFakeVehicleRepository(
+            UserVehicleListResult.Success(listOf(profileStatsVehicle("vehicle-1"))),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = bookingRepository,
+            userVehicleRepository = vehicleRepository,
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileStatsUiState.Loading>(viewModel.statsState.value)
+        assertEquals(1, bookingRepository.historyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileStatsUiState.Loading>(viewModel.statsState.value)
+        assertEquals(2, bookingRepository.historyCalls)
+
+        latestResult.complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        profileStatsHistoryReservation("completed-latest-1", upcoming = false),
+                        profileStatsHistoryReservation("completed-latest-2", upcoming = false),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val loaded = assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
+        assertEquals("2", loaded.stats.washCount)
+
+        oldResult.complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(profileStatsHistoryReservation("completed-old", upcoming = false)),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
+        assertEquals("2", stillLoaded.stats.washCount)
+    }
+
+    @Test
     fun loadStatsMapsBackendErrorAsRetryable() = runTest {
         val viewModel = ProfileViewModel(
             authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
@@ -566,8 +626,15 @@ private class ProfileStatsFakeBookingRepository(
     }
 }
 
-private class DeferredProfileStatsBookingRepository : BookingRepository {
-    val result = CompletableDeferred<BookingHistoryResult>()
+private class DeferredProfileStatsBookingRepository(
+    firstResult: CompletableDeferred<BookingHistoryResult> = CompletableDeferred(),
+    vararg remainingResults: CompletableDeferred<BookingHistoryResult>,
+) : BookingRepository {
+    val result: CompletableDeferred<BookingHistoryResult> = firstResult
+    private val results = listOf(firstResult, *remainingResults)
+    private var nextResultIndex: Int = 0
+    var historyCalls: Int = 0
+        private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
         error("Not used")
@@ -577,7 +644,12 @@ private class DeferredProfileStatsBookingRepository : BookingRepository {
         error("Not used")
     }
 
-    override suspend fun getMyBookings(): BookingHistoryResult = result.await()
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        val result = results.getOrNull(nextResultIndex) ?: error("No deferred profile stats result configured.")
+        nextResultIndex += 1
+        historyCalls += 1
+        return result.await()
+    }
 }
 
 private class ProfileStatsFakeVehicleRepository(
