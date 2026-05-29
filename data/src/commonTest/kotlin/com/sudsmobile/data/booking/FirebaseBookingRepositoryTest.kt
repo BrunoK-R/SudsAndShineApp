@@ -44,6 +44,37 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun rejectsInvalidCreateSlotBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.createBooking(
+            validRequest().copy(slotStartIso = "2026-02-31T09:30:00.000Z"),
+        )
+
+        assertIs<BookingCreateResult.Failure>(result)
+        assertIs<BookingCreateError.Validation>(result.error)
+        assertEquals(0, api.calls)
+    }
+
+    @Test
+    fun rejectsCreateSlotEndBeforeStartBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.createBooking(
+            validRequest().copy(
+                slotStartIso = "2026-05-20T10:30:00.000Z",
+                slotEndIso = "2026-05-20T10:00:00.000Z",
+            ),
+        )
+
+        assertIs<BookingCreateResult.Failure>(result)
+        assertIs<BookingCreateError.Validation>(result.error)
+        assertEquals(0, api.calls)
+    }
+
+    @Test
     fun normalizesRequestBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
@@ -52,6 +83,8 @@ class FirebaseBookingRepositoryTest {
             validRequest().copy(
                 customerName = "  Bruno Ribeiro  ",
                 customerEmail = "  BRUNO@EXAMPLE.COM  ",
+                slotStartIso = " 2026-05-20T09:30:00.000Z ",
+                slotEndIso = " 2026-05-20T10:15:00.000Z ",
                 notes = "  Sem ambientador  ",
             ),
         )
@@ -60,6 +93,8 @@ class FirebaseBookingRepositoryTest {
         assertEquals(1, api.calls)
         assertEquals("Bruno Ribeiro", api.lastRequest?.customerName)
         assertEquals("bruno@example.com", api.lastRequest?.customerEmail)
+        assertEquals("2026-05-20T09:30:00.000Z", api.lastRequest?.slotStartIso)
+        assertEquals("2026-05-20T10:15:00.000Z", api.lastRequest?.slotEndIso)
         assertEquals("Sem ambientador", api.lastRequest?.notes)
         assertEquals("id-token-1", api.lastIdToken)
     }

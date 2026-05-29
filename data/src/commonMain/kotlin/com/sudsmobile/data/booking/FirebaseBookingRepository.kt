@@ -154,8 +154,10 @@ class FirebaseBookingRepository(
             request.customerName.isBlank() -> BookingCreateError.Validation("Indique o nome para a marcação.")
             !request.customerEmail.trim().contains("@") -> BookingCreateError.Validation("Indique um email válido.")
             request.serviceId.isBlank() -> BookingCreateError.Validation("Escolha um serviço antes de confirmar.")
-            request.slotStartIso.isBlank() || request.slotEndIso.isBlank() ->
+            !isValidSlotIso(request.slotStartIso) || !isValidSlotIso(request.slotEndIso) ->
                 BookingCreateError.Validation("Escolha uma data e hora válidas.")
+            request.slotEndIso <= request.slotStartIso ->
+                BookingCreateError.Validation("Escolha uma hora de fim válida.")
             request.vehicleType !in setOf("passageiros", "suv") ->
                 BookingCreateError.Validation("Escolha um tipo de veículo válido.")
             request.userVehicleId?.contains("/") == true ->
@@ -215,6 +217,8 @@ class FirebaseBookingRepository(
         customerPhone = customerPhone.trim(),
         serviceId = serviceId.trim(),
         serviceName = serviceName.trim(),
+        slotStartIso = slotStartIso.trim(),
+        slotEndIso = slotEndIso.trim(),
         vehicleType = vehicleType.trim(),
         notes = notes.trim(),
         userVehicleId = userVehicleId?.trim()?.takeIf { it.isNotBlank() },
@@ -253,7 +257,12 @@ class FirebaseBookingRepository(
 
 private fun isValidDateId(dateId: String): Boolean {
     if (dateId.length != 10) return false
-    return dateId[4] == '-' && dateId[7] == '-'
+    if (dateId[4] != '-' || dateId[7] != '-') return false
+
+    val year = dateId.substring(0, 4).toIntOrNull() ?: return false
+    val month = dateId.substring(5, 7).toIntOrNull() ?: return false
+    val day = dateId.substring(8, 10).toIntOrNull() ?: return false
+    return year > 0 && month in 1..12 && day in 1..daysInMonth(year, month)
 }
 
 private fun Int?.orZero(): Int = this ?: 0
@@ -268,4 +277,17 @@ private fun isValidSlotIso(value: String): Boolean {
     val hour = time.substring(0, 2).toIntOrNull() ?: return false
     val minute = time.substring(3, 5).toIntOrNull() ?: return false
     return isValidDateId(date) && hour in 0..23 && minute in 0..59
+}
+
+private fun daysInMonth(year: Int, month: Int): Int {
+    return when (month) {
+        1, 3, 5, 7, 8, 10, 12 -> 31
+        4, 6, 9, 11 -> 30
+        2 -> if (isLeapYear(year)) 29 else 28
+        else -> 0
+    }
+}
+
+private fun isLeapYear(year: Int): Boolean {
+    return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }

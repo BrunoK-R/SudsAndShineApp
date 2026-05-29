@@ -58,6 +58,33 @@ class ProductsBookingDraftTest {
 
         assertNull(request)
     }
+
+    @Test
+    fun invalidCalendarDateDoesNotCreateBackendRequest() {
+        val request = validDraft().copy(dateId = "2026-02-29").toCreateRequest()
+
+        assertNull(request)
+    }
+
+    @Test
+    fun leapDayCreatesBackendRequestForLeapYear() {
+        val request = validDraft().copy(dateId = "2028-02-29").toCreateRequest()
+
+        assertNotNull(request)
+        assertEquals("2028-02-29T09:30:00.000Z", request.slotStartIso)
+    }
+
+    @Test
+    fun serviceDurationCrossingMidnightDoesNotCreateBackendRequest() {
+        val request = validDraft()
+            .copy(
+                time = "23:30",
+                serviceDurationMinutes = 45,
+            )
+            .toCreateRequest()
+
+        assertNull(request)
+    }
 }
 
 private fun validDraft(): ProductsBookingDraft = ProductsBookingDraft(
