@@ -96,6 +96,9 @@ internal class ProfileHistoryViewModel(
     val uiState: StateFlow<ProfileHistoryUiState> = _uiState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
+    private var loadingUid: String? = null
+    private var loadingRevision: Long? = null
+    private var historyRequestRevision: Long = 0
 
     fun refreshForSession() {
         val session = when (val currentSessionState = sessionState.value) {
@@ -124,8 +127,6 @@ internal class ProfileHistoryViewModel(
     }
 
     fun loadHistory() {
-        if (_uiState.value is ProfileHistoryUiState.Loading) return
-
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedSession()
@@ -146,6 +147,16 @@ internal class ProfileHistoryViewModel(
         }
         val requestedUid = session.session.user.uid
         val requestedRevision = bookingRevision.value
+        if (
+            _uiState.value is ProfileHistoryUiState.Loading &&
+            loadingUid == requestedUid &&
+            loadingRevision == requestedRevision
+        ) {
+            return
+        }
+        val requestRevision = ++historyRequestRevision
+        loadingUid = requestedUid
+        loadingRevision = requestedRevision
 
         viewModelScope.launch {
             _uiState.value = ProfileHistoryUiState.Loading
@@ -153,6 +164,9 @@ internal class ProfileHistoryViewModel(
                 is BookingHistoryResult.Success -> result.history.toUiState()
                 is BookingHistoryResult.Failure -> result.error.toUiState()
             }
+            if (requestRevision != historyRequestRevision) return@launch
+            loadingUid = null
+            loadingRevision = null
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid == requestedUid) {
                 loadedUid = requestedUid
@@ -196,6 +210,9 @@ internal class ProfileHistoryViewModel(
     private fun clearLoadedSession() {
         loadedUid = null
         loadedRevision = null
+        loadingUid = null
+        loadingRevision = null
+        historyRequestRevision += 1
     }
 }
 

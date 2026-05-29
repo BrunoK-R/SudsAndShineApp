@@ -176,6 +176,9 @@ internal class CartBookingsViewModel(
     val rescheduleState: StateFlow<BookingRescheduleUiState> = _rescheduleState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
+    private var loadingUid: String? = null
+    private var loadingRevision: Long? = null
+    private var historyRequestRevision: Long = 0
     private var rescheduleAvailabilityRequestRevision: Long = 0
 
     fun loadBusinessInfo(force: Boolean = false) {
@@ -226,8 +229,6 @@ internal class CartBookingsViewModel(
     }
 
     fun loadBookings() {
-        if (_uiState.value is CartBookingsUiState.Loading) return
-
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedSession()
@@ -254,6 +255,16 @@ internal class CartBookingsViewModel(
         }
         val requestedUid = session.session.user.uid
         val requestedRevision = bookingRevision.value
+        if (
+            _uiState.value is CartBookingsUiState.Loading &&
+            loadingUid == requestedUid &&
+            loadingRevision == requestedRevision
+        ) {
+            return
+        }
+        val requestRevision = ++historyRequestRevision
+        loadingUid = requestedUid
+        loadingRevision = requestedRevision
 
         viewModelScope.launch {
             _uiState.value = CartBookingsUiState.Loading
@@ -261,6 +272,9 @@ internal class CartBookingsViewModel(
                 is BookingHistoryResult.Success -> result.history.toUiState()
                 is BookingHistoryResult.Failure -> result.error.toUiState()
             }
+            if (requestRevision != historyRequestRevision) return@launch
+            loadingUid = null
+            loadingRevision = null
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid == requestedUid) {
                 loadedUid = requestedUid
@@ -547,6 +561,9 @@ internal class CartBookingsViewModel(
     private fun clearLoadedSession() {
         loadedUid = null
         loadedRevision = null
+        loadingUid = null
+        loadingRevision = null
+        historyRequestRevision += 1
     }
 }
 

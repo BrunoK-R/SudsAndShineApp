@@ -23,6 +23,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -470,6 +471,69 @@ class ProfileHistoryViewModelTest {
         assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
         assertEquals(2, repository.historyCalls)
     }
+
+    @Test
+    fun refreshForSessionKeepsLatestBookingRevisionWhenHistoryLoadIsInFlight() = runTest {
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val firstResult = CompletableDeferred<BookingHistoryResult>()
+        val secondResult = CompletableDeferred<BookingHistoryResult>()
+        val repository = DeferredHistoryBookingRepository(firstResult, secondResult)
+        val viewModel = ProfileHistoryViewModel(
+            bookingRepository = repository,
+            authRepository = FakeProfileHistoryAuthRepository(authenticated = true),
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfileHistoryUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.historyCalls)
+
+        secondResult.complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        historyReservation(
+                            id = "latest-completed",
+                            slotStartIso = "2026-05-23T10:00:00.000Z",
+                            upcoming = false,
+                            priceCents = 3200,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("latest-completed", loaded.items.single().id)
+
+        firstResult.complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        historyReservation(
+                            id = "stale-completed",
+                            slotStartIso = "2026-05-21T10:00:00.000Z",
+                            upcoming = false,
+                            priceCents = 3200,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("latest-completed", stillLoaded.items.single().id)
+    }
 }
 
 private class FakeBookingRepository(
@@ -489,6 +553,27 @@ private class FakeBookingRepository(
     override suspend fun getMyBookings(): BookingHistoryResult {
         historyCalls += 1
         return historyResult
+    }
+}
+
+private class DeferredHistoryBookingRepository(
+    vararg results: CompletableDeferred<BookingHistoryResult>,
+) : BookingRepository {
+    private val pendingResults = results.toMutableList()
+    var historyCalls: Int = 0
+        private set
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        error("Not used")
+    }
+
+    override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        historyCalls += 1
+        return pendingResults.removeAt(0).await()
     }
 }
 

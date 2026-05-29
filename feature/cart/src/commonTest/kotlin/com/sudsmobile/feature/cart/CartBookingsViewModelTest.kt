@@ -388,6 +388,72 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun refreshForSessionKeepsLatestBookingRevisionWhenHistoryLoadIsInFlight() = runTest {
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val firstResult = CompletableDeferred<BookingHistoryResult>()
+        val secondResult = CompletableDeferred<BookingHistoryResult>()
+        val repository = DeferredHistoryBookingRepository(firstResult, secondResult)
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<CartBookingsUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.historyCalls)
+
+        secondResult.complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        historyReservation(
+                            id = "latest-upcoming",
+                            slotStartIso = "2026-05-23T10:00:00.000Z",
+                            slotEndIso = "2026-05-23T10:45:00.000Z",
+                            upcoming = true,
+                            priceCents = 3400,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("latest-upcoming", loaded.upcoming.single().id)
+
+        firstResult.complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    reservations = listOf(
+                        historyReservation(
+                            id = "stale-upcoming",
+                            slotStartIso = "2026-05-21T10:00:00.000Z",
+                            slotEndIso = "2026-05-21T10:45:00.000Z",
+                            upcoming = true,
+                            priceCents = 3400,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("latest-upcoming", stillLoaded.upcoming.single().id)
+    }
+
+    @Test
     fun cancelBookingPublishesSuccessState() = runTest {
         val repository = FakeBookingRepository(
             historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
@@ -897,6 +963,27 @@ private class DeferredAvailabilityBookingRepository(
 
     override suspend fun getMyBookings(): BookingHistoryResult {
         error("Not used")
+    }
+}
+
+private class DeferredHistoryBookingRepository(
+    vararg results: CompletableDeferred<BookingHistoryResult>,
+) : BookingRepository {
+    private val pendingResults = results.toMutableList()
+    var historyCalls: Int = 0
+        private set
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        error("Not used")
+    }
+
+    override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        historyCalls += 1
+        return pendingResults.removeAt(0).await()
     }
 }
 
