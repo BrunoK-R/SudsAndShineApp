@@ -174,6 +174,7 @@ class ProductsBookingViewModel(
     val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
     private val _availabilityState = MutableStateFlow<BookingAvailabilityUiState>(BookingAvailabilityUiState.Idle)
     val availabilityState: StateFlow<BookingAvailabilityUiState> = _availabilityState.asStateFlow()
+    private var availabilityRequestRevision: Long = 0
 
     private val _submitState = MutableStateFlow<BookingSubmitUiState>(BookingSubmitUiState.Idle)
     val submitState: StateFlow<BookingSubmitUiState> = _submitState.asStateFlow()
@@ -486,18 +487,15 @@ class ProductsBookingViewModel(
     }
 
     fun loadAvailability(serviceDurationMinutes: Int, anchorDate: String? = null) {
-        if (_availabilityState.value is BookingAvailabilityUiState.Loading) return
+        val requestRevision = ++availabilityRequestRevision
+        val request = BookingAvailabilityRequest(
+            anchorDate = anchorDate,
+            serviceDurationMinutes = serviceDurationMinutes,
+        )
 
+        _availabilityState.value = BookingAvailabilityUiState.Loading
         viewModelScope.launch {
-            _availabilityState.value = BookingAvailabilityUiState.Loading
-            _availabilityState.value = when (
-                val result = bookingRepository.getAvailability(
-                    BookingAvailabilityRequest(
-                        anchorDate = anchorDate,
-                        serviceDurationMinutes = serviceDurationMinutes,
-                    ),
-                )
-            ) {
+            val nextState = when (val result = bookingRepository.getAvailability(request)) {
                 is BookingAvailabilityResult.Success -> {
                     if (result.month.days.any { it.available }) {
                         BookingAvailabilityUiState.Loaded(result.month)
@@ -506,6 +504,9 @@ class ProductsBookingViewModel(
                     }
                 }
                 is BookingAvailabilityResult.Failure -> result.error.toUiState()
+            }
+            if (requestRevision == availabilityRequestRevision) {
+                _availabilityState.value = nextState
             }
         }
     }

@@ -52,6 +52,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -106,6 +107,43 @@ class ProductsBookingViewModelTest {
         val empty = assertIs<BookingAvailabilityUiState.Empty>(viewModel.availabilityState.value)
         assertEquals(emptyMonth, empty.month)
         assertEquals("2026-05-01", empty.month.monthAnchorDate())
+    }
+
+    @Test
+    fun loadAvailabilityAcceptsNewMonthWhilePreviousRequestIsLoading() = runTest {
+        val firstResult = CompletableDeferred<BookingAvailabilityResult>()
+        val secondResult = CompletableDeferred<BookingAvailabilityResult>()
+        val repository = DeferredAvailabilityBookingRepository(firstResult, secondResult)
+        val viewModel = productsBookingViewModel(repository)
+
+        viewModel.loadAvailability(serviceDurationMinutes = 30, anchorDate = "2026-05-01")
+        runCurrent()
+
+        assertIs<BookingAvailabilityUiState.Loading>(viewModel.availabilityState.value)
+        assertEquals("2026-05-01", repository.requests.single().anchorDate)
+
+        viewModel.loadAvailability(serviceDurationMinutes = 45, anchorDate = "2026-06-01")
+        runCurrent()
+
+        assertEquals(2, repository.requests.size)
+        assertEquals("2026-06-01", repository.requests[1].anchorDate)
+        assertEquals(45, repository.requests[1].serviceDurationMinutes)
+
+        secondResult.complete(
+            BookingAvailabilityResult.Success(availableMonth("junho 2026", "2026-06-01")),
+        )
+        runCurrent()
+
+        val loaded = assertIs<BookingAvailabilityUiState.Loaded>(viewModel.availabilityState.value)
+        assertEquals("junho 2026", loaded.month.monthTitle)
+
+        firstResult.complete(
+            BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<BookingAvailabilityUiState.Loaded>(viewModel.availabilityState.value)
+        assertEquals("junho 2026", stillLoaded.month.monthTitle)
     }
 
     @Test
@@ -931,6 +969,26 @@ private class FakeBookingRepository(
     override suspend fun getMyLoyalty(): BookingLoyaltyResult {
         loyaltyCalls += 1
         return loyaltyResult
+    }
+}
+
+private class DeferredAvailabilityBookingRepository(
+    vararg results: CompletableDeferred<BookingAvailabilityResult>,
+) : BookingRepository {
+    private val pendingResults = results.toMutableList()
+    val requests: MutableList<BookingAvailabilityRequest> = mutableListOf()
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        requests += request
+        return pendingResults.removeAt(0).await()
+    }
+
+    override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        error("Not used")
     }
 }
 
