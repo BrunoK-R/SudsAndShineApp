@@ -90,6 +90,10 @@ internal class PaymentViewModel(
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
     private var loadedTargetReservationId: String? = null
+    private var loadingUid: String? = null
+    private var loadingRevision: Long? = null
+    private var loadingTargetReservationId: String? = null
+    private var paymentRequestSequence: Long = 0
 
     fun refreshForSession(
         targetReservationId: String? = null,
@@ -98,17 +102,15 @@ internal class PaymentViewModel(
         val targetId = targetReservationId.normalizedTargetReservationId()
         when (val session = sessionState.value) {
             AuthSessionState.Restoring -> {
-                loadedUid = null
-                loadedRevision = null
-                loadedTargetReservationId = null
+                clearPaymentSession()
                 _uiState.value = PaymentUiState.Loading
             }
             is AuthSessionState.RestoreFailed -> {
-                clearLoadedSession()
+                clearPaymentSession()
                 _uiState.value = session.error.toPaymentUiState()
             }
             AuthSessionState.Unauthenticated -> {
-                clearLoadedSession()
+                clearPaymentSession()
                 _uiState.value = PaymentUiState.Unauthenticated
             }
             is AuthSessionState.Authenticated -> {
@@ -130,22 +132,21 @@ internal class PaymentViewModel(
     }
 
     fun loadPayments(targetReservationId: String? = null) {
-        if (_uiState.value is PaymentUiState.Loading) return
         val targetId = targetReservationId.normalizedTargetReservationId()
 
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
-                clearLoadedSession()
+                clearPaymentSession()
                 _uiState.value = PaymentUiState.Loading
                 return
             }
             is AuthSessionState.RestoreFailed -> {
-                clearLoadedSession()
+                clearPaymentSession()
                 _uiState.value = currentSessionState.error.toPaymentUiState()
                 return
             }
             AuthSessionState.Unauthenticated -> {
-                clearLoadedSession()
+                clearPaymentSession()
                 _uiState.value = PaymentUiState.Unauthenticated
                 return
             }
@@ -154,36 +155,52 @@ internal class PaymentViewModel(
 
         val requestedUid = session.session.user.uid
         val requestedRevision = bookingRevision.value
-        viewModelScope.launch {
-            _uiState.value = PaymentUiState.Loading
-            val nextState = when (val result = bookingRepository.getMyBookings()) {
-                is BookingHistoryResult.Success -> result.history.toPaymentUiState(targetId)
-                is BookingHistoryResult.Failure -> result.error.toPaymentUiState()
-            }
+        val sameRequestInFlight = loadingUid == requestedUid &&
+            loadingRevision == requestedRevision &&
+            loadingTargetReservationId == targetId
+        if (sameRequestInFlight) return
 
-            when (val currentSessionState = sessionState.value) {
-                AuthSessionState.Restoring -> {
-                    clearLoadedSession()
-                    _uiState.value = PaymentUiState.Loading
+        val requestSequence = ++paymentRequestSequence
+        loadingUid = requestedUid
+        loadingRevision = requestedRevision
+        loadingTargetReservationId = targetId
+        viewModelScope.launch {
+            try {
+                _uiState.value = PaymentUiState.Loading
+                val nextState = when (val result = bookingRepository.getMyBookings()) {
+                    is BookingHistoryResult.Success -> result.history.toPaymentUiState(targetId)
+                    is BookingHistoryResult.Failure -> result.error.toPaymentUiState()
                 }
-                is AuthSessionState.RestoreFailed -> {
-                    clearLoadedSession()
-                    _uiState.value = currentSessionState.error.toPaymentUiState()
-                }
-                AuthSessionState.Unauthenticated -> {
-                    clearLoadedSession()
-                    _uiState.value = PaymentUiState.Unauthenticated
-                }
-                is AuthSessionState.Authenticated -> {
-                    if (currentSessionState.session.user.uid == requestedUid) {
-                        loadedUid = requestedUid
-                        loadedRevision = requestedRevision
-                        loadedTargetReservationId = targetId
-                        _uiState.value = nextState
-                    } else {
-                        clearLoadedSession()
+                if (requestSequence != paymentRequestSequence) return@launch
+
+                when (val currentSessionState = sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearPaymentSession()
+                        _uiState.value = PaymentUiState.Loading
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        clearPaymentSession()
+                        _uiState.value = currentSessionState.error.toPaymentUiState()
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        clearPaymentSession()
                         _uiState.value = PaymentUiState.Unauthenticated
                     }
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedUid = requestedUid
+                            loadedRevision = requestedRevision
+                            loadedTargetReservationId = targetId
+                            _uiState.value = nextState
+                        } else {
+                            clearPaymentSession()
+                            _uiState.value = PaymentUiState.Unauthenticated
+                        }
+                    }
+                }
+            } finally {
+                if (requestSequence == paymentRequestSequence) {
+                    clearLoadingRequest()
                 }
             }
         }
@@ -247,6 +264,18 @@ internal class PaymentViewModel(
         loadedUid = null
         loadedRevision = null
         loadedTargetReservationId = null
+    }
+
+    private fun clearLoadingRequest() {
+        loadingUid = null
+        loadingRevision = null
+        loadingTargetReservationId = null
+    }
+
+    private fun clearPaymentSession() {
+        clearLoadedSession()
+        clearLoadingRequest()
+        paymentRequestSequence += 1L
     }
 }
 

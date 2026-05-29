@@ -16,6 +16,7 @@ import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.business.BusinessInfoRepository
 import com.sudsmobile.data.business.BusinessInfoResult
 import com.sudsmobile.data.business.DefaultBusinessInfo
@@ -330,6 +331,132 @@ class PaymentViewModelTest {
     }
 
     @Test
+    fun loadPaymentsKeepsLatestBookingRevisionRequest() = runTest {
+        val repository = DeferredPaymentBookingRepository()
+        val bookingChangeNotifier = MutableBookingChangeNotifier()
+        val viewModel = PaymentViewModel(
+            bookingRepository = repository,
+            authRepository = FakePaymentAuthRepository(authenticated = true),
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+            bookingChangeNotifier = bookingChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<PaymentUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.historyCalls)
+
+        bookingChangeNotifier.notifyBookingsChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.historyCalls)
+
+        repository.requests[1].complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        historyReservation(
+                            id = "latest-payment",
+                            reservationCode = "SS-LATEST",
+                            priceCents = 4100,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val loaded = assertIs<PaymentUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("latest-payment", loaded.bookings.single().id)
+        assertEquals("41,00€", loaded.totalDue)
+
+        repository.requests[0].complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        historyReservation(
+                            id = "stale-payment",
+                            reservationCode = "SS-STALE",
+                            priceCents = 3200,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<PaymentUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("latest-payment", stillLoaded.bookings.single().id)
+        assertEquals("41,00€", stillLoaded.totalDue)
+    }
+
+    @Test
+    fun loadPaymentsKeepsLatestTargetReservationRequest() = runTest {
+        val repository = DeferredPaymentBookingRepository()
+        val viewModel = PaymentViewModel(
+            bookingRepository = repository,
+            authRepository = FakePaymentAuthRepository(authenticated = true),
+            businessInfoRepository = FakePaymentBusinessInfoRepository(),
+        )
+
+        viewModel.loadPayments("payable-1")
+        runCurrent()
+
+        assertEquals(1, repository.historyCalls)
+
+        viewModel.loadPayments("payable-2")
+        runCurrent()
+
+        assertEquals(2, repository.historyCalls)
+
+        repository.requests[1].complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        historyReservation(
+                            id = "payable-1",
+                            reservationCode = "SS-FIRST",
+                            priceCents = 3200,
+                        ),
+                        historyReservation(
+                            id = "payable-2",
+                            reservationCode = "SS-FOCUS",
+                            priceCents = 2500,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val focused = assertIs<PaymentUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("payable-2", focused.bookings.single().id)
+        assertEquals("SS-FOCUS", focused.focusedBookingReference)
+        assertEquals(1, focused.otherPendingCount)
+
+        repository.requests[0].complete(
+            BookingHistoryResult.Success(
+                BookingHistory(
+                    listOf(
+                        historyReservation(
+                            id = "payable-1",
+                            reservationCode = "SS-STALE",
+                            priceCents = 3200,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        runCurrent()
+
+        val stillFocused = assertIs<PaymentUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("payable-2", stillFocused.bookings.single().id)
+        assertEquals("SS-FOCUS", stillFocused.focusedBookingReference)
+    }
+
+    @Test
     fun loadBusinessInfoKeepsFallbackForBackendFailure() = runTest {
         val viewModel = PaymentViewModel(
             bookingRepository = FakePaymentBookingRepository(BookingHistoryResult.Success(BookingHistory(emptyList()))),
@@ -349,7 +476,9 @@ class PaymentViewModelTest {
 }
 
 private class DeferredPaymentBookingRepository : BookingRepository {
-    val result = CompletableDeferred<BookingHistoryResult>()
+    val requests = mutableListOf<CompletableDeferred<BookingHistoryResult>>()
+    val result: CompletableDeferred<BookingHistoryResult>
+        get() = requests.single()
     var historyCalls = 0
         private set
 
@@ -363,7 +492,9 @@ private class DeferredPaymentBookingRepository : BookingRepository {
 
     override suspend fun getMyBookings(): BookingHistoryResult {
         historyCalls += 1
-        return result.await()
+        val request = CompletableDeferred<BookingHistoryResult>()
+        requests += request
+        return request.await()
     }
 }
 
