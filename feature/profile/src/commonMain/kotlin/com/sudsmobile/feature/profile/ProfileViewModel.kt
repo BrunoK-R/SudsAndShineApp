@@ -101,6 +101,9 @@ internal class ProfileViewModel(
     private var statsRequestSequence: Long = 0
     private var loadedPreferencesUid: String? = null
     private var loadedProfileRevision: Long? = null
+    private var loadingPreferencesUid: String? = null
+    private var loadingPreferencesProfileRevision: Long? = null
+    private var preferencesRequestSequence: Long = 0
 
     fun loadStats() {
         val session = when (val currentSessionState = sessionState.value) {
@@ -181,9 +184,7 @@ internal class ProfileViewModel(
     }
 
     fun loadPreferences() {
-        if (_preferencesState.value is ProfilePreferencesUiState.Loading ||
-            _preferencesState.value is ProfilePreferencesUiState.Saving
-        ) {
+        if (_preferencesState.value is ProfilePreferencesUiState.Saving) {
             return
         }
 
@@ -207,22 +208,51 @@ internal class ProfileViewModel(
         }
         val requestedUid = session.session.user.uid
         val requestedProfileRevision = profileRevision.value
+        val sameRequestInFlight = loadingPreferencesUid == requestedUid &&
+            loadingPreferencesProfileRevision == requestedProfileRevision
+        if (sameRequestInFlight) return
+
+        val requestSequence = ++preferencesRequestSequence
+        loadingPreferencesUid = requestedUid
+        loadingPreferencesProfileRevision = requestedProfileRevision
 
         viewModelScope.launch {
-            _preferencesState.value = ProfilePreferencesUiState.Loading
-            val nextState = when (val result = userProfileRepository.getMyProfile()) {
-                is UserProfileResult.Success -> ProfilePreferencesUiState.Loaded(result.profile.toPreferencesUi())
-                is UserProfileResult.Failure -> result.error.toPreferencesState()
-            }
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedPreferencesUid = requestedUid
-                loadedProfileRevision = requestedProfileRevision
-                _preferencesState.value = nextState
-            } else {
-                loadedPreferencesUid = null
-                loadedProfileRevision = null
-                _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+            try {
+                _preferencesState.value = ProfilePreferencesUiState.Loading
+                val nextState = when (val result = userProfileRepository.getMyProfile()) {
+                    is UserProfileResult.Success -> ProfilePreferencesUiState.Loaded(result.profile.toPreferencesUi())
+                    is UserProfileResult.Failure -> result.error.toPreferencesState()
+                }
+                if (requestSequence != preferencesRequestSequence) return@launch
+
+                when (val currentSessionState = sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedPreferences()
+                        _preferencesState.value = ProfilePreferencesUiState.Loading
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedPreferences()
+                        _preferencesState.value = currentSessionState.error.toProfilePreferencesErrorState()
+                    }
+                    AuthSessionState.Unauthenticated -> {
+                        clearLoadedPreferences()
+                        _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+                    }
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedPreferencesUid = requestedUid
+                            loadedProfileRevision = requestedProfileRevision
+                            _preferencesState.value = nextState
+                        } else {
+                            clearLoadedPreferences()
+                            _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+                        }
+                    }
+                }
+            } finally {
+                if (requestSequence == preferencesRequestSequence) {
+                    clearLoadingPreferencesRequest()
+                }
             }
         }
     }
@@ -267,6 +297,11 @@ internal class ProfileViewModel(
 
         viewModelScope.launch {
             _preferencesState.value = ProfilePreferencesUiState.Saving(requestedPreferences)
+            if (!preferencesSessionStillMatches(requestedUid)) {
+                handlePreferencesSessionChangedDuringMutation()
+                return@launch
+            }
+
             val result = userProfileRepository.updateMyProfile(
                 UserProfileSaveRequest(
                     displayName = requestedPreferences.displayName,
@@ -275,11 +310,8 @@ internal class ProfileViewModel(
                     appointmentReminderOptIn = requestedPreferences.appointmentReminderOptIn,
                 ),
             )
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
-                loadedPreferencesUid = null
-                loadedProfileRevision = null
-                _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+            if (!preferencesSessionStillMatches(requestedUid)) {
+                handlePreferencesSessionChangedDuringMutation()
                 return@launch
             }
 
@@ -365,11 +397,8 @@ internal class ProfileViewModel(
 
     fun signOut() {
         authRepository.signOut()
-        loadedUid = null
-        loadedBookingRevision = null
-        loadedVehicleRevision = null
-        loadedPreferencesUid = null
-        loadedProfileRevision = null
+        clearLoadedStats()
+        clearLoadedPreferences()
         _statsState.value = ProfileStatsUiState.Unauthenticated
         _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
     }
@@ -391,6 +420,38 @@ internal class ProfileViewModel(
     private fun clearLoadedPreferences() {
         loadedPreferencesUid = null
         loadedProfileRevision = null
+        clearLoadingPreferencesRequest()
+        preferencesRequestSequence += 1
+    }
+
+    private fun clearLoadingPreferencesRequest() {
+        loadingPreferencesUid = null
+        loadingPreferencesProfileRevision = null
+    }
+
+    private fun preferencesSessionStillMatches(uid: String): Boolean {
+        return (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid == uid
+    }
+
+    private fun handlePreferencesSessionChangedDuringMutation() {
+        when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedPreferences()
+                _preferencesState.value = ProfilePreferencesUiState.Loading
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedPreferences()
+                _preferencesState.value = currentSessionState.error.toProfilePreferencesErrorState()
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedPreferences()
+                _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+            }
+            is AuthSessionState.Authenticated -> {
+                clearLoadedPreferences()
+                _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+            }
+        }
     }
 }
 

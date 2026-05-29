@@ -480,6 +480,33 @@ class ProfileViewModelTest {
     }
 
     @Test
+    fun signOutInvalidatesInFlightPreferencesLoadBeforeSameUserReturns() = runTest {
+        val authRepository = ProfileStatsFakeAuthRepository(authenticated = true)
+        val profileResult = CompletableDeferred<UserProfileResult>()
+        val profileRepository = DeferredProfilePreferencesRepository(profileResult)
+        val viewModel = ProfileViewModel(
+            authRepository = authRepository,
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+
+        viewModel.signOut()
+        authRepository.authenticate("uid-1")
+        profileResult.complete(
+            UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = true)),
+        )
+        runCurrent()
+
+        assertIs<ProfilePreferencesUiState.Unauthenticated>(viewModel.preferencesState.value)
+    }
+
+    @Test
     fun updateMarketingOptInSavesProfilePreference() = runTest {
         val profileRepository = ProfileStatsFakeProfileRepository(
             profileResult = UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = false)),
@@ -505,6 +532,33 @@ class ProfileViewModelTest {
         assertEquals(false, profileRepository.lastRequest?.appointmentReminderOptIn)
         assertEquals("Bruno Ribeiro", profileRepository.lastRequest?.displayName)
         assertEquals(1, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun updateMarketingOptInSkipsRepositoryWhenSessionChangesBeforeCoroutineRuns() = runTest {
+        val authRepository = ProfileStatsFakeAuthRepository(authenticated = true)
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            profileResult = UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = false)),
+            mutationResult = UserProfileMutationResult.Success(profilePreferencesProfile(marketingOptIn = true)),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = authRepository,
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+
+        viewModel.updateMarketingOptIn(true)
+        authRepository.signOut()
+        runCurrent()
+
+        assertIs<ProfilePreferencesUiState.Unauthenticated>(viewModel.preferencesState.value)
+        assertEquals(0, profileRepository.updateCalls)
     }
 
     @Test
@@ -604,6 +658,52 @@ class ProfileViewModelTest {
         assertEquals(true, loaded.preferences.marketingOptIn)
         assertEquals(2, profileRepository.loadCalls)
     }
+
+    @Test
+    fun refreshForSessionKeepsLatestPreferencesRevisionWhenPreferenceLoadIsInFlight() = runTest {
+        val profileChangeNotifier = MutableUserProfileChangeNotifier()
+        val oldResult = CompletableDeferred<UserProfileResult>()
+        val latestResult = CompletableDeferred<UserProfileResult>()
+        val profileRepository = DeferredProfilePreferencesRepository(oldResult, latestResult)
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+            userProfileChangeNotifier = profileChangeNotifier,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfilePreferencesUiState.Loading>(viewModel.preferencesState.value)
+        assertEquals(1, profileRepository.loadCalls)
+
+        profileChangeNotifier.notifyProfileChanged()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<ProfilePreferencesUiState.Loading>(viewModel.preferencesState.value)
+        assertEquals(2, profileRepository.loadCalls)
+
+        latestResult.complete(
+            UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = true)),
+        )
+        runCurrent()
+
+        val loaded = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(true, loaded.preferences.marketingOptIn)
+
+        oldResult.complete(
+            UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = false)),
+        )
+        runCurrent()
+
+        val stillLoaded = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(true, stillLoaded.preferences.marketingOptIn)
+    }
 }
 
 private class ProfileStatsFakeBookingRepository(
@@ -701,25 +801,34 @@ private class ProfileStatsFakeProfileRepository(
     }
 }
 
+private class DeferredProfilePreferencesRepository(
+    firstResult: CompletableDeferred<UserProfileResult>,
+    vararg remainingResults: CompletableDeferred<UserProfileResult>,
+) : UserProfileRepository {
+    private val results = listOf(firstResult, *remainingResults)
+    private var nextResultIndex: Int = 0
+    var loadCalls: Int = 0
+        private set
+
+    override suspend fun getMyProfile(): UserProfileResult {
+        val result = results.getOrNull(nextResultIndex) ?: error("No deferred profile preferences result configured.")
+        nextResultIndex += 1
+        loadCalls += 1
+        return result.await()
+    }
+
+    override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
+        error("Not used")
+    }
+}
+
 private class ProfileStatsFakeAuthRepository(
     authenticated: Boolean,
     initialState: AuthSessionState? = null,
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
         initialState ?: if (authenticated) {
-            AuthSessionState.Authenticated(
-                AuthSession(
-                    user = AuthUser(
-                        uid = "uid-1",
-                        email = "bruno@example.com",
-                        displayName = "Bruno Ribeiro",
-                        phoneNumber = "",
-                    ),
-                    idToken = "id-token-1",
-                    refreshToken = "refresh-token-1",
-                    expiresInSeconds = 3600,
-                ),
-            )
+            authenticatedState()
         } else {
             AuthSessionState.Unauthenticated
         },
@@ -750,6 +859,26 @@ private class ProfileStatsFakeAuthRepository(
 
     override fun signOut() {
         mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+
+    fun authenticate(uid: String = "uid-1") {
+        mutableSessionState.value = authenticatedState(uid)
+    }
+
+    private fun authenticatedState(uid: String = "uid-1"): AuthSessionState.Authenticated {
+        return AuthSessionState.Authenticated(
+            AuthSession(
+                user = AuthUser(
+                    uid = uid,
+                    email = "bruno@example.com",
+                    displayName = "Bruno Ribeiro",
+                    phoneNumber = "",
+                ),
+                idToken = "id-token-$uid",
+                refreshToken = "refresh-token-$uid",
+                expiresInSeconds = 3600,
+            ),
+        )
     }
 }
 
