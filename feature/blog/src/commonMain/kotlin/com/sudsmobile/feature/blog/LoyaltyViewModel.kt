@@ -80,6 +80,9 @@ internal class LoyaltyViewModel(
 
     private var loadedUid: String? = null
     private var loadedRevision: Long? = null
+    private var loadingUid: String? = null
+    private var loadingRevision: Long? = null
+    private var rewardsRequestSequence: Long = 0
 
     fun refreshForSession() {
         when (val state = sessionState.value) {
@@ -108,7 +111,7 @@ internal class LoyaltyViewModel(
     }
 
     fun loadRewards() {
-        if (_uiState.value is LoyaltyUiState.Loading || _uiState.value.isRedeeming()) return
+        if (_uiState.value.isRedeeming()) return
 
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
@@ -131,35 +134,49 @@ internal class LoyaltyViewModel(
 
         val requestedUid = session.session.user.uid
         val requestedRevision = bookingRevision.value
-        viewModelScope.launch {
-            _uiState.value = LoyaltyUiState.Loading
-            val nextState = when (val result = bookingRepository.getMyLoyalty()) {
-                is BookingLoyaltyResult.Success -> result.loyalty.toLoyaltyState()
-                is BookingLoyaltyResult.Failure -> result.error.toLoyaltyState()
-            }
+        val sameRequestInFlight = loadingUid == requestedUid && loadingRevision == requestedRevision
+        if (sameRequestInFlight) return
 
-            when (val currentSessionState = sessionState.value) {
-                AuthSessionState.Restoring -> {
-                    clearLoadedSession()
-                    _uiState.value = LoyaltyUiState.Loading
+        val requestSequence = ++rewardsRequestSequence
+        loadingUid = requestedUid
+        loadingRevision = requestedRevision
+
+        viewModelScope.launch {
+            try {
+                _uiState.value = LoyaltyUiState.Loading
+                val nextState = when (val result = bookingRepository.getMyLoyalty()) {
+                    is BookingLoyaltyResult.Success -> result.loyalty.toLoyaltyState()
+                    is BookingLoyaltyResult.Failure -> result.error.toLoyaltyState()
                 }
-                is AuthSessionState.RestoreFailed -> {
-                    clearLoadedSession()
-                    _uiState.value = currentSessionState.error.toLoyaltyState()
-                }
-                AuthSessionState.Unauthenticated -> {
-                    clearLoadedSession()
-                    _uiState.value = LoyaltyUiState.Unauthenticated
-                }
-                is AuthSessionState.Authenticated -> {
-                    if (currentSessionState.session.user.uid == requestedUid) {
-                        loadedUid = requestedUid
-                        loadedRevision = requestedRevision
-                        _uiState.value = nextState
-                    } else {
+                if (requestSequence != rewardsRequestSequence) return@launch
+
+                when (val currentSessionState = sessionState.value) {
+                    AuthSessionState.Restoring -> {
+                        clearLoadedSession()
+                        _uiState.value = LoyaltyUiState.Loading
+                    }
+                    is AuthSessionState.RestoreFailed -> {
+                        clearLoadedSession()
+                        _uiState.value = currentSessionState.error.toLoyaltyState()
+                    }
+                    AuthSessionState.Unauthenticated -> {
                         clearLoadedSession()
                         _uiState.value = LoyaltyUiState.Unauthenticated
                     }
+                    is AuthSessionState.Authenticated -> {
+                        if (currentSessionState.session.user.uid == requestedUid) {
+                            loadedUid = requestedUid
+                            loadedRevision = requestedRevision
+                            _uiState.value = nextState
+                        } else {
+                            clearLoadedSession()
+                            _uiState.value = LoyaltyUiState.Unauthenticated
+                        }
+                    }
+                }
+            } finally {
+                if (requestSequence == rewardsRequestSequence) {
+                    clearLoadingRequest()
                 }
             }
         }
@@ -172,8 +189,11 @@ internal class LoyaltyViewModel(
         }
 
         val requestedUid = authenticatedUidOrUpdateState() ?: return
+        _uiState.value = content.toUiState(LoyaltyRedemptionUiState.Redeeming)
         viewModelScope.launch {
-            _uiState.value = content.toUiState(LoyaltyRedemptionUiState.Redeeming)
+            if (!sessionStillMatches(requestedUid)) {
+                return@launch
+            }
             val nextState = when (val result = bookingRepository.redeemLoyaltyReward()) {
                 is BookingRewardRedemptionResult.Success -> {
                     val progress = result.receipt.loyalty.toBackendLoyaltyProgress()
@@ -197,28 +217,39 @@ internal class LoyaltyViewModel(
                 )
             }
 
-            when (val currentSessionState = sessionState.value) {
-                AuthSessionState.Restoring -> {
-                    clearLoadedSession()
-                    _uiState.value = LoyaltyUiState.Loading
-                }
-                is AuthSessionState.RestoreFailed -> {
-                    clearLoadedSession()
-                    _uiState.value = currentSessionState.error.toLoyaltyState()
-                }
-                AuthSessionState.Unauthenticated -> {
+            if (!sessionStillMatches(requestedUid)) {
+                return@launch
+            }
+            loadedUid = requestedUid
+            loadedRevision = bookingRevision.value
+            _uiState.value = nextState
+        }
+    }
+
+    private fun sessionStillMatches(requestedUid: String): Boolean {
+        return when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = LoyaltyUiState.Loading
+                false
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toLoyaltyState()
+                false
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = LoyaltyUiState.Unauthenticated
+                false
+            }
+            is AuthSessionState.Authenticated -> {
+                if (currentSessionState.session.user.uid == requestedUid) {
+                    true
+                } else {
                     clearLoadedSession()
                     _uiState.value = LoyaltyUiState.Unauthenticated
-                }
-                is AuthSessionState.Authenticated -> {
-                    if (currentSessionState.session.user.uid == requestedUid) {
-                        loadedUid = requestedUid
-                        loadedRevision = bookingRevision.value
-                        _uiState.value = nextState
-                    } else {
-                        clearLoadedSession()
-                        _uiState.value = LoyaltyUiState.Unauthenticated
-                    }
+                    false
                 }
             }
         }
@@ -248,6 +279,13 @@ internal class LoyaltyViewModel(
     private fun clearLoadedSession() {
         loadedUid = null
         loadedRevision = null
+        rewardsRequestSequence += 1
+        clearLoadingRequest()
+    }
+
+    private fun clearLoadingRequest() {
+        loadingUid = null
+        loadingRevision = null
     }
 }
 
