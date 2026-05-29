@@ -24,6 +24,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,6 +138,50 @@ class RatingViewModelTest {
     }
 
     @Test
+    fun loadTargetRejectsAlreadyReviewedReservation() = runTest {
+        val viewModel = RatingViewModel(
+            bookingRepository = FakeRatingBookingRepository(
+                historyResult = completedHistory(reviewed = true),
+            ),
+            authRepository = FakeRatingAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadTarget("reservation-1")
+        runCurrent()
+
+        assertIs<RatingTargetUiState.AlreadyReviewed>(viewModel.targetState.value)
+    }
+
+    @Test
+    fun loadTargetKeepsLatestReservationWhenRequestsCompleteOutOfOrder() = runTest {
+        val firstRequest = CompletableDeferred<BookingHistoryResult>()
+        val secondRequest = CompletableDeferred<BookingHistoryResult>()
+        val repository = DeferredRatingBookingRepository(listOf(firstRequest, secondRequest))
+        val viewModel = RatingViewModel(
+            bookingRepository = repository,
+            authRepository = FakeRatingAuthRepository(authenticated = true),
+        )
+
+        viewModel.loadTarget("reservation-1")
+        runCurrent()
+        viewModel.loadTarget("reservation-2")
+        runCurrent()
+
+        secondRequest.complete(completedHistory(id = "reservation-2"))
+        runCurrent()
+
+        val latestLoaded = assertIs<RatingTargetUiState.Loaded>(viewModel.targetState.value)
+        assertEquals("reservation-2", latestLoaded.target.reservationId)
+
+        firstRequest.complete(completedHistory(id = "reservation-1"))
+        runCurrent()
+
+        val stillLatestLoaded = assertIs<RatingTargetUiState.Loaded>(viewModel.targetState.value)
+        assertEquals("reservation-2", stillLatestLoaded.target.reservationId)
+        assertEquals(2, repository.historyCalls)
+    }
+
+    @Test
     fun submitReviewValidatesRatingBeforeRepositoryCall() = runTest {
         val repository = FakeRatingBookingRepository(historyResult = completedHistory())
         val viewModel = RatingViewModel(
@@ -238,6 +283,27 @@ class RatingViewModelTest {
     }
 }
 
+private class DeferredRatingBookingRepository(
+    historyResults: List<CompletableDeferred<BookingHistoryResult>>,
+) : BookingRepository {
+    private val pendingHistoryResults = historyResults.toMutableList()
+    var historyCalls: Int = 0
+        private set
+
+    override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
+        error("Not used")
+    }
+
+    override suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult {
+        error("Not used")
+    }
+
+    override suspend fun getMyBookings(): BookingHistoryResult {
+        historyCalls += 1
+        return pendingHistoryResults.removeAt(0).await()
+    }
+}
+
 private class FakeRatingBookingRepository(
     private val historyResult: BookingHistoryResult,
     private val reviewResult: BookingReviewResult = BookingReviewResult.Success(
@@ -328,10 +394,13 @@ private fun authenticatedSession(uid: String = "uid-1"): AuthSessionState.Authen
     )
 }
 
-private fun completedHistory(): BookingHistoryResult {
+private fun completedHistory(
+    id: String = "reservation-1",
+    reviewed: Boolean = false,
+): BookingHistoryResult {
     return BookingHistoryResult.Success(
         BookingHistory(
-            listOf(historyReservation(id = "reservation-1", upcoming = false)),
+            listOf(historyReservation(id = id, upcoming = false, reviewed = reviewed)),
         ),
     )
 }
@@ -339,6 +408,7 @@ private fun completedHistory(): BookingHistoryResult {
 private fun historyReservation(
     id: String,
     upcoming: Boolean,
+    reviewed: Boolean = false,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -351,4 +421,5 @@ private fun historyReservation(
     vehicleLabel = "BMW 320d",
     priceCents = 3400,
     upcoming = upcoming,
+    reviewed = reviewed,
 )

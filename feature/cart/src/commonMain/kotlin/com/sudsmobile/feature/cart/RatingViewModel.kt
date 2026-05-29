@@ -30,6 +30,7 @@ internal sealed interface RatingTargetUiState {
     data object Loading : RatingTargetUiState
     data object Unauthenticated : RatingTargetUiState
     data object NotFound : RatingTargetUiState
+    data object AlreadyReviewed : RatingTargetUiState
     data class Loaded(val target: RatingTargetUi) : RatingTargetUiState
     data class Error(val message: String, val retryable: Boolean) : RatingTargetUiState
 }
@@ -57,10 +58,14 @@ internal class RatingViewModel(
     val submitState: StateFlow<RatingSubmitUiState> = _submitState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedReservationId: String? = null
+    private var loadingUid: String? = null
+    private var loadingReservationId: String? = null
+    private var targetRequestRevision: Long = 0
 
     fun refreshTarget(reservationId: String) {
         val cleanReservationId = reservationId.trim()
         if (cleanReservationId.isBlank()) {
+            clearLoadedTarget()
             _targetState.value = RatingTargetUiState.NotFound
             return
         }
@@ -92,10 +97,9 @@ internal class RatingViewModel(
     }
 
     fun loadTarget(reservationId: String) {
-        if (_targetState.value is RatingTargetUiState.Loading) return
-
         val cleanReservationId = reservationId.trim()
         if (cleanReservationId.isBlank()) {
+            clearLoadedTarget()
             _targetState.value = RatingTargetUiState.NotFound
             return
         }
@@ -119,6 +123,16 @@ internal class RatingViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
+        if (
+            _targetState.value is RatingTargetUiState.Loading &&
+            loadingUid == requestedUid &&
+            loadingReservationId == cleanReservationId
+        ) {
+            return
+        }
+        val requestRevision = ++targetRequestRevision
+        loadingUid = requestedUid
+        loadingReservationId = cleanReservationId
 
         viewModelScope.launch {
             _targetState.value = RatingTargetUiState.Loading
@@ -132,6 +146,9 @@ internal class RatingViewModel(
                 is BookingHistoryResult.Failure -> result.error.toTargetState()
             }
 
+            if (requestRevision != targetRequestRevision) return@launch
+            loadingUid = null
+            loadingReservationId = null
             when (val currentSessionState = sessionState.value) {
                 AuthSessionState.Restoring -> {
                     clearLoadedTarget()
@@ -263,6 +280,9 @@ internal class RatingViewModel(
     private fun clearLoadedTarget() {
         loadedUid = null
         loadedReservationId = null
+        loadingUid = null
+        loadingReservationId = null
+        targetRequestRevision += 1
     }
 }
 
@@ -308,6 +328,9 @@ private fun AuthError.isRetryableSessionError(): Boolean {
 private fun BookingHistoryReservation.toRatingTargetState(): RatingTargetUiState {
     if (!isReviewableReservation() || id.isBlank() || slotStartIso.isBlank()) {
         return RatingTargetUiState.NotFound
+    }
+    if (reviewed) {
+        return RatingTargetUiState.AlreadyReviewed
     }
 
     return RatingTargetUiState.Loaded(

@@ -1777,6 +1777,12 @@ fun RatingScreen(
                         actionLabel = "Voltar",
                         onAction = onBack,
                     )
+                    RatingTargetUiState.AlreadyReviewed -> BookingsStatusCard(
+                        title = "Avaliação já registada",
+                        body = "Esta lavagem já tem uma avaliação guardada no histórico.",
+                        actionLabel = "Voltar",
+                        onAction = onBack,
+                    )
                     is RatingTargetUiState.Error -> BookingsStatusCard(
                         title = "Não foi possível carregar",
                         body = target.message,
