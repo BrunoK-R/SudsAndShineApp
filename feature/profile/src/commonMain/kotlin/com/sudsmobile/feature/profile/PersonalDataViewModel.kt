@@ -53,23 +53,25 @@ internal class PersonalDataViewModel(
     val saveState: StateFlow<PersonalDataSaveUiState> = _saveState.asStateFlow()
 
     private var loadedUid: String? = null
+    private var loadingUid: String? = null
+    private var profileRequestRevision: Long = 0
 
     fun refreshForSession() {
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
-                loadedUid = null
+                clearLoadedSession()
                 _uiState.value = PersonalDataUiState.Loading
                 _saveState.value = PersonalDataSaveUiState.Idle
                 return
             }
             is AuthSessionState.RestoreFailed -> {
-                loadedUid = null
+                clearLoadedSession()
                 _uiState.value = currentSessionState.error.toPersonalDataState()
                 _saveState.value = PersonalDataSaveUiState.Idle
                 return
             }
             AuthSessionState.Unauthenticated -> {
-                loadedUid = null
+                clearLoadedSession()
                 _uiState.value = PersonalDataUiState.Unauthenticated
                 _saveState.value = PersonalDataSaveUiState.Idle
                 return
@@ -83,27 +85,29 @@ internal class PersonalDataViewModel(
     }
 
     fun loadProfile() {
-        if (_uiState.value is PersonalDataUiState.Loading) return
-
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
-                loadedUid = null
+                clearLoadedSession()
                 _uiState.value = PersonalDataUiState.Loading
                 return
             }
             is AuthSessionState.RestoreFailed -> {
-                loadedUid = null
+                clearLoadedSession()
                 _uiState.value = currentSessionState.error.toPersonalDataState()
                 return
             }
             AuthSessionState.Unauthenticated -> {
-                loadedUid = null
+                clearLoadedSession()
                 _uiState.value = PersonalDataUiState.Unauthenticated
                 return
             }
             is AuthSessionState.Authenticated -> currentSessionState
         }
         val requestedUid = session.session.user.uid
+        if (_uiState.value is PersonalDataUiState.Loading && loadingUid == requestedUid) return
+
+        val requestRevision = ++profileRequestRevision
+        loadingUid = requestedUid
 
         viewModelScope.launch {
             _uiState.value = PersonalDataUiState.Loading
@@ -112,13 +116,31 @@ internal class PersonalDataViewModel(
                 is UserProfileResult.Success -> PersonalDataUiState.Loaded(result.profile.toFormUi())
                 is UserProfileResult.Failure -> result.error.toUiState()
             }
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                loadedUid = requestedUid
-                _uiState.value = nextState
-            } else {
-                loadedUid = null
-                _uiState.value = PersonalDataUiState.Unauthenticated
+            if (requestRevision != profileRequestRevision) return@launch
+            loadingUid = null
+
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    clearLoadedSession()
+                    _uiState.value = PersonalDataUiState.Loading
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    clearLoadedSession()
+                    _uiState.value = currentSessionState.error.toPersonalDataState()
+                }
+                AuthSessionState.Unauthenticated -> {
+                    clearLoadedSession()
+                    _uiState.value = PersonalDataUiState.Unauthenticated
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid == requestedUid) {
+                        loadedUid = requestedUid
+                        _uiState.value = nextState
+                    } else {
+                        clearLoadedSession()
+                        _uiState.value = PersonalDataUiState.Unauthenticated
+                    }
+                }
             }
         }
     }
@@ -132,17 +154,33 @@ internal class PersonalDataViewModel(
             return
         }
 
-        val session = sessionState.value as? AuthSessionState.Authenticated
-        if (session == null) {
-            loadedUid = null
-            _uiState.value = PersonalDataUiState.Unauthenticated
-            _saveState.value = PersonalDataSaveUiState.Idle
-            return
-        }
-        val requestedUid = session.session.user.uid
+        val requestedUid = authenticatedUidOrUpdateState() ?: return
 
         viewModelScope.launch {
             _saveState.value = PersonalDataSaveUiState.Saving
+            when (val currentSessionState = sessionState.value) {
+                AuthSessionState.Restoring -> {
+                    _saveState.value = restoringSaveState()
+                    return@launch
+                }
+                is AuthSessionState.RestoreFailed -> {
+                    _saveState.value = currentSessionState.error.toPersonalDataSaveState()
+                    return@launch
+                }
+                AuthSessionState.Unauthenticated -> {
+                    clearLoadedSession()
+                    _uiState.value = PersonalDataUiState.Unauthenticated
+                    _saveState.value = PersonalDataSaveUiState.Idle
+                    return@launch
+                }
+                is AuthSessionState.Authenticated -> {
+                    if (currentSessionState.session.user.uid != requestedUid) {
+                        _saveState.value = changedSessionSaveState()
+                        return@launch
+                    }
+                }
+            }
+
             val result = profileRepository.updateMyProfile(
                 UserProfileSaveRequest(
                     displayName = form.displayName,
@@ -151,11 +189,8 @@ internal class PersonalDataViewModel(
                     appointmentReminderOptIn = form.appointmentReminderOptIn,
                 ),
             )
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
-                loadedUid = null
-                _uiState.value = PersonalDataUiState.Unauthenticated
-                _saveState.value = PersonalDataSaveUiState.Idle
+            if ((sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid != requestedUid) {
+                _saveState.value = changedSessionSaveState()
                 return@launch
             }
 
@@ -170,6 +205,36 @@ internal class PersonalDataViewModel(
                 }
             }
         }
+    }
+
+    private fun authenticatedUidOrUpdateState(): String? {
+        return when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedSession()
+                _uiState.value = PersonalDataUiState.Loading
+                _saveState.value = PersonalDataSaveUiState.Idle
+                null
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedSession()
+                _uiState.value = currentSessionState.error.toPersonalDataState()
+                _saveState.value = PersonalDataSaveUiState.Idle
+                null
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedSession()
+                _uiState.value = PersonalDataUiState.Unauthenticated
+                _saveState.value = PersonalDataSaveUiState.Idle
+                null
+            }
+            is AuthSessionState.Authenticated -> currentSessionState.session.user.uid
+        }
+    }
+
+    private fun clearLoadedSession() {
+        loadedUid = null
+        loadingUid = null
+        profileRequestRevision += 1
     }
 
     fun clearSaveState() {
@@ -210,6 +275,20 @@ internal class PersonalDataViewModel(
     }
 }
 
+private fun restoringSaveState(): PersonalDataSaveUiState.Error {
+    return PersonalDataSaveUiState.Error(
+        message = "A sessão ainda está a ser validada. Tente novamente dentro de momentos.",
+        retryable = true,
+    )
+}
+
+private fun changedSessionSaveState(): PersonalDataSaveUiState.Error {
+    return PersonalDataSaveUiState.Error(
+        message = "A sessão mudou antes de guardarmos os dados. Atualize e tente novamente.",
+        retryable = false,
+    )
+}
+
 private val phoneSeparators = setOf('+', '-', '(', ')', '.', ' ')
 
 private fun UserProfile.toFormUi(): PersonalDataFormUi = PersonalDataFormUi(
@@ -222,6 +301,10 @@ private fun UserProfile.toFormUi(): PersonalDataFormUi = PersonalDataFormUi(
 
 private fun AuthError.toPersonalDataState(): PersonalDataUiState.Error {
     return PersonalDataUiState.Error(message = message, retryable = isRetryableSessionError())
+}
+
+private fun AuthError.toPersonalDataSaveState(): PersonalDataSaveUiState.Error {
+    return PersonalDataSaveUiState.Error(message = message, retryable = isRetryableSessionError())
 }
 
 private fun AuthError.isRetryableSessionError(): Boolean {

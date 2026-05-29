@@ -18,6 +18,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -128,6 +129,58 @@ class PersonalDataViewModelTest {
     }
 
     @Test
+    fun loadProfileKeepsLatestSessionProfileWhenEarlierLoadCompletesLast() = runTest {
+        val authRepository = FakePersonalDataAuthRepository(authenticated = true)
+        val repository = QueuedPersonalDataRepository()
+        val viewModel = PersonalDataViewModel(
+            authRepository = authRepository,
+            profileRepository = repository,
+        )
+
+        viewModel.loadProfile()
+        runCurrent()
+
+        assertIs<PersonalDataUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.loadCalls)
+
+        authRepository.authenticate(uid = "uid-2")
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+
+        repository.secondLoad.complete(
+            UserProfileResult.Success(
+                personalDataProfile(
+                    uid = "uid-2",
+                    email = "second@example.com",
+                    displayName = "Segundo Cliente",
+                ),
+            ),
+        )
+        runCurrent()
+
+        val loaded = assertIs<PersonalDataUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Segundo Cliente", loaded.form.displayName)
+        assertEquals("second@example.com", loaded.form.email)
+
+        repository.firstLoad.complete(
+            UserProfileResult.Success(
+                personalDataProfile(
+                    uid = "uid-1",
+                    email = "first@example.com",
+                    displayName = "Primeiro Cliente",
+                ),
+            ),
+        )
+        runCurrent()
+
+        val latest = assertIs<PersonalDataUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Segundo Cliente", latest.form.displayName)
+        assertEquals("second@example.com", latest.form.email)
+    }
+
+    @Test
     fun saveProfileValidatesPhoneBeforeCallingRepository() = runTest {
         val repository = FakePersonalDataRepository(
             profileResult = UserProfileResult.Success(personalDataProfile()),
@@ -148,6 +201,34 @@ class PersonalDataViewModelTest {
         runCurrent()
 
         assertIs<PersonalDataSaveUiState.ValidationError>(viewModel.saveState.value)
+        assertEquals(0, repository.updateCalls)
+    }
+
+    @Test
+    fun saveProfileDoesNotCallRepositoryWhenSessionChangesBeforeCoroutineRuns() = runTest {
+        val authRepository = FakePersonalDataAuthRepository(authenticated = true)
+        val repository = FakePersonalDataRepository(
+            profileResult = UserProfileResult.Success(personalDataProfile()),
+        )
+        val viewModel = PersonalDataViewModel(
+            authRepository = authRepository,
+            profileRepository = repository,
+        )
+
+        viewModel.saveProfile(
+            PersonalDataFormUi(
+                displayName = "Bruno Ribeiro",
+                email = "bruno@example.com",
+                phoneNumber = "913 005 855",
+                marketingOptIn = false,
+            ),
+        )
+        authRepository.authenticate(uid = "uid-2")
+        runCurrent()
+
+        val error = assertIs<PersonalDataSaveUiState.Error>(viewModel.saveState.value)
+        assertEquals("A sessão mudou antes de guardarmos os dados. Atualize e tente novamente.", error.message)
+        assertEquals(false, error.retryable)
         assertEquals(0, repository.updateCalls)
     }
 
@@ -202,6 +283,26 @@ class PersonalDataViewModelTest {
     }
 }
 
+private class QueuedPersonalDataRepository : UserProfileRepository {
+    val firstLoad = CompletableDeferred<UserProfileResult>()
+    val secondLoad = CompletableDeferred<UserProfileResult>()
+    var loadCalls: Int = 0
+        private set
+
+    override suspend fun getMyProfile(): UserProfileResult {
+        loadCalls += 1
+        return when (loadCalls) {
+            1 -> firstLoad.await()
+            2 -> secondLoad.await()
+            else -> error("Unexpected profile load")
+        }
+    }
+
+    override suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult {
+        error("Not used")
+    }
+}
+
 private class FakePersonalDataRepository(
     private val profileResult: UserProfileResult,
     private val mutationResult: UserProfileMutationResult = UserProfileMutationResult.Success(personalDataProfile()),
@@ -238,6 +339,10 @@ private class FakePersonalDataAuthRepository(
         return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
     }
 
+    fun authenticate(uid: String = "uid-1") {
+        mutableSessionState.value = authenticatedSessionState(uid = uid)
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
         error("Not used")
     }
@@ -260,30 +365,32 @@ private class FakePersonalDataAuthRepository(
     }
 }
 
-private fun authenticatedSessionState(): AuthSessionState.Authenticated {
+private fun authenticatedSessionState(uid: String = "uid-1"): AuthSessionState.Authenticated {
     return AuthSessionState.Authenticated(
         AuthSession(
             user = AuthUser(
-                uid = "uid-1",
-                email = "bruno@example.com",
+                uid = uid,
+                email = "$uid@example.com",
                 displayName = "Bruno",
                 phoneNumber = "913005855",
             ),
-            idToken = "id-token-1",
-            refreshToken = "refresh-token-1",
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
             expiresInSeconds = 3600,
         ),
     )
 }
 
 private fun personalDataProfile(
+    uid: String = "uid-1",
+    email: String = "bruno@example.com",
     displayName: String = "Bruno",
     phoneNumber: String = "913005855",
     marketingOptIn: Boolean = false,
     appointmentReminderOptIn: Boolean = false,
 ): UserProfile = UserProfile(
-    uid = "uid-1",
-    email = "bruno@example.com",
+    uid = uid,
+    email = email,
     displayName = displayName,
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
