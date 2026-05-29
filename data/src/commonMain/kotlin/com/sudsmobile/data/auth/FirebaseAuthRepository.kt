@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class FirebaseAuthRepository(
     private val api: AuthApi,
@@ -19,6 +21,7 @@ class FirebaseAuthRepository(
         if (restoreOnStart) AuthSessionState.Restoring else AuthSessionState.Unauthenticated,
     )
     override val sessionState: StateFlow<AuthSessionState> = _sessionState.asStateFlow()
+    private val refreshMutex = Mutex()
 
     init {
         if (restoreOnStart) {
@@ -29,11 +32,12 @@ class FirebaseAuthRepository(
     }
 
     override suspend fun currentSession(): AuthSession? {
-        val authenticated = _sessionState.value as? AuthSessionState.Authenticated ?: return null
-        val session = authenticated.session
-        if (!session.needsRefresh(nowEpochSeconds())) return session
+        return refreshMutex.withLock {
+            val session = currentAuthenticatedSession() ?: return@withLock null
+            if (!session.needsRefresh(nowEpochSeconds())) return@withLock session
 
-        return refreshSession(session)
+            refreshSession(session)
+        }
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
@@ -80,8 +84,8 @@ class FirebaseAuthRepository(
     }
 
     override fun signOut() {
-        clearStoredSession()
         _sessionState.value = AuthSessionState.Unauthenticated
+        clearStoredSession()
     }
 
     private suspend fun restorePersistedSession() {
@@ -95,9 +99,7 @@ class FirebaseAuthRepository(
     }
 
     private fun completeRestore(state: AuthSessionState) {
-        if (_sessionState.value == AuthSessionState.Restoring) {
-            _sessionState.value = state
-        }
+        _sessionState.compareAndSet(AuthSessionState.Restoring, state)
     }
 
     private suspend fun refreshSession(
@@ -105,45 +107,52 @@ class FirebaseAuthRepository(
         onlyIfRestoring: Boolean = false,
     ): AuthSession? {
         if (onlyIfRestoring && _sessionState.value != AuthSessionState.Restoring) {
-            return (_sessionState.value as? AuthSessionState.Authenticated)?.session
+            return currentAuthenticatedSession()
         }
 
         if (session.refreshToken.isBlank()) {
-            clearStoredSession()
-            completeRestore(AuthSessionState.Unauthenticated)
+            if (clearSessionState(session, onlyIfRestoring)) {
+                clearStoredSession()
+            }
             return null
         }
 
         return when (val result = api.refreshSession(session.refreshToken)) {
             is AuthResult.Success -> {
-                if (onlyIfRestoring && _sessionState.value != AuthSessionState.Restoring) {
-                    return (_sessionState.value as? AuthSessionState.Authenticated)?.session
-                }
                 val refreshedSession = session.mergeRefresh(result.session, nowEpochSeconds())
-                writeStoredSession(refreshedSession)
-                _sessionState.value = AuthSessionState.Authenticated(refreshedSession)
-                refreshedSession
+                if (authenticateRefreshedSession(session, refreshedSession, onlyIfRestoring)) {
+                    writeStoredSession(refreshedSession)
+                    refreshedSession
+                } else if (onlyIfRestoring) {
+                    currentAuthenticatedSession()
+                } else {
+                    null
+                }
             }
             is AuthResult.Failure -> {
                 if (onlyIfRestoring && _sessionState.value != AuthSessionState.Restoring) {
-                    return (_sessionState.value as? AuthSessionState.Authenticated)?.session
+                    return currentAuthenticatedSession()
                 }
                 when (result.error) {
                     is AuthError.InvalidCredentials,
                     is AuthError.Permission,
                     is AuthError.Validation -> {
-                        clearStoredSession()
-                        _sessionState.value = AuthSessionState.Unauthenticated
+                        if (clearSessionState(session, onlyIfRestoring)) {
+                            clearStoredSession()
+                        }
+                        null
                     }
                     else -> {
                         if (onlyIfRestoring) {
                             completeRestore(AuthSessionState.RestoreFailed(result.error))
+                            currentAuthenticatedSession()
+                        } else if (currentAuthenticatedSession() == session) {
+                            session
                         } else {
-                            return session
+                            null
                         }
                     }
                 }
-                null
             }
         }
     }
@@ -153,10 +162,47 @@ class FirebaseAuthRepository(
             is AuthResult.Failure -> this
             is AuthResult.Success -> {
                 val issuedSession = session.copy(issuedAtEpochSeconds = nowEpochSeconds())
-                writeStoredSession(issuedSession)
                 _sessionState.value = AuthSessionState.Authenticated(issuedSession)
+                writeStoredSession(issuedSession)
                 copy(session = issuedSession)
             }
+        }
+    }
+
+    private fun currentAuthenticatedSession(): AuthSession? {
+        return (_sessionState.value as? AuthSessionState.Authenticated)?.session
+    }
+
+    private fun authenticateRefreshedSession(
+        staleSession: AuthSession,
+        refreshedSession: AuthSession,
+        onlyIfRestoring: Boolean,
+    ): Boolean {
+        val refreshedState = AuthSessionState.Authenticated(refreshedSession)
+        return if (onlyIfRestoring) {
+            _sessionState.compareAndSet(AuthSessionState.Restoring, refreshedState)
+        } else {
+            _sessionState.compareAndSet(
+                AuthSessionState.Authenticated(staleSession),
+                refreshedState,
+            )
+        }
+    }
+
+    private fun clearSessionState(
+        session: AuthSession,
+        onlyIfRestoring: Boolean,
+    ): Boolean {
+        return if (onlyIfRestoring) {
+            _sessionState.compareAndSet(
+                AuthSessionState.Restoring,
+                AuthSessionState.Unauthenticated,
+            )
+        } else {
+            _sessionState.compareAndSet(
+                AuthSessionState.Authenticated(session),
+                AuthSessionState.Unauthenticated,
+            )
         }
     }
 

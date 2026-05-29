@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -141,9 +143,101 @@ class FirebaseAuthRepositoryTest {
         assertEquals("refreshed-id-token", session?.idToken)
         assertEquals("refreshed-id-token", store.savedSession?.idToken)
     }
+
+    @Test
+    fun inFlightCurrentSessionRefreshDoesNotReauthenticateAfterSignOut() = runTest {
+        var now = 1_000L
+        val store = RecordingAuthSessionStore()
+        val refreshResult = CompletableDeferred<AuthResult>()
+        val api = RecordingAuthApi(refreshResult = refreshResult)
+        val repository = FirebaseAuthRepository(
+            api = api,
+            sessionStore = store,
+            nowEpochSeconds = { now },
+            restoreOnStart = false,
+        )
+        repository.signIn(email = "bruno@example.com", password = "secret123")
+        now = 4_600L
+
+        val session = async { repository.currentSession() }
+        assertEquals("refresh-token", api.refreshStarted.await())
+
+        repository.signOut()
+        refreshResult.complete(
+            AuthResult.Success(
+                testSession(
+                    email = "bruno@example.com",
+                    displayName = "Bruno Ribeiro",
+                    idToken = "late-id-token",
+                    refreshToken = "late-refresh-token",
+                ),
+            ),
+        )
+
+        assertNull(session.await())
+        assertEquals(AuthSessionState.Unauthenticated, repository.sessionState.value)
+        assertNull(store.savedSession)
+    }
+
+    @Test
+    fun inFlightCurrentSessionRefreshDoesNotReplaceNewSignIn() = runTest {
+        var now = 1_000L
+        val store = RecordingAuthSessionStore()
+        val refreshResult = CompletableDeferred<AuthResult>()
+        val api = RecordingAuthApi(
+            refreshResult = refreshResult,
+            signInSession = { email ->
+                if (email == "ana@example.com") {
+                    testSession(
+                        uid = "user-2",
+                        email = email,
+                        displayName = "Ana Silva",
+                        idToken = "ana-id-token",
+                        refreshToken = "ana-refresh-token",
+                    )
+                } else {
+                    testSession(email = email, displayName = "Bruno Ribeiro")
+                }
+            },
+        )
+        val repository = FirebaseAuthRepository(
+            api = api,
+            sessionStore = store,
+            nowEpochSeconds = { now },
+            restoreOnStart = false,
+        )
+        repository.signIn(email = "bruno@example.com", password = "secret123")
+        now = 4_600L
+
+        val staleSession = async { repository.currentSession() }
+        assertEquals("refresh-token", api.refreshStarted.await())
+
+        repository.signIn(email = "ana@example.com", password = "secret123")
+        refreshResult.complete(
+            AuthResult.Success(
+                testSession(
+                    email = "bruno@example.com",
+                    displayName = "Bruno Ribeiro",
+                    idToken = "late-id-token",
+                    refreshToken = "late-refresh-token",
+                ),
+            ),
+        )
+
+        assertNull(staleSession.await())
+        val sessionState = assertIs<AuthSessionState.Authenticated>(repository.sessionState.value)
+        assertEquals("user-2", sessionState.session.user.uid)
+        assertEquals("ana-id-token", sessionState.session.idToken)
+        assertEquals("ana-id-token", store.savedSession?.idToken)
+    }
 }
 
-private class RecordingAuthApi : AuthApi {
+private class RecordingAuthApi(
+    private val refreshResult: CompletableDeferred<AuthResult>? = null,
+    private val signInSession: (String) -> AuthSession = { email ->
+        testSession(email = email, displayName = "Bruno Ribeiro")
+    },
+) : AuthApi {
     var signInCalls: Int = 0
         private set
     var signUpCalls: Int = 0
@@ -154,10 +248,11 @@ private class RecordingAuthApi : AuthApi {
         private set
     var lastRefreshToken: String? = null
         private set
+    val refreshStarted = CompletableDeferred<String>()
 
     override suspend fun signIn(email: String, password: String): AuthResult {
         signInCalls += 1
-        return AuthResult.Success(testSession(email = email, displayName = "Bruno Ribeiro"))
+        return AuthResult.Success(signInSession(email))
     }
 
     override suspend fun signUp(email: String, password: String): AuthResult {
@@ -178,6 +273,8 @@ private class RecordingAuthApi : AuthApi {
 
     override suspend fun refreshSession(refreshToken: String): AuthResult {
         lastRefreshToken = refreshToken
+        refreshStarted.complete(refreshToken)
+        if (refreshResult != null) return refreshResult.await()
         return AuthResult.Success(
             AuthSession(
                 user = AuthUser(
@@ -213,16 +310,20 @@ private class RecordingAuthSessionStore(
 }
 
 private fun testSession(
+    uid: String = "user-1",
     email: String,
     displayName: String,
+    idToken: String = "id-token",
+    refreshToken: String = "refresh-token",
+    expiresInSeconds: Long = 3600,
 ): AuthSession = AuthSession(
     user = AuthUser(
-        uid = "user-1",
+        uid = uid,
         email = email,
         displayName = displayName,
         phoneNumber = "",
     ),
-    idToken = "id-token",
-    refreshToken = "refresh-token",
-    expiresInSeconds = 3600,
+    idToken = idToken,
+    refreshToken = refreshToken,
+    expiresInSeconds = expiresInSeconds,
 )
