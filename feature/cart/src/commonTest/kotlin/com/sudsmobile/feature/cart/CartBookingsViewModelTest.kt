@@ -672,6 +672,58 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun rescheduleBookingRejectsImpossibleCalendarDateBeforeRepositoryCall() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.rescheduleBooking(
+            BookingRescheduleDraft(
+                reservationId = "reservation-1",
+                dateId = "2026-02-29",
+                time = "11:00",
+                durationMinutes = 45,
+            ),
+        )
+
+        val error = assertIs<BookingRescheduleUiState.Error>(viewModel.rescheduleState.value)
+        assertEquals("Escolha uma nova data e hora para remarcar.", error.message)
+        assertEquals(0, repository.rescheduleCalls)
+    }
+
+    @Test
+    fun rescheduleBookingAllowsLeapDayDraft() = runTest {
+        val repository = FakeBookingRepository(
+            historyResult = BookingHistoryResult.Success(BookingHistory(emptyList())),
+        )
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = repository,
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.rescheduleBooking(
+            BookingRescheduleDraft(
+                reservationId = "reservation-1",
+                dateId = "2028-02-29",
+                time = "11:00",
+                durationMinutes = 45,
+            ),
+        )
+        runCurrent()
+
+        assertIs<BookingRescheduleUiState.Success>(viewModel.rescheduleState.value)
+        assertEquals(1, repository.rescheduleCalls)
+        assertEquals("2028-02-29T11:00:00.000Z", repository.lastRescheduleRequest?.slotStartIso)
+        assertEquals("2028-02-29T11:45:00.000Z", repository.lastRescheduleRequest?.slotEndIso)
+    }
+
+    @Test
     fun loadBusinessInfoMapsBackendAddressAndSkipsCachedReload() = runTest {
         val businessRepository = FakeBusinessInfoRepository(
             BusinessInfoResult.Success(

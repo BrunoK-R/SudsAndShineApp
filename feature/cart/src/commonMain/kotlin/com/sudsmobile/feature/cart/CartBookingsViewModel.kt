@@ -798,10 +798,23 @@ private fun isValidDateId(dateId: String): Boolean {
     val year = dateId.substring(0, 4).toIntOrNull() ?: return false
     val month = dateId.substring(5, 7).toIntOrNull() ?: return false
     val day = dateId.substring(8, 10).toIntOrNull() ?: return false
-    return year > 0 && month in 1..12 && day in 1..31
+    return year > 0 && month in 1..12 && day in 1..daysInMonth(year, month)
 }
 
 private fun Int.twoDigits(): String = toString().padStart(length = 2, padChar = '0')
+
+private fun daysInMonth(year: Int, month: Int): Int {
+    return when (month) {
+        1, 3, 5, 7, 8, 10, 12 -> 31
+        4, 6, 9, 11 -> 30
+        2 -> if (isLeapYear(year)) 29 else 28
+        else -> 0
+    }
+}
+
+private fun isLeapYear(year: Int): Boolean {
+    return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+}
 
 private fun AuthError.toCartBookingsState(): CartBookingsUiState.Error {
     return CartBookingsUiState.Error(message = message, retryable = isRetryableSessionError())
