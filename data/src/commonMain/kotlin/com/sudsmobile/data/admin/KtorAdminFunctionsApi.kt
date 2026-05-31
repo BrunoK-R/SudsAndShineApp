@@ -391,6 +391,33 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun sendNotificationTestToSelf(
+        request: AdminNotificationTestRequest,
+        idToken: String,
+    ): AdminNotificationTestResult {
+        return try {
+            val response = httpClient.post(config.sendAdminNotificationTestUrl) {
+                callableHeaders(idToken)
+                setBody(CallableNotificationTestRequest(NotificationTestPayload.from(request)))
+            }
+            val body = response.body<CallableNotificationTestResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminNotificationTestResult.Failure(error.toAdminError())
+                body.result != null -> AdminNotificationTestResult.Success(body.result.toAdminNotificationTestReceipt())
+                else -> AdminNotificationTestResult.Failure(
+                    AdminError.Backend("A resposta do teste de notificação veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminNotificationTestResult.Failure(
+                AdminError.Unavailable("Não foi possível enviar o teste de notificação. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
         idToken: String,
@@ -601,6 +628,11 @@ private data class CallableNotificationSettingsUpdateRequest(
 )
 
 @Serializable
+private data class CallableNotificationTestRequest(
+    val data: NotificationTestPayload,
+)
+
+@Serializable
 private data class CallableCapacityOverrideMutationRequest(
     val data: CapacityOverridePayload,
 )
@@ -755,6 +787,17 @@ private data class NotificationTemplatePayload(
         title = title.trim(),
         body = body.trim(),
     )
+}
+
+@Serializable
+private data class NotificationTestPayload(
+    val templateKey: String,
+) {
+    companion object {
+        fun from(request: AdminNotificationTestRequest): NotificationTestPayload = NotificationTestPayload(
+            templateKey = request.templateKey,
+        )
+    }
 }
 
 @Serializable
@@ -956,6 +999,12 @@ private data class CallableLoyaltySettingsResponse(
 @Serializable
 private data class CallableNotificationSettingsResponse(
     val result: NotificationSettingsResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableNotificationTestResponse(
+    val result: NotificationTestResultPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -1278,6 +1327,23 @@ private data class NotificationSettingsResultPayload(
         quietHoursStart = quietHoursStart.trim().ifBlank { "22:00" },
         quietHoursEnd = quietHoursEnd.trim().ifBlank { "08:00" },
         templates = templates.map { it.toAdminNotificationTemplate() },
+    )
+}
+
+@Serializable
+private data class NotificationTestResultPayload(
+    val notificationId: String = "",
+    val templateKey: String = "",
+    val deliveryState: String = "",
+    val recipientUid: String = "",
+    val message: String = "",
+) {
+    fun toAdminNotificationTestReceipt(): AdminNotificationTestReceipt = AdminNotificationTestReceipt(
+        notificationId = notificationId.trim(),
+        templateKey = templateKey.trim(),
+        deliveryState = deliveryState.trim(),
+        recipientUid = recipientUid.trim(),
+        message = message.trim(),
     )
 }
 

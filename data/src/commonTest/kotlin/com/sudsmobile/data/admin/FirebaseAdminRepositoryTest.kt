@@ -475,6 +475,41 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun sendNotificationTestNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.sendNotificationTestToSelf(
+            AdminNotificationTestRequest(templateKey = " booking_request "),
+        )
+
+        val success = assertIs<AdminNotificationTestResult.Success>(result)
+        assertEquals("test-notification-1", success.receipt.notificationId)
+        assertEquals("id-token-1", api.notificationTestIdTokens.single())
+        assertEquals("booking_request", api.notificationTestRequests.single().templateKey)
+    }
+
+    @Test
+    fun sendNotificationTestReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.sendNotificationTestToSelf(
+            AdminNotificationTestRequest(templateKey = "../booking_request"),
+        )
+
+        val failure = assertIs<AdminNotificationTestResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.notificationTestRequests.size)
+    }
+
+    @Test
     fun upsertCapacityOverrideNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -556,6 +591,8 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val updateLoyaltySettingsIdTokens = mutableListOf<String>()
     val updateNotificationSettingsRequests = mutableListOf<AdminNotificationSettingsUpdateRequest>()
     val updateNotificationSettingsIdTokens = mutableListOf<String>()
+    val notificationTestRequests = mutableListOf<AdminNotificationTestRequest>()
+    val notificationTestIdTokens = mutableListOf<String>()
     val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
     val upsertCapacityOverrideIdTokens = mutableListOf<String>()
     val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
@@ -694,6 +731,23 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
                 quietHoursStart = request.quietHoursStart,
                 quietHoursEnd = request.quietHoursEnd,
                 templates = request.templates,
+            ),
+        )
+    }
+
+    override suspend fun sendNotificationTestToSelf(
+        request: AdminNotificationTestRequest,
+        idToken: String,
+    ): AdminNotificationTestResult {
+        notificationTestRequests += request
+        notificationTestIdTokens += idToken
+        return AdminNotificationTestResult.Success(
+            AdminNotificationTestReceipt(
+                notificationId = "test-notification-1",
+                templateKey = request.templateKey,
+                deliveryState = "queued",
+                recipientUid = "admin-1",
+                message = "queued",
             ),
         )
     }

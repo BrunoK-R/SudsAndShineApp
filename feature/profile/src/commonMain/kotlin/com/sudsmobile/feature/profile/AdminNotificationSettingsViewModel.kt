@@ -6,6 +6,8 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminNotificationSettingsConfig
 import com.sudsmobile.data.admin.AdminNotificationSettingsResult
 import com.sudsmobile.data.admin.AdminNotificationSettingsUpdateRequest
+import com.sudsmobile.data.admin.AdminNotificationTestRequest
+import com.sudsmobile.data.admin.AdminNotificationTestResult
 import com.sudsmobile.data.admin.AdminNotificationTemplateConfig
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.auth.AuthError
@@ -52,6 +54,13 @@ internal sealed interface AdminNotificationSettingsSaveState {
     data class Error(val message: String, val retryable: Boolean) : AdminNotificationSettingsSaveState
 }
 
+internal sealed interface AdminNotificationTestState {
+    data object Idle : AdminNotificationTestState
+    data class Sending(val templateKey: String) : AdminNotificationTestState
+    data class Success(val templateLabel: String, val message: String) : AdminNotificationTestState
+    data class Error(val templateLabel: String, val message: String, val retryable: Boolean) : AdminNotificationTestState
+}
+
 internal class AdminNotificationSettingsViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -63,9 +72,12 @@ internal class AdminNotificationSettingsViewModel(
         AdminNotificationSettingsSaveState.Idle,
     )
     val saveState: StateFlow<AdminNotificationSettingsSaveState> = _saveState.asStateFlow()
+    private val _testState = MutableStateFlow<AdminNotificationTestState>(AdminNotificationTestState.Idle)
+    val testState: StateFlow<AdminNotificationTestState> = _testState.asStateFlow()
     private var loadedUid: String? = null
     private var loadingUid: String? = null
     private var loadSequence: Long = 0
+    private var testSequence: Long = 0
 
     fun refreshForSession(force: Boolean = false) {
         val session = when (val currentSessionState = sessionState.value) {
@@ -147,6 +159,7 @@ internal class AdminNotificationSettingsViewModel(
         if (_uiState.value is AdminNotificationSettingsUiState.Loaded) {
             _uiState.value = AdminNotificationSettingsUiState.Loaded(form)
             _saveState.value = AdminNotificationSettingsSaveState.Idle
+            clearFinishedTestState()
         }
     }
 
@@ -215,14 +228,87 @@ internal class AdminNotificationSettingsViewModel(
         }
     }
 
+    fun sendTest(templateKey: String) {
+        if (_testState.value is AdminNotificationTestState.Sending) return
+        val loaded = _uiState.value as? AdminNotificationSettingsUiState.Loaded ?: return
+        val template = loaded.form.templates.firstOrNull { it.key == templateKey.trim() } ?: return
+        if (!template.enabled) {
+            _testState.value = AdminNotificationTestState.Error(
+                templateLabel = template.label,
+                message = "Ative este modelo antes de enviar um teste.",
+                retryable = false,
+            )
+            return
+        }
+        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+        if (requestedUid == null) {
+            clearLoadedConfig()
+            _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
+            return
+        }
+
+        val requestSequence = ++testSequence
+        viewModelScope.launch {
+            _testState.value = AdminNotificationTestState.Sending(template.key)
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid != requestedUid) {
+                clearLoadedConfig()
+                _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
+                _testState.value = AdminNotificationTestState.Idle
+                return@launch
+            }
+
+            val result = adminRepository.sendNotificationTestToSelf(AdminNotificationTestRequest(template.key))
+            if (requestSequence != testSequence) return@launch
+
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                clearLoadedConfig()
+                _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
+                _testState.value = AdminNotificationTestState.Idle
+                return@launch
+            }
+
+            when (result) {
+                is AdminNotificationTestResult.Success -> {
+                    _testState.value = AdminNotificationTestState.Success(
+                        templateLabel = template.label,
+                        message = "Teste de notificação em fila para o seu dispositivo.",
+                    )
+                }
+                is AdminNotificationTestResult.Failure -> {
+                    _testState.value = result.error.toAdminNotificationTestState(template.label)
+                    if (result.error is AdminError.Permission) {
+                        _uiState.value = AdminNotificationSettingsUiState.NotAdmin
+                    } else if (result.error is AdminError.Unauthenticated) {
+                        clearLoadedConfig()
+                        _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
+                    }
+                }
+            }
+        }
+    }
+
     fun clearSaveState() {
         _saveState.value = AdminNotificationSettingsSaveState.Idle
+    }
+
+    fun clearTestState() {
+        testSequence += 1
+        _testState.value = AdminNotificationTestState.Idle
     }
 
     private fun clearLoadedConfig() {
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+        clearTestState()
+    }
+
+    private fun clearFinishedTestState() {
+        if (_testState.value !is AdminNotificationTestState.Sending) {
+            clearTestState()
+        }
     }
 }
 
@@ -326,6 +412,18 @@ private fun AdminError.toAdminNotificationSettingsSaveState(): AdminNotification
         message = message,
         retryable = this is AdminError.Unavailable || this is AdminError.Backend,
     )
+}
+
+private fun AdminError.toAdminNotificationTestState(templateLabel: String): AdminNotificationTestState.Error {
+    return when (this) {
+        is AdminError.Validation,
+        is AdminError.Permission,
+        is AdminError.Unauthenticated,
+        is AdminError.NotFound,
+        is AdminError.Conflict -> AdminNotificationTestState.Error(templateLabel, message, retryable = false)
+        is AdminError.Unavailable,
+        is AdminError.Backend -> AdminNotificationTestState.Error(templateLabel, message, retryable = true)
+    }
 }
 
 private fun AuthError.toAdminNotificationSettingsState(): AdminNotificationSettingsUiState.Error {

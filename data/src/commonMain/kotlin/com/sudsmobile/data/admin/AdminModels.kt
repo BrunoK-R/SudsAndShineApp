@@ -213,6 +213,18 @@ data class AdminNotificationSettingsUpdateRequest(
     val templates: List<AdminNotificationTemplateConfig>,
 )
 
+data class AdminNotificationTestRequest(
+    val templateKey: String,
+)
+
+data class AdminNotificationTestReceipt(
+    val notificationId: String,
+    val templateKey: String,
+    val deliveryState: String,
+    val recipientUid: String,
+    val message: String,
+)
+
 data class AdminCapacityOverrideItem(
     val date: String,
     val maxBookingsPerSlot: Int,
@@ -304,6 +316,11 @@ sealed interface AdminNotificationSettingsResult {
     data class Failure(val error: AdminError) : AdminNotificationSettingsResult
 }
 
+sealed interface AdminNotificationTestResult {
+    data class Success(val receipt: AdminNotificationTestReceipt) : AdminNotificationTestResult
+    data class Failure(val error: AdminError) : AdminNotificationTestResult
+}
+
 sealed interface AdminCapacityOverrideMutationResult {
     data class Success(val receipt: AdminCapacityOverrideMutationReceipt) : AdminCapacityOverrideMutationResult
     data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
@@ -352,6 +369,11 @@ interface AdminRepository {
         request: AdminNotificationSettingsUpdateRequest,
     ): AdminNotificationSettingsResult =
         AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
+
+    suspend fun sendNotificationTestToSelf(
+        request: AdminNotificationTestRequest,
+    ): AdminNotificationTestResult =
+        AdminNotificationTestResult.Failure(AdminError.Backend("Notification test send is not implemented."))
 
     suspend fun updateAvailabilityConfiguration(
         request: AdminAvailabilityUpdateRequest,

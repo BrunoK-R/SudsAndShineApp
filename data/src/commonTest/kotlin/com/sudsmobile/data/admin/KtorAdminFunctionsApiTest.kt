@@ -500,6 +500,42 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun postsNotificationTestSendWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "notificationId": "test-notification-1",
+                    "templateKey": "booking_request",
+                    "deliveryState": "queued",
+                    "recipientUid": "admin-1",
+                    "message": "queued"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.sendNotificationTestToSelf(
+            AdminNotificationTestRequest(templateKey = "booking_request"),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminNotificationTestResult.Success>(result)
+        assertEquals("/test-project/europe-west1/sendAdminNotificationTest", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("test-notification-1", success.receipt.notificationId)
+        assertEquals("queued", success.receipt.deliveryState)
+    }
+
+    @Test
     fun postsAvailabilityUpdateWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

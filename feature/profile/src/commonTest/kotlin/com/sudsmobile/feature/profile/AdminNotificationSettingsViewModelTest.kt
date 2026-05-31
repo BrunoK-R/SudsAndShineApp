@@ -15,6 +15,9 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminNotificationSettingsConfig
 import com.sudsmobile.data.admin.AdminNotificationSettingsResult
 import com.sudsmobile.data.admin.AdminNotificationSettingsUpdateRequest
+import com.sudsmobile.data.admin.AdminNotificationTestReceipt
+import com.sudsmobile.data.admin.AdminNotificationTestRequest
+import com.sudsmobile.data.admin.AdminNotificationTestResult
 import com.sudsmobile.data.admin.AdminNotificationTemplateConfig
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.admin.AdminRole
@@ -179,17 +182,78 @@ class AdminNotificationSettingsViewModelTest {
         assertEquals(0, repository.updateRequests.size)
         assertIs<AdminNotificationSettingsUiState.Unauthenticated>(viewModel.uiState.value)
     }
+
+    @Test
+    fun sendTestSubmitsSelectedTemplate() = runTest {
+        val repository = FakeNotificationSettingsAdminRepository()
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = FakeNotificationSettingsAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.sendTest("booking_request")
+        runCurrent()
+
+        val success = assertIs<AdminNotificationTestState.Success>(viewModel.testState.value)
+        assertEquals("Pedido recebido", success.templateLabel)
+        assertEquals("booking_request", repository.testRequests.single().templateKey)
+    }
+
+    @Test
+    fun sendTestMapsPermissionFailureToNotAdmin() = runTest {
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = FakeNotificationSettingsAuthRepository(authenticated = true),
+            adminRepository = FakeNotificationSettingsAdminRepository(
+                testResult = AdminNotificationTestResult.Failure(AdminError.Permission("denied")),
+            ),
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.sendTest("booking_request")
+        runCurrent()
+
+        assertIs<AdminNotificationSettingsUiState.NotAdmin>(viewModel.uiState.value)
+        assertIs<AdminNotificationTestState.Error>(viewModel.testState.value)
+    }
+
+    @Test
+    fun sendTestIgnoresStaleResponseAfterSignOut() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationTestResult>()
+        val authRepository = FakeNotificationSettingsAuthRepository(authenticated = true)
+        val repository = FakeNotificationSettingsAdminRepository(testResultDeferred = deferred)
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.sendTest("booking_request")
+        runCurrent()
+        authRepository.signOut()
+        deferred.complete(notificationTestSuccess("booking_request"))
+        runCurrent()
+
+        assertIs<AdminNotificationSettingsUiState.Unauthenticated>(viewModel.uiState.value)
+        assertIs<AdminNotificationTestState.Idle>(viewModel.testState.value)
+    }
 }
 
 private class FakeNotificationSettingsAdminRepository(
     var loadResult: AdminNotificationSettingsResult =
         AdminNotificationSettingsResult.Success(adminNotificationSettingsConfig()),
     var updateResult: AdminNotificationSettingsResult? = null,
+    var testResult: AdminNotificationTestResult? = null,
     private val loadResultDeferred: CompletableDeferred<AdminNotificationSettingsResult>? = null,
+    private val testResultDeferred: CompletableDeferred<AdminNotificationTestResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
     val updateRequests = mutableListOf<AdminNotificationSettingsUpdateRequest>()
+    val testRequests = mutableListOf<AdminNotificationTestRequest>()
 
     override suspend fun syncMyRole(): AdminRoleResult {
         return AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin"))
@@ -232,6 +296,13 @@ private class FakeNotificationSettingsAdminRepository(
                 templates = request.templates,
             ),
         )
+    }
+
+    override suspend fun sendNotificationTestToSelf(
+        request: AdminNotificationTestRequest,
+    ): AdminNotificationTestResult {
+        testRequests += request
+        return testResultDeferred?.await() ?: testResult ?: notificationTestSuccess(request.templateKey)
     }
 
     override suspend fun updateBusinessInfoConfiguration(
@@ -328,6 +399,17 @@ private fun adminNotificationSettingsConfig(): AdminNotificationSettingsConfig =
     quietHoursEnd = "08:00",
     templates = adminNotificationTemplates(),
 )
+
+private fun notificationTestSuccess(templateKey: String): AdminNotificationTestResult.Success =
+    AdminNotificationTestResult.Success(
+        AdminNotificationTestReceipt(
+            notificationId = "test-notification-1",
+            templateKey = templateKey,
+            deliveryState = "queued",
+            recipientUid = "admin-1",
+            message = "queued",
+        ),
+    )
 
 private fun AdminNotificationSettingsConfig.toTestForm(
     bookingStatusEnabled: Boolean = this.bookingStatusEnabled,

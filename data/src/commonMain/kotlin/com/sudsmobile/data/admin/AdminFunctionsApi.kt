@@ -58,6 +58,12 @@ interface AdminFunctionsApi {
     ): AdminNotificationSettingsResult =
         AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
 
+    suspend fun sendNotificationTestToSelf(
+        request: AdminNotificationTestRequest,
+        idToken: String,
+    ): AdminNotificationTestResult =
+        AdminNotificationTestResult.Failure(AdminError.Backend("Notification test send is not implemented."))
+
     suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
         idToken: String,

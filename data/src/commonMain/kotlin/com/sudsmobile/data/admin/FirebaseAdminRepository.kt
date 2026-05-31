@@ -136,6 +136,19 @@ class FirebaseAdminRepository(
         return api.updateNotificationSettingsConfiguration(normalizedRequest, idToken)
     }
 
+    override suspend fun sendNotificationTestToSelf(
+        request: AdminNotificationTestRequest,
+    ): AdminNotificationTestResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminNotificationTestResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminNotificationTestResult.Failure(unauthenticatedError())
+
+        return api.sendNotificationTestToSelf(normalizedRequest, idToken)
+    }
+
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
     ): AdminCapacityOverrideMutationResult {
@@ -453,6 +466,14 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminNotificationTestRequest): AdminError.Validation? {
+        return when {
+            request.templateKey !in NotificationTemplateKeys ->
+                AdminError.Validation("Escolha um modelo de notificação válido.")
+            else -> null
+        }
+    }
+
     private fun AdminBookingDecisionRequest.normalized(): AdminBookingDecisionRequest = copy(
         reservationId = reservationId.trim(),
         rejectionReason = rejectionReason.trim().replace(Regex("\\s+"), " "),
@@ -548,6 +569,10 @@ class FirebaseAdminRepository(
                 )
             }
             .distinctBy { it.key },
+    )
+
+    private fun AdminNotificationTestRequest.normalized(): AdminNotificationTestRequest = copy(
+        templateKey = templateKey.trim(),
     )
 }
 

@@ -100,6 +100,9 @@ data class FirebaseFunctionsConfig(
     val updateNotificationSettingsUrl: String
         get() = functionUrl("updateNotificationSettings")
 
+    val sendAdminNotificationTestUrl: String
+        get() = functionUrl("sendAdminNotificationTest")
+
     val upsertCapacityOverrideUrl: String
         get() = functionUrl("upsertCapacityOverride")
 

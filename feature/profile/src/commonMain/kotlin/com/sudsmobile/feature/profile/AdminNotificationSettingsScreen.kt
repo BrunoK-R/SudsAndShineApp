@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
@@ -62,6 +63,7 @@ fun AdminNotificationSettingsScreen(
     val viewModel: AdminNotificationSettingsViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
+    val testState by viewModel.testState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
 
     LaunchedEffect(sessionState) {
@@ -72,13 +74,16 @@ fun AdminNotificationSettingsScreen(
         contentPadding = contentPadding,
         uiState = uiState,
         saveState = saveState,
+        testState = testState,
         onBack = onBack,
         onRequestSignIn = onRequestSignIn,
         onRetry = { viewModel.loadConfiguration() },
         onFormChange = viewModel::updateForm,
         onTemplateChange = viewModel::updateTemplate,
         onSave = viewModel::save,
+        onSendTest = viewModel::sendTest,
         onDismissSaveState = viewModel::clearSaveState,
+        onDismissTestState = viewModel::clearTestState,
     )
 }
 
@@ -87,13 +92,16 @@ private fun AdminNotificationSettingsScreenContent(
     contentPadding: PaddingValues,
     uiState: AdminNotificationSettingsUiState,
     saveState: AdminNotificationSettingsSaveState,
+    testState: AdminNotificationTestState,
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
     onFormChange: (AdminNotificationSettingsForm) -> Unit,
     onTemplateChange: (AdminNotificationTemplateForm) -> Unit,
     onSave: () -> Unit,
+    onSendTest: (String) -> Unit,
     onDismissSaveState: () -> Unit,
+    onDismissTestState: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -114,6 +122,10 @@ private fun AdminNotificationSettingsScreenContent(
             AdminNotificationSettingsSaveBanner(
                 saveState = saveState,
                 onDismiss = onDismissSaveState,
+            )
+            AdminNotificationSettingsTestBanner(
+                testState = testState,
+                onDismiss = onDismissTestState,
             )
 
             when (uiState) {
@@ -150,9 +162,11 @@ private fun AdminNotificationSettingsScreenContent(
                 is AdminNotificationSettingsUiState.Loaded -> AdminNotificationSettingsFormCard(
                     form = uiState.form,
                     saving = saveState == AdminNotificationSettingsSaveState.Saving,
+                    sendingTemplateKey = (testState as? AdminNotificationTestState.Sending)?.templateKey,
                     onFormChange = onFormChange,
                     onTemplateChange = onTemplateChange,
                     onSave = onSave,
+                    onSendTest = onSendTest,
                 )
             }
         }
@@ -242,6 +256,31 @@ private fun AdminNotificationSettingsSaveBanner(
 }
 
 @Composable
+private fun AdminNotificationSettingsTestBanner(
+    testState: AdminNotificationTestState,
+    onDismiss: () -> Unit,
+) {
+    when (testState) {
+        AdminNotificationTestState.Idle,
+        is AdminNotificationTestState.Sending -> Unit
+        is AdminNotificationTestState.Success -> AdminNotificationSettingsStatusCard(
+            title = "Teste em fila",
+            body = "${testState.templateLabel}: ${testState.message}",
+            icon = Icons.Filled.CheckCircle,
+            actionLabel = "Fechar",
+            onAction = onDismiss,
+        )
+        is AdminNotificationTestState.Error -> AdminNotificationSettingsStatusCard(
+            title = "Teste não enviado",
+            body = "${testState.templateLabel}: ${testState.message}",
+            icon = Icons.Filled.ErrorOutline,
+            actionLabel = "Fechar",
+            onAction = onDismiss,
+        )
+    }
+}
+
+@Composable
 private fun AdminNotificationSettingsStatusCard(
     title: String,
     body: String,
@@ -305,9 +344,11 @@ private fun AdminNotificationSettingsStatusCard(
 private fun AdminNotificationSettingsFormCard(
     form: AdminNotificationSettingsForm,
     saving: Boolean,
+    sendingTemplateKey: String?,
     onFormChange: (AdminNotificationSettingsForm) -> Unit,
     onTemplateChange: (AdminNotificationTemplateForm) -> Unit,
     onSave: () -> Unit,
+    onSendTest: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(
@@ -403,8 +444,10 @@ private fun AdminNotificationSettingsFormCard(
         form.templates.forEach { template ->
             AdminNotificationTemplateCard(
                 template = template,
-                enabled = !saving,
+                enabled = !saving && sendingTemplateKey == null,
+                sending = sendingTemplateKey == template.key,
                 onTemplateChange = onTemplateChange,
+                onSendTest = onSendTest,
             )
         }
 
@@ -447,7 +490,9 @@ private fun AdminNotificationSettingsFormCard(
 private fun AdminNotificationTemplateCard(
     template: AdminNotificationTemplateForm,
     enabled: Boolean,
+    sending: Boolean,
     onTemplateChange: (AdminNotificationTemplateForm) -> Unit,
+    onSendTest: (String) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -479,6 +524,36 @@ private fun AdminNotificationTemplateCard(
                 enabled = enabled,
                 minLines = 2,
             )
+            OutlinedButton(
+                onClick = { onSendTest(template.key) },
+                enabled = enabled && !sending,
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.tertiary,
+                ),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                if (sending) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (sending) "A enviar teste" else "Enviar teste",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
