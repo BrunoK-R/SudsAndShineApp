@@ -224,7 +224,11 @@ internal class NotificationPreferencesViewModel(
     }
 
     fun registerCurrentDevice() {
-        if (_deviceState.value == NotificationDeviceUiState.Registering) return
+        when (_deviceState.value) {
+            NotificationDeviceUiState.Registering,
+            is NotificationDeviceUiState.Removing -> return
+            else -> Unit
+        }
         val requestedUid = authenticatedUidOrNull()
         if (requestedUid == null) {
             clearDeviceState(NotificationDeviceUiState.Unauthenticated)
@@ -254,17 +258,17 @@ internal class NotificationPreferencesViewModel(
                     }
                 }
                 is NotificationDeviceRegistrationRequestResult.PermissionRequired -> {
-                    if (requestSequence == deviceSequence) {
+                    if (isSameAuthenticatedUser(requestedUid, requestSequence)) {
                         _deviceState.value = NotificationDeviceUiState.PermissionRequired(requestResult.message)
                     }
                 }
                 is NotificationDeviceRegistrationRequestResult.Unsupported -> {
-                    if (requestSequence == deviceSequence) {
+                    if (isSameAuthenticatedUser(requestedUid, requestSequence)) {
                         _deviceState.value = NotificationDeviceUiState.Unsupported(requestResult.message)
                     }
                 }
                 is NotificationDeviceRegistrationRequestResult.Failure -> {
-                    if (requestSequence == deviceSequence) {
+                    if (isSameAuthenticatedUser(requestedUid, requestSequence)) {
                         _deviceState.value = NotificationDeviceUiState.Error(requestResult.message, retryable = true)
                     }
                 }
@@ -273,7 +277,11 @@ internal class NotificationPreferencesViewModel(
     }
 
     fun removeCurrentDevice() {
-        if (_deviceState.value == NotificationDeviceUiState.Registering) return
+        when (_deviceState.value) {
+            NotificationDeviceUiState.Registering,
+            is NotificationDeviceUiState.Removing -> return
+            else -> Unit
+        }
         val requestedUid = authenticatedUidOrNull()
         if (requestedUid == null) {
             clearDeviceState(NotificationDeviceUiState.Unauthenticated)
@@ -325,6 +333,10 @@ internal class NotificationPreferencesViewModel(
         if (granted) {
             registerCurrentDevice()
         } else {
+            if (authenticatedUidOrNull() == null) {
+                clearDeviceState(NotificationDeviceUiState.Unauthenticated)
+                return
+            }
             _deviceState.value = NotificationDeviceUiState.PermissionRequired(
                 "As notificações estão desativadas para este dispositivo.",
             )

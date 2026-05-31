@@ -218,6 +218,44 @@ class NotificationPreferencesViewModelTest {
     }
 
     @Test
+    fun registerCurrentDeviceIgnoresPermissionResultAfterSignOut() = runTest {
+        val requestDeferred = CompletableDeferred<NotificationDeviceRegistrationRequestResult>()
+        val authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true)
+        val repository = FakeNotificationPreferencesRepository()
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = authRepository,
+            notificationRepository = repository,
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(requestDeferred = requestDeferred),
+        )
+
+        viewModel.registerCurrentDevice()
+        runCurrent()
+        authRepository.signOut()
+        requestDeferred.complete(
+            NotificationDeviceRegistrationRequestResult.PermissionRequired("permission needed"),
+        )
+        runCurrent()
+
+        assertIs<NotificationDeviceUiState.Unauthenticated>(viewModel.deviceState.value)
+        assertEquals(0, repository.registerRequests.size)
+    }
+
+    @Test
+    fun permissionDenialAfterSignOutShowsUnauthenticatedDeviceState() = runTest {
+        val authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true)
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = authRepository,
+            notificationRepository = FakeNotificationPreferencesRepository(),
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(),
+        )
+
+        authRepository.signOut()
+        viewModel.handlePermissionResult(granted = false)
+
+        assertIs<NotificationDeviceUiState.Unauthenticated>(viewModel.deviceState.value)
+    }
+
+    @Test
     fun removeCurrentDeviceDeletesRegisteredToken() = runTest {
         val repository = FakeNotificationPreferencesRepository()
         val registrar = FakeNotificationDeviceRegistrar(
@@ -243,12 +281,43 @@ class NotificationPreferencesViewModelTest {
         assertEquals(NotificationTokenDeleteRequest("token-id-1"), repository.deleteRequests.single())
         assertEquals(listOf("token-id-1"), registrar.markedDeletedTokenIds)
     }
+
+    @Test
+    fun removeCurrentDeviceIgnoresDuplicateTapWhileRemoving() = runTest {
+        val deleteDeferred = CompletableDeferred<NotificationTokenDeleteResult>()
+        val repository = FakeNotificationPreferencesRepository(deleteDeferred = deleteDeferred)
+        val registrar = FakeNotificationDeviceRegistrar(
+            currentState = NotificationDeviceRegistrationState(
+                permissionStatus = NotificationDevicePermissionStatus.Granted,
+                registeredTokenId = "token-id-1",
+                platform = NotificationTokenPlatform.Android,
+            ),
+        )
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true),
+            notificationRepository = repository,
+            notificationDeviceRegistrar = registrar,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+        viewModel.removeCurrentDevice()
+        runCurrent()
+        viewModel.removeCurrentDevice()
+        runCurrent()
+        deleteDeferred.complete(NotificationTokenDeleteResult.Success("token-id-1", "revoked"))
+        runCurrent()
+
+        assertEquals(listOf(NotificationTokenDeleteRequest("token-id-1")), repository.deleteRequests)
+        assertEquals(listOf("token-id-1"), registrar.markedDeletedTokenIds)
+    }
 }
 
 private class FakeNotificationPreferencesRepository(
     private val loadResult: NotificationPreferencesResult =
         NotificationPreferencesResult.Success(notificationPreferences()),
     private val loadDeferred: CompletableDeferred<NotificationPreferencesResult>? = null,
+    private val deleteDeferred: CompletableDeferred<NotificationTokenDeleteResult>? = null,
 ) : NotificationRepository {
     var loadCalls = 0
         private set
@@ -286,7 +355,7 @@ private class FakeNotificationPreferencesRepository(
         request: NotificationTokenDeleteRequest,
     ): NotificationTokenDeleteResult {
         deleteRequests += request
-        return NotificationTokenDeleteResult.Success(request.tokenId, "revoked")
+        return deleteDeferred?.await() ?: NotificationTokenDeleteResult.Success(request.tokenId, "revoked")
     }
 }
 
