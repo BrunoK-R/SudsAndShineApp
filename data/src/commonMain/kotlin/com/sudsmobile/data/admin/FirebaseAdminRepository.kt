@@ -589,6 +589,7 @@ private val NotificationTemplateKeys = setOf(
     "booking_rescheduled",
     "booking_reminder",
     "review_prompt",
+    "admin_pending_booking",
 )
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")

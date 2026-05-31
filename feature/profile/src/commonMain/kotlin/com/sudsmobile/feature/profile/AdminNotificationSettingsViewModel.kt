@@ -402,6 +402,13 @@ private fun defaultNotificationTemplates(): List<AdminNotificationTemplateConfig
             title = "Como correu a lavagem?",
             body = "Avalie o serviço para nos ajudar a melhorar.",
         ),
+        AdminNotificationTemplateConfig(
+            key = "admin_pending_booking",
+            label = "Alerta admin de pedido",
+            enabled = true,
+            title = "Novo pedido de marcação",
+            body = "{{customerName}} pediu {{serviceName}} para {{slotStart}}.",
+        ),
     )
 }
 
@@ -414,4 +421,5 @@ private val NotificationTemplateKeys = setOf(
     "booking_rescheduled",
     "booking_reminder",
     "review_prompt",
+    "admin_pending_booking",
 )

@@ -977,4 +977,11 @@ private fun adminNotificationTemplates(): List<AdminNotificationTemplateConfig> 
         title = "Avalie a lavagem",
         body = "Diga-nos como correu o serviço.",
     ),
+    AdminNotificationTemplateConfig(
+        key = "admin_pending_booking",
+        label = "Alerta admin de pedido",
+        enabled = true,
+        title = "Novo pedido de marcação",
+        body = "{{customerName}} pediu {{serviceName}} para {{slotStart}}.",
+    ),
 )
