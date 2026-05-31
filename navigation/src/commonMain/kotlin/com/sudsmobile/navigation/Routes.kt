@@ -15,6 +15,7 @@ object Routes {
     const val Profile = "profile"
     const val AdminBookings = "admin_bookings"
     const val AdminBusinessInfo = "admin_business_info"
+    const val AdminServiceCatalog = "admin_service_catalog"
     const val PersonalData = "personal_data"
     const val Vehicles = "vehicles"
     const val History = "history"

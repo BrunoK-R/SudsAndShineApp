@@ -57,6 +57,23 @@ data class AdminServiceCatalogMutationRequest(
     val sortOrder: Int = 999,
 )
 
+data class AdminServiceCatalogItem(
+    val id: String,
+    val name: String,
+    val description: String,
+    val durationMinutes: Int,
+    val passengerPriceCents: Int,
+    val suvPriceCents: Int,
+    val iconKey: String,
+    val popular: Boolean,
+    val active: Boolean,
+    val sortOrder: Int,
+)
+
+data class AdminServiceCatalogConfig(
+    val services: List<AdminServiceCatalogItem>,
+)
+
 data class AdminServiceCatalogArchiveRequest(
     val serviceId: String,
 )
@@ -120,6 +137,11 @@ sealed interface AdminServiceCatalogMutationResult {
     data class Failure(val error: AdminError) : AdminServiceCatalogMutationResult
 }
 
+sealed interface AdminServiceCatalogResult {
+    data class Success(val config: AdminServiceCatalogConfig) : AdminServiceCatalogResult
+    data class Failure(val error: AdminError) : AdminServiceCatalogResult
+}
+
 sealed interface AdminBusinessInfoResult {
     data class Success(val config: AdminBusinessInfoConfig) : AdminBusinessInfoResult
     data class Failure(val error: AdminError) : AdminBusinessInfoResult
@@ -141,6 +163,7 @@ interface AdminRepository {
     suspend fun syncMyRole(): AdminRoleResult
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
     suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
+    suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult
     suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult

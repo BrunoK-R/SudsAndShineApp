@@ -108,6 +108,36 @@ class FirebaseAdminRepositoryTest {
         assertEquals("id-token-1", api.archiveIdTokens.single())
         assertEquals("premium", api.archiveRequests.single().serviceId)
     }
+
+    @Test
+    fun getServiceCatalogConfigurationRequiresAuthenticatedSession() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = false),
+        )
+
+        val result = repository.getServiceCatalogConfiguration()
+
+        val failure = assertIs<AdminServiceCatalogResult.Failure>(result)
+        assertIs<AdminError.Unauthenticated>(failure.error)
+        assertEquals(0, api.catalogIdTokens.size)
+    }
+
+    @Test
+    fun getServiceCatalogConfigurationUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getServiceCatalogConfiguration()
+
+        val success = assertIs<AdminServiceCatalogResult.Success>(result)
+        assertEquals("premium", success.config.services.single().id)
+        assertEquals("id-token-1", api.catalogIdTokens.single())
+    }
 }
 
 private class FakeAdminFunctionsApi : AdminFunctionsApi {
@@ -115,6 +145,7 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val upsertIdTokens = mutableListOf<String>()
     val archiveRequests = mutableListOf<AdminServiceCatalogArchiveRequest>()
     val archiveIdTokens = mutableListOf<String>()
+    val catalogIdTokens = mutableListOf<String>()
 
     override suspend fun syncMyRole(idToken: String): AdminRoleResult {
         return AdminRoleResult.Failure(AdminError.Backend("unused"))
@@ -147,6 +178,28 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         idToken: String,
     ): AdminBusinessInfoResult {
         return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult {
+        catalogIdTokens += idToken
+        return AdminServiceCatalogResult.Success(
+            AdminServiceCatalogConfig(
+                services = listOf(
+                    AdminServiceCatalogItem(
+                        id = "premium",
+                        name = "Lavagem Premium",
+                        description = "Detalhe",
+                        durationMinutes = 45,
+                        passengerPriceCents = 3200,
+                        suvPriceCents = 3400,
+                        iconKey = "sparkles",
+                        popular = true,
+                        active = true,
+                        sortOrder = 20,
+                    ),
+                ),
+            ),
+        )
     }
 
     override suspend fun upsertServiceCatalogItem(

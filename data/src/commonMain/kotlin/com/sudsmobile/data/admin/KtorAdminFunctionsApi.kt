@@ -108,6 +108,30 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult {
+        return try {
+            val response = httpClient.post(config.getAdminServiceCatalogUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableAdminServiceCatalogResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminServiceCatalogResult.Failure(error.toAdminError())
+                body.result != null -> AdminServiceCatalogResult.Success(body.result.toAdminServiceCatalogConfig())
+                else -> AdminServiceCatalogResult.Failure(
+                    AdminError.Backend("A resposta do catálogo veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminServiceCatalogResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar a configuração do catálogo. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
         idToken: String,
@@ -388,6 +412,12 @@ private data class CallableServiceCatalogMutationResponse(
 )
 
 @Serializable
+private data class CallableAdminServiceCatalogResponse(
+    val result: AdminServiceCatalogPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class RolePayload(
     val uid: String,
     val email: String = "",
@@ -486,6 +516,42 @@ private data class ServiceCatalogMutationResultPayload(
         serviceId = serviceId,
         status = status,
         created = created,
+    )
+}
+
+@Serializable
+private data class AdminServiceCatalogPayload(
+    val services: List<AdminServiceCatalogItemPayload> = emptyList(),
+) {
+    fun toAdminServiceCatalogConfig(): AdminServiceCatalogConfig = AdminServiceCatalogConfig(
+        services = services.map { it.toAdminServiceCatalogItem() },
+    )
+}
+
+@Serializable
+private data class AdminServiceCatalogItemPayload(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val durationMinutes: Int = 30,
+    val passengerPriceCents: Int = 0,
+    val suvPriceCents: Int = passengerPriceCents,
+    val iconKey: String = "car",
+    val popular: Boolean = false,
+    val active: Boolean = true,
+    val sortOrder: Int = 999,
+) {
+    fun toAdminServiceCatalogItem(): AdminServiceCatalogItem = AdminServiceCatalogItem(
+        id = id.trim(),
+        name = name.trim(),
+        description = description.trim(),
+        durationMinutes = durationMinutes.coerceIn(5, 480),
+        passengerPriceCents = passengerPriceCents.coerceIn(0, 100000),
+        suvPriceCents = suvPriceCents.coerceIn(0, 100000),
+        iconKey = iconKey.trim().ifBlank { "car" },
+        popular = popular,
+        active = active,
+        sortOrder = sortOrder.coerceIn(0, 9999),
     )
 }
 

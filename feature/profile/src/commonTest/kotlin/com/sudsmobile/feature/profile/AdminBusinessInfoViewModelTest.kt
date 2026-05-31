@@ -15,6 +15,7 @@ import com.sudsmobile.data.admin.AdminRoleResult
 import com.sudsmobile.data.admin.AdminServiceCatalogArchiveRequest
 import com.sudsmobile.data.admin.AdminServiceCatalogMutationRequest
 import com.sudsmobile.data.admin.AdminServiceCatalogMutationResult
+import com.sudsmobile.data.admin.AdminServiceCatalogResult
 import com.sudsmobile.data.auth.AuthActionResult
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
@@ -200,6 +201,10 @@ private class FakeBusinessInfoAdminRepository(
     override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {
         loadCalls += 1
         return loadResultDeferred?.await() ?: loadResult
+    }
+
+    override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
+        return AdminServiceCatalogResult.Failure(AdminError.Backend("unused"))
     }
 
     override suspend fun updateBusinessInfoConfiguration(

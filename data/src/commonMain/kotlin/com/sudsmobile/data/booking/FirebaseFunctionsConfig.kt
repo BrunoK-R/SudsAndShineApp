@@ -67,6 +67,9 @@ data class FirebaseFunctionsConfig(
     val getAdminBusinessInfoUrl: String
         get() = functionUrl("getAdminBusinessInfo")
 
+    val getAdminServiceCatalogUrl: String
+        get() = functionUrl("getAdminServiceCatalog")
+
     val updateBusinessInfoUrl: String
         get() = functionUrl("updateBusinessInfo")
 

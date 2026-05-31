@@ -15,6 +15,8 @@ interface AdminFunctionsApi {
 
     suspend fun getBusinessInfoConfiguration(idToken: String): AdminBusinessInfoResult
 
+    suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult
+
     suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
         idToken: String,

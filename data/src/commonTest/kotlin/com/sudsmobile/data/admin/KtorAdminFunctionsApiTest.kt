@@ -212,6 +212,53 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminServiceCatalogConfiguration() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "services": [
+                      {
+                        "id": "premium",
+                        "name": "Lavagem Premium",
+                        "description": "Detalhe completo",
+                        "durationMinutes": 45,
+                        "passengerPriceCents": 3200,
+                        "suvPriceCents": 3400,
+                        "iconKey": "sparkles",
+                        "popular": true,
+                        "active": false,
+                        "sortOrder": 20
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getServiceCatalogConfiguration("id-token-1")
+
+        val success = assertIs<AdminServiceCatalogResult.Success>(result)
+        val service = success.config.services.single()
+        assertEquals("/test-project/europe-west1/getAdminServiceCatalog", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("premium", service.id)
+        assertEquals("Lavagem Premium", service.name)
+        assertEquals(45, service.durationMinutes)
+        assertEquals(3200, service.passengerPriceCents)
+        assertEquals(false, service.active)
+        assertEquals(20, service.sortOrder)
+    }
+
+    @Test
     fun postsRejectDecisionWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

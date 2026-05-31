@@ -29,6 +29,13 @@ class FirebaseAdminRepository(
         return api.getBusinessInfoConfiguration(idToken)
     }
 
+    override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminServiceCatalogResult.Failure(unauthenticatedError())
+
+        return api.getServiceCatalogConfiguration(idToken)
+    }
+
     override suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult {
