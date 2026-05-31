@@ -37,6 +37,7 @@ import com.sudsmobile.feature.cart.CartScreen
 import com.sudsmobile.feature.cart.RatingScreen
 import com.sudsmobile.feature.home.HomeScreen
 import com.sudsmobile.feature.payment.PaymentScreen
+import com.sudsmobile.feature.profile.AdminBusinessInfoScreen
 import com.sudsmobile.feature.profile.AdminBookingsScreen
 import com.sudsmobile.feature.profile.ContactScreen
 import com.sudsmobile.feature.profile.HistoryScreen
@@ -192,10 +193,18 @@ fun MainNavigation(
                     onOpenContact = { navController.navigate(Routes.Contact) },
                     onOpenRewards = { navController.navigate(Routes.Loyalty) },
                     onOpenAdminBookings = { navController.navigate(Routes.AdminBookings) },
+                    onOpenAdminBusinessInfo = { navController.navigate(Routes.AdminBusinessInfo) },
                 )
             }
             composable(Routes.AdminBookings) {
                 AdminBookingsScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
+                )
+            }
+            composable(Routes.AdminBusinessInfo) {
+                AdminBusinessInfoScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,

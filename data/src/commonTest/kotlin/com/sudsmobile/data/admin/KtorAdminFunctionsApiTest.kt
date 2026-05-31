@@ -110,6 +110,108 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminBusinessInfoConfiguration() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "phone": "913 005 855",
+                    "email": "info@sudsshine.pt",
+                    "addressLine1": "Shopping Norte Sul",
+                    "addressLine2": "Leiria, Portugal",
+                    "mapsUri": "https://maps.example.test",
+                    "whatsappUri": "https://wa.me/351913005855",
+                    "openingHours": [
+                      {
+                        "dayLabel": "Segunda a Sexta",
+                        "hoursLabel": "09:00 - 19:00",
+                        "closed": false
+                      }
+                    ],
+                    "socialLinks": [
+                      {
+                        "label": "Instagram",
+                        "uri": "https://instagram.com/sudsshine"
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getBusinessInfoConfiguration("id-token-1")
+
+        val success = assertIs<AdminBusinessInfoResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getAdminBusinessInfo", requestedPath)
+        assertEquals("913 005 855", success.config.phone)
+        assertEquals("Segunda a Sexta", success.config.openingHours.single().dayLabel)
+        assertEquals("Instagram", success.config.socialLinks.single().label)
+    }
+
+    @Test
+    fun postsBusinessInfoUpdateWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "phone": "913 005 855",
+                    "email": "info@sudsshine.pt",
+                    "addressLine1": "Shopping Norte Sul",
+                    "addressLine2": "Leiria, Portugal",
+                    "mapsUri": "https://maps.example.test",
+                    "whatsappUri": "https://wa.me/351913005855",
+                    "openingHours": [
+                      {
+                        "dayLabel": "Segunda a Sexta",
+                        "hoursLabel": "09:00 - 19:00",
+                        "closed": false
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.updateBusinessInfoConfiguration(
+            AdminBusinessInfoUpdateRequest(
+                phone = "913 005 855",
+                email = "info@sudsshine.pt",
+                addressLine1 = "Shopping Norte Sul",
+                addressLine2 = "Leiria, Portugal",
+                mapsUri = "https://maps.example.test",
+                whatsappUri = "https://wa.me/351913005855",
+                openingHours = listOf(
+                    AdminBusinessOpeningHours(
+                        dayLabel = "Segunda a Sexta",
+                        hoursLabel = "09:00 - 19:00",
+                        closed = false,
+                    ),
+                ),
+                socialLinks = emptyList(),
+            ),
+            idToken = "id-token-1",
+        )
+
+        assertIs<AdminBusinessInfoResult.Success>(result)
+        assertEquals("/test-project/europe-west1/updateBusinessInfo", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+    }
+
+    @Test
     fun postsRejectDecisionWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null
@@ -171,6 +273,82 @@ class KtorAdminFunctionsApiTest {
         val failure = assertIs<AdminBookingDecisionResult.Failure>(result)
         assertIs<AdminError.Conflict>(failure.error)
         assertEquals("Reservation request has expired", failure.error.message)
+    }
+
+    @Test
+    fun postsServiceCatalogUpsertWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "serviceId": "premium",
+                    "status": "active",
+                    "created": false
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.upsertServiceCatalogItem(
+            AdminServiceCatalogMutationRequest(
+                serviceId = "premium",
+                name = "Lavagem Premium",
+                description = "Lavagem detalhada",
+                durationMinutes = 45,
+                passengerPriceCents = 3200,
+                suvPriceCents = 3400,
+                iconKey = "sparkles",
+                popular = true,
+                sortOrder = 20,
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminServiceCatalogMutationResult.Success>(result)
+        assertEquals("/test-project/europe-west1/upsertServiceCatalogItem", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("premium", success.receipt.serviceId)
+        assertEquals("active", success.receipt.status)
+        assertEquals(false, success.receipt.created)
+    }
+
+    @Test
+    fun mapsServiceCatalogArchiveNotFound() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "NOT_FOUND",
+                    "message": "Service catalog item not found"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.archiveServiceCatalogItem(
+            AdminServiceCatalogArchiveRequest(serviceId = "premium"),
+            idToken = "id-token-1",
+        )
+
+        val failure = assertIs<AdminServiceCatalogMutationResult.Failure>(result)
+        assertEquals("/test-project/europe-west1/archiveServiceCatalogItem", requestedPath)
+        assertIs<AdminError.NotFound>(failure.error)
+        assertEquals("O item selecionado já não existe.", failure.error.message)
     }
 }
 

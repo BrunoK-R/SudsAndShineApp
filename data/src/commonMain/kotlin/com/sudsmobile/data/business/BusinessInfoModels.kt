@@ -12,6 +12,7 @@ data class BusinessInfo(
     val openingHours: List<BusinessOpeningHours>,
     val faq: List<BusinessFaq>,
     val stats: List<BusinessStat>,
+    val socialLinks: List<BusinessSocialLink>,
 )
 
 data class BusinessOpeningHours(
@@ -28,6 +29,11 @@ data class BusinessFaq(
 data class BusinessStat(
     val value: String,
     val label: String,
+)
+
+data class BusinessSocialLink(
+    val label: String,
+    val uri: String,
 )
 
 sealed interface BusinessInfoResult {
@@ -93,4 +99,5 @@ val DefaultBusinessInfo = BusinessInfo(
         BusinessStat(value = "4.9", label = "Avaliação Média"),
         BusinessStat(value = "3+", label = "Anos Experiência"),
     ),
+    socialLinks = emptyList(),
 )

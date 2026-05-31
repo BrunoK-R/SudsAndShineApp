@@ -8,6 +8,7 @@ import com.sudsmobile.data.business.BusinessInfoError
 import com.sudsmobile.data.business.BusinessInfoRepository
 import com.sudsmobile.data.business.BusinessInfoResult
 import com.sudsmobile.data.business.BusinessOpeningHours
+import com.sudsmobile.data.business.BusinessSocialLink
 import com.sudsmobile.data.business.BusinessStat
 import com.sudsmobile.data.business.DefaultBusinessInfo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,7 @@ internal data class ContactBusinessInfoUi(
     val openingHours: List<ContactOpeningHoursUi>,
     val faq: List<ContactFaqUi>,
     val stats: List<ContactStatUi>,
+    val socialLinks: List<ContactSocialLinkUi>,
 )
 
 internal data class ContactOpeningHoursUi(
@@ -43,6 +45,11 @@ internal data class ContactFaqUi(
 internal data class ContactStatUi(
     val value: String,
     val label: String,
+)
+
+internal data class ContactSocialLinkUi(
+    val label: String,
+    val uri: String,
 )
 
 internal sealed interface ContactBusinessInfoUiState {
@@ -117,6 +124,7 @@ private fun BusinessInfo.toContactUi(): ContactBusinessInfoUi = ContactBusinessI
     stats = stats.map { it.toContactUi() }.ifEmpty {
         DefaultBusinessInfo.stats.map { it.toContactUi() }
     },
+    socialLinks = socialLinks.mapNotNull { it.toContactUiOrNull() },
 )
 
 private fun BusinessOpeningHours.toContactUi(): ContactOpeningHoursUi = ContactOpeningHoursUi(
@@ -134,3 +142,13 @@ private fun BusinessStat.toContactUi(): ContactStatUi = ContactStatUi(
     value = value.trim(),
     label = label.trim(),
 )
+
+private fun BusinessSocialLink.toContactUiOrNull(): ContactSocialLinkUi? {
+    val cleanLabel = label.trim()
+    val cleanUri = uri.trim()
+    if (cleanLabel.isBlank() || cleanUri.isBlank()) return null
+    return ContactSocialLinkUi(
+        label = cleanLabel,
+        uri = cleanUri,
+    )
+}

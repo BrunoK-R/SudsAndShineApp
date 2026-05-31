@@ -132,6 +132,12 @@ private fun ContactScreenContent(
                 onWhatsApp = { uriHandler.openUri(businessInfo.whatsappUri) },
                 onCall = { uriHandler.openUri(businessInfo.phoneUri) },
             )
+            if (businessInfo.socialLinks.isNotEmpty()) {
+                SocialLinksCard(
+                    links = businessInfo.socialLinks,
+                    onOpenUri = { uriHandler.openUri(it) },
+                )
+            }
             FaqCard(faqItems = businessInfo.faq)
             DirectionsCard(
                 addressLine = businessInfo.addressLine1,
@@ -517,6 +523,57 @@ private fun QuickActionButton(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+@Composable
+private fun SocialLinksCard(
+    links: List<ContactSocialLinkUi>,
+    onOpenUri: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            SectionTitle(
+                icon = Icons.AutoMirrored.Filled.OpenInNew,
+                title = "Redes Sociais",
+            )
+            links.forEachIndexed { index, link ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onOpenUri(link.uri) }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = link.label,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                if (index != links.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
         }
     }
 }

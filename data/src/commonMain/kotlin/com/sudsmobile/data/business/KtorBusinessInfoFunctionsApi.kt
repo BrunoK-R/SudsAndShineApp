@@ -66,6 +66,7 @@ private data class GetBusinessInfoResult(
     val openingHours: List<GetOpeningHours> = emptyList(),
     val faq: List<GetFaq> = emptyList(),
     val stats: List<GetStat> = emptyList(),
+    val socialLinks: List<GetSocialLink> = emptyList(),
 ) {
     fun toBusinessInfo(): BusinessInfo {
         val fallback = DefaultBusinessInfo
@@ -84,6 +85,7 @@ private data class GetBusinessInfoResult(
                 .ifEmpty { fallback.faq },
             stats = stats.mapNotNull { it.toStatOrNull() }
                 .ifEmpty { fallback.stats },
+            socialLinks = socialLinks.mapNotNull { it.toSocialLinkOrNull() },
         )
     }
 }
@@ -128,6 +130,20 @@ private data class GetStat(
         return BusinessStat(
             value = value.trim(),
             label = label.trim(),
+        )
+    }
+}
+
+@Serializable
+internal data class GetSocialLink(
+    val label: String = "",
+    val uri: String = "",
+) {
+    fun toSocialLinkOrNull(): BusinessSocialLink? {
+        if (label.isBlank() || uri.isBlank()) return null
+        return BusinessSocialLink(
+            label = label.trim(),
+            uri = uri.trim(),
         )
     }
 }

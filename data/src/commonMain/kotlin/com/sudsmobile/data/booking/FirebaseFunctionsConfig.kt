@@ -64,6 +64,18 @@ data class FirebaseFunctionsConfig(
     val rejectReservationUrl: String
         get() = functionUrl("rejectReservation")
 
+    val getAdminBusinessInfoUrl: String
+        get() = functionUrl("getAdminBusinessInfo")
+
+    val updateBusinessInfoUrl: String
+        get() = functionUrl("updateBusinessInfo")
+
+    val upsertServiceCatalogItemUrl: String
+        get() = functionUrl("upsertServiceCatalogItem")
+
+    val archiveServiceCatalogItemUrl: String
+        get() = functionUrl("archiveServiceCatalogItem")
+
     val getMyVehiclesUrl: String
         get() = functionUrl("getMyVehicles")
 

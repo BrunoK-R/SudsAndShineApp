@@ -191,4 +191,5 @@ private fun customBusinessInfo(phone: String = "244 000 111"): BusinessInfo = Bu
             label = "Clientes",
         ),
     ),
+    socialLinks = emptyList(),
 )

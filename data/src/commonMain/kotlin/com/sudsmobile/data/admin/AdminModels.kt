@@ -44,6 +44,62 @@ data class AdminBookingDecisionReceipt(
     val status: String,
 )
 
+data class AdminServiceCatalogMutationRequest(
+    val serviceId: String = "",
+    val name: String,
+    val description: String = "",
+    val durationMinutes: Int,
+    val passengerPriceCents: Int,
+    val suvPriceCents: Int,
+    val iconKey: String = "car",
+    val popular: Boolean = false,
+    val active: Boolean = true,
+    val sortOrder: Int = 999,
+)
+
+data class AdminServiceCatalogArchiveRequest(
+    val serviceId: String,
+)
+
+data class AdminServiceCatalogMutationReceipt(
+    val serviceId: String,
+    val status: String,
+    val created: Boolean = false,
+)
+
+data class AdminBusinessInfoConfig(
+    val phone: String,
+    val email: String,
+    val addressLine1: String,
+    val addressLine2: String,
+    val mapsUri: String,
+    val whatsappUri: String,
+    val openingHours: List<AdminBusinessOpeningHours>,
+    val socialLinks: List<AdminBusinessSocialLink>,
+)
+
+data class AdminBusinessOpeningHours(
+    val dayLabel: String,
+    val hoursLabel: String,
+    val closed: Boolean,
+)
+
+data class AdminBusinessSocialLink(
+    val label: String,
+    val uri: String,
+)
+
+data class AdminBusinessInfoUpdateRequest(
+    val phone: String,
+    val email: String,
+    val addressLine1: String,
+    val addressLine2: String,
+    val mapsUri: String,
+    val whatsappUri: String,
+    val openingHours: List<AdminBusinessOpeningHours>,
+    val socialLinks: List<AdminBusinessSocialLink>,
+)
+
 sealed interface AdminRoleResult {
     data class Success(val role: AdminRole) : AdminRoleResult
     data class Failure(val error: AdminError) : AdminRoleResult
@@ -57,6 +113,16 @@ sealed interface AdminBookingRequestsResult {
 sealed interface AdminBookingDecisionResult {
     data class Success(val receipt: AdminBookingDecisionReceipt) : AdminBookingDecisionResult
     data class Failure(val error: AdminError) : AdminBookingDecisionResult
+}
+
+sealed interface AdminServiceCatalogMutationResult {
+    data class Success(val receipt: AdminServiceCatalogMutationReceipt) : AdminServiceCatalogMutationResult
+    data class Failure(val error: AdminError) : AdminServiceCatalogMutationResult
+}
+
+sealed interface AdminBusinessInfoResult {
+    data class Success(val config: AdminBusinessInfoConfig) : AdminBusinessInfoResult
+    data class Failure(val error: AdminError) : AdminBusinessInfoResult
 }
 
 sealed interface AdminError {
@@ -74,6 +140,18 @@ sealed interface AdminError {
 interface AdminRepository {
     suspend fun syncMyRole(): AdminRoleResult
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
+    suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
+    suspend fun updateBusinessInfoConfiguration(
+        request: AdminBusinessInfoUpdateRequest,
+    ): AdminBusinessInfoResult
+
     suspend fun acceptBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult
     suspend fun rejectBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult
+    suspend fun upsertServiceCatalogItem(
+        request: AdminServiceCatalogMutationRequest,
+    ): AdminServiceCatalogMutationResult
+
+    suspend fun archiveServiceCatalogItem(
+        request: AdminServiceCatalogArchiveRequest,
+    ): AdminServiceCatalogMutationResult
 }

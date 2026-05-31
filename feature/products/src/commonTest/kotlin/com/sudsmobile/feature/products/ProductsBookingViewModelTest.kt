@@ -1410,6 +1410,7 @@ private fun businessInfo(
     openingHours = openingHours,
     faq = listOf(BusinessFaq(question = "Pergunta?", answer = "Resposta.")),
     stats = listOf(BusinessStat(value = "500+", label = "Carros")),
+    socialLinks = emptyList(),
 )
 
 private fun bookingLoyalty(

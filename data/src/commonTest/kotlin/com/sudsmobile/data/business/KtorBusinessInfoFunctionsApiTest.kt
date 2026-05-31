@@ -50,6 +50,12 @@ class KtorBusinessInfoFunctionsApiTest {
                         "value": "900+",
                         "label": "Clientes"
                       }
+                    ],
+                    "socialLinks": [
+                      {
+                        "label": "Instagram",
+                        "uri": "https://instagram.com/sudsshine"
+                      }
                     ]
                   }
                 }
@@ -68,6 +74,7 @@ class KtorBusinessInfoFunctionsApiTest {
         assertEquals("Dias úteis", success.info.openingHours.single().dayLabel)
         assertEquals("Pergunta?", success.info.faq.single().question)
         assertEquals("900+", success.info.stats.single().value)
+        assertEquals("Instagram", success.info.socialLinks.single().label)
     }
 
     @Test

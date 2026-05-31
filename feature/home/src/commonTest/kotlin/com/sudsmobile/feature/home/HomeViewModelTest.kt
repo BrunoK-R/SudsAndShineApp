@@ -651,6 +651,7 @@ private fun businessInfo(
         BusinessFaq(question = "Onde?", answer = "No centro."),
     ),
     stats = stats,
+    socialLinks = emptyList(),
 )
 
 private fun homeReservation(

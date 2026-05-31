@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -78,6 +79,7 @@ private data class ProfileMenuItem(
 private enum class ProfileMenuAction {
     None,
     AdminBookings,
+    AdminBusinessInfo,
     PersonalData,
     Vehicles,
     Loyalty,
@@ -89,6 +91,12 @@ private val adminMenuItem = ProfileMenuItem(
     icon = Icons.Filled.Security,
     label = "Gestão de marcações",
     action = ProfileMenuAction.AdminBookings,
+)
+
+private val adminBusinessInfoMenuItem = ProfileMenuItem(
+    icon = Icons.Filled.Business,
+    label = "Configuração do negócio",
+    action = ProfileMenuAction.AdminBusinessInfo,
 )
 
 private val menuItems = listOf(
@@ -131,6 +139,7 @@ fun ProfileScreen(
     onOpenContact: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
     onOpenAdminBookings: () -> Unit = {},
+    onOpenAdminBusinessInfo: () -> Unit = {},
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
     val adminAccessViewModel: AdminAccessViewModel = koinViewModel()
@@ -177,6 +186,7 @@ fun ProfileScreen(
         onOpenContact = onOpenContact,
         onOpenRewards = onOpenRewards,
         onOpenAdminBookings = onOpenAdminBookings,
+        onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
     )
 }
 
@@ -202,6 +212,7 @@ private fun ProfileScreenContent(
     onOpenContact: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
     onOpenAdminBookings: () -> Unit = {},
+    onOpenAdminBusinessInfo: () -> Unit = {},
 ) {
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
     val isRestoringSession = sessionState == AuthSessionState.Restoring
@@ -248,6 +259,7 @@ private fun ProfileScreenContent(
                     onOpenContact = onOpenContact,
                     onOpenRewards = onOpenRewards,
                     onOpenAdminBookings = onOpenAdminBookings,
+                    onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
                 )
                 PreferencesCard(
                     preferencesState = preferencesState,
@@ -961,9 +973,10 @@ private fun ProfileMenuCard(
     onOpenContact: () -> Unit,
     onOpenRewards: () -> Unit,
     onOpenAdminBookings: () -> Unit,
+    onOpenAdminBusinessInfo: () -> Unit,
 ) {
     val visibleItems = if (showAdminBookings) {
-        listOf(adminMenuItem) + menuItems
+        listOf(adminMenuItem, adminBusinessInfoMenuItem) + menuItems
     } else {
         menuItems
     }
@@ -982,6 +995,7 @@ private fun ProfileMenuCard(
                         when (item.action) {
                             ProfileMenuAction.None -> Unit
                             ProfileMenuAction.AdminBookings -> onOpenAdminBookings()
+                            ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
                             ProfileMenuAction.PersonalData -> onOpenPersonalData()
                             ProfileMenuAction.Vehicles -> onManageVehicles()
                             ProfileMenuAction.Loyalty -> onOpenRewards()

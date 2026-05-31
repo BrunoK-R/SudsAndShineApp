@@ -5,10 +5,15 @@ import com.sudsmobile.data.admin.AdminBookingDecisionRequest
 import com.sudsmobile.data.admin.AdminBookingDecisionResult
 import com.sudsmobile.data.admin.AdminBookingRequest
 import com.sudsmobile.data.admin.AdminBookingRequestsResult
+import com.sudsmobile.data.admin.AdminBusinessInfoResult
+import com.sudsmobile.data.admin.AdminBusinessInfoUpdateRequest
 import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.admin.AdminRole
 import com.sudsmobile.data.admin.AdminRoleResult
+import com.sudsmobile.data.admin.AdminServiceCatalogArchiveRequest
+import com.sudsmobile.data.admin.AdminServiceCatalogMutationRequest
+import com.sudsmobile.data.admin.AdminServiceCatalogMutationResult
 import com.sudsmobile.data.auth.AuthActionResult
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
@@ -273,6 +278,28 @@ private class FakeAdminRepository(
     ): AdminBookingDecisionResult {
         rejectRequests += request
         return rejectResult
+    }
+
+    override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {
+        return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun updateBusinessInfoConfiguration(
+        request: AdminBusinessInfoUpdateRequest,
+    ): AdminBusinessInfoResult {
+        return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun upsertServiceCatalogItem(
+        request: AdminServiceCatalogMutationRequest,
+    ): AdminServiceCatalogMutationResult {
+        return AdminServiceCatalogMutationResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun archiveServiceCatalogItem(
+        request: AdminServiceCatalogArchiveRequest,
+    ): AdminServiceCatalogMutationResult {
+        return AdminServiceCatalogMutationResult.Failure(AdminError.Backend("unused"))
     }
 }
 

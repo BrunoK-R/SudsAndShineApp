@@ -1119,6 +1119,7 @@ private fun businessInfo(
     stats = listOf(
         BusinessStat(value = "500+", label = "Carros"),
     ),
+    socialLinks = emptyList(),
 )
 
 private fun availabilityMonth(

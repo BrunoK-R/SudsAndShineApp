@@ -84,6 +84,77 @@ class KtorAdminFunctionsApi(
         unavailableMessage = "Não foi possível rejeitar a marcação. Tente novamente.",
     )
 
+    override suspend fun getBusinessInfoConfiguration(idToken: String): AdminBusinessInfoResult {
+        return try {
+            val response = httpClient.post(config.getAdminBusinessInfoUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableBusinessInfoResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminBusinessInfoResult.Failure(error.toAdminError())
+                body.result != null -> AdminBusinessInfoResult.Success(body.result.toAdminBusinessInfoConfig())
+                else -> AdminBusinessInfoResult.Failure(
+                    AdminError.Backend("A resposta da configuração veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminBusinessInfoResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar a configuração do negócio. Tente novamente."),
+            )
+        }
+    }
+
+    override suspend fun updateBusinessInfoConfiguration(
+        request: AdminBusinessInfoUpdateRequest,
+        idToken: String,
+    ): AdminBusinessInfoResult {
+        return try {
+            val response = httpClient.post(config.updateBusinessInfoUrl) {
+                callableHeaders(idToken)
+                setBody(CallableBusinessInfoUpdateRequest(BusinessInfoPayload.from(request)))
+            }
+            val body = response.body<CallableBusinessInfoResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminBusinessInfoResult.Failure(error.toAdminError())
+                body.result != null -> AdminBusinessInfoResult.Success(body.result.toAdminBusinessInfoConfig())
+                else -> AdminBusinessInfoResult.Failure(
+                    AdminError.Backend("A resposta da configuração veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminBusinessInfoResult.Failure(
+                AdminError.Unavailable("Não foi possível guardar a configuração do negócio. Tente novamente."),
+            )
+        }
+    }
+
+    override suspend fun upsertServiceCatalogItem(
+        request: AdminServiceCatalogMutationRequest,
+        idToken: String,
+    ): AdminServiceCatalogMutationResult = postServiceCatalogMutation(
+        url = config.upsertServiceCatalogItemUrl,
+        payload = ServiceCatalogUpsertPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível guardar o serviço. Tente novamente.",
+    )
+
+    override suspend fun archiveServiceCatalogItem(
+        request: AdminServiceCatalogArchiveRequest,
+        idToken: String,
+    ): AdminServiceCatalogMutationResult = postServiceCatalogMutation(
+        url = config.archiveServiceCatalogItemUrl,
+        payload = ServiceCatalogArchivePayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível arquivar o serviço. Tente novamente.",
+    )
+
     private suspend fun postDecision(
         url: String,
         payload: DecisionPayload,
@@ -111,6 +182,33 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    private suspend fun postServiceCatalogMutation(
+        url: String,
+        payload: ServiceCatalogMutationPayload,
+        idToken: String,
+        unavailableMessage: String,
+    ): AdminServiceCatalogMutationResult {
+        return try {
+            val response = httpClient.post(url) {
+                callableHeaders(idToken)
+                setBody(CallableServiceCatalogMutationRequest(payload))
+            }
+            val body = response.body<CallableServiceCatalogMutationResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminServiceCatalogMutationResult.Failure(error.toAdminError())
+                body.result != null -> AdminServiceCatalogMutationResult.Success(body.result.toReceipt())
+                else -> AdminServiceCatalogMutationResult.Failure(
+                    AdminError.Backend("A resposta do catálogo veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminServiceCatalogMutationResult.Failure(AdminError.Unavailable(unavailableMessage))
+        }
+    }
+
     private fun io.ktor.client.request.HttpRequestBuilder.callableHeaders(idToken: String) {
         header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
         header(HttpHeaders.Authorization, "Bearer $idToken")
@@ -128,6 +226,16 @@ private data class CallableDecisionRequest(
 )
 
 @Serializable
+private data class CallableBusinessInfoUpdateRequest(
+    val data: BusinessInfoPayload,
+)
+
+@Serializable
+private data class CallableServiceCatalogMutationRequest(
+    val data: ServiceCatalogMutationPayload,
+)
+
+@Serializable
 private data class DecisionPayload(
     val reservationId: String,
     val rejectionReason: String = "",
@@ -137,6 +245,115 @@ private data class DecisionPayload(
             reservationId = request.reservationId,
             rejectionReason = request.rejectionReason,
         )
+    }
+}
+
+@Serializable
+private data class BusinessInfoPayload(
+    val phone: String,
+    val email: String,
+    val addressLine1: String,
+    val addressLine2: String,
+    val mapsUri: String,
+    val whatsappUri: String,
+    val openingHours: List<BusinessOpeningHoursPayload>,
+    val socialLinks: List<BusinessSocialLinkPayload> = emptyList(),
+) {
+    companion object {
+        fun from(request: AdminBusinessInfoUpdateRequest): BusinessInfoPayload = BusinessInfoPayload(
+            phone = request.phone,
+            email = request.email,
+            addressLine1 = request.addressLine1,
+            addressLine2 = request.addressLine2,
+            mapsUri = request.mapsUri,
+            whatsappUri = request.whatsappUri,
+            openingHours = request.openingHours.map { BusinessOpeningHoursPayload.from(it) },
+            socialLinks = request.socialLinks.map { BusinessSocialLinkPayload.from(it) },
+        )
+    }
+}
+
+@Serializable
+private data class BusinessOpeningHoursPayload(
+    val dayLabel: String,
+    val hoursLabel: String,
+    val closed: Boolean = false,
+) {
+    companion object {
+        fun from(hours: AdminBusinessOpeningHours): BusinessOpeningHoursPayload = BusinessOpeningHoursPayload(
+            dayLabel = hours.dayLabel,
+            hoursLabel = hours.hoursLabel,
+            closed = hours.closed,
+        )
+    }
+
+    fun toAdminOpeningHours(): AdminBusinessOpeningHours = AdminBusinessOpeningHours(
+        dayLabel = dayLabel.trim(),
+        hoursLabel = hoursLabel.trim(),
+        closed = closed,
+    )
+}
+
+@Serializable
+private data class BusinessSocialLinkPayload(
+    val label: String,
+    val uri: String,
+) {
+    companion object {
+        fun from(link: AdminBusinessSocialLink): BusinessSocialLinkPayload = BusinessSocialLinkPayload(
+            label = link.label,
+            uri = link.uri,
+        )
+    }
+
+    fun toAdminSocialLink(): AdminBusinessSocialLink = AdminBusinessSocialLink(
+        label = label.trim(),
+        uri = uri.trim(),
+    )
+}
+
+@Serializable
+private sealed interface ServiceCatalogMutationPayload
+
+@Serializable
+private data class ServiceCatalogUpsertPayload(
+    val serviceId: String = "",
+    val name: String,
+    val description: String = "",
+    val durationMinutes: Int,
+    val passengerPriceCents: Int,
+    val suvPriceCents: Int,
+    val iconKey: String = "car",
+    val popular: Boolean = false,
+    val active: Boolean = true,
+    val sortOrder: Int = 999,
+) : ServiceCatalogMutationPayload {
+    companion object {
+        fun from(request: AdminServiceCatalogMutationRequest): ServiceCatalogUpsertPayload {
+            return ServiceCatalogUpsertPayload(
+                serviceId = request.serviceId,
+                name = request.name,
+                description = request.description,
+                durationMinutes = request.durationMinutes,
+                passengerPriceCents = request.passengerPriceCents,
+                suvPriceCents = request.suvPriceCents,
+                iconKey = request.iconKey,
+                popular = request.popular,
+                active = request.active,
+                sortOrder = request.sortOrder,
+            )
+        }
+    }
+}
+
+@Serializable
+private data class ServiceCatalogArchivePayload(
+    val serviceId: String,
+) : ServiceCatalogMutationPayload {
+    companion object {
+        fun from(request: AdminServiceCatalogArchiveRequest): ServiceCatalogArchivePayload {
+            return ServiceCatalogArchivePayload(serviceId = request.serviceId)
+        }
     }
 }
 
@@ -155,6 +372,18 @@ private data class CallablePendingReservationsResponse(
 @Serializable
 private data class CallableDecisionResponse(
     val result: DecisionResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableBusinessInfoResponse(
+    val result: BusinessInfoResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableServiceCatalogMutationResponse(
+    val result: ServiceCatalogMutationResultPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -248,6 +477,42 @@ private data class DecisionResultPayload(
 }
 
 @Serializable
+private data class ServiceCatalogMutationResultPayload(
+    val serviceId: String,
+    val status: String = "",
+    val created: Boolean = false,
+) {
+    fun toReceipt(): AdminServiceCatalogMutationReceipt = AdminServiceCatalogMutationReceipt(
+        serviceId = serviceId,
+        status = status,
+        created = created,
+    )
+}
+
+@Serializable
+private data class BusinessInfoResultPayload(
+    val phone: String = "",
+    val email: String = "",
+    val addressLine1: String = "",
+    val addressLine2: String = "",
+    val mapsUri: String = "",
+    val whatsappUri: String = "",
+    val openingHours: List<BusinessOpeningHoursPayload> = emptyList(),
+    val socialLinks: List<BusinessSocialLinkPayload> = emptyList(),
+) {
+    fun toAdminBusinessInfoConfig(): AdminBusinessInfoConfig = AdminBusinessInfoConfig(
+        phone = phone.trim(),
+        email = email.trim(),
+        addressLine1 = addressLine1.trim(),
+        addressLine2 = addressLine2.trim(),
+        mapsUri = mapsUri.trim(),
+        whatsappUri = whatsappUri.trim(),
+        openingHours = openingHours.map { it.toAdminOpeningHours() },
+        socialLinks = socialLinks.map { it.toAdminSocialLink() },
+    )
+}
+
+@Serializable
 private data class CallableError(
     val status: String? = null,
     val code: String? = null,
@@ -261,8 +526,8 @@ private data class CallableError(
         return when (normalizedCode) {
             "invalid_argument" -> AdminError.Validation(fallbackMessage)
             "permission_denied" -> AdminError.Permission("Não tem permissões administrativas.")
-            "unauthenticated" -> AdminError.Unauthenticated("Inicie sessão para gerir marcações.")
-            "not_found" -> AdminError.NotFound("A marcação selecionada já não existe.")
+            "unauthenticated" -> AdminError.Unauthenticated("Inicie sessão para gerir a área administrativa.")
+            "not_found" -> AdminError.NotFound("O item selecionado já não existe.")
             "failed_precondition", "already_exists", "aborted" -> AdminError.Conflict(fallbackMessage)
             "unavailable" -> AdminError.Unavailable("O serviço administrativo está indisponível.")
             else -> AdminError.Backend(fallbackMessage)

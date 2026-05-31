@@ -8,6 +8,7 @@ val profileModule = module {
     viewModelOf(::ProfileHistoryViewModel)
     viewModelOf(::AdminAccessViewModel)
     viewModelOf(::AdminBookingsViewModel)
+    viewModelOf(::AdminBusinessInfoViewModel)
     viewModelOf(::PersonalDataViewModel)
     viewModelOf(::VehiclesViewModel)
     viewModelOf(::ContactViewModel)
