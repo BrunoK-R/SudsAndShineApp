@@ -316,6 +316,9 @@ class KtorBookingFunctionsApiTest {
                     "completedRewards": 1,
                     "claimedRewards": 1,
                     "availableRewards": 0,
+                    "rewardType": "discount_percent",
+                    "rewardValue": 15,
+                    "rewardDescription": "15% de desconto",
                     "stampHistory": [
                       {
                         "id": "reservation-1",
@@ -351,6 +354,9 @@ class KtorBookingFunctionsApiTest {
         assertEquals("/test-project/europe-west1/getMyLoyalty", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals(10, success.loyalty.summary.totalWashes)
+        assertEquals("discount_percent", success.loyalty.summary.rewardType)
+        assertEquals(15, success.loyalty.summary.rewardValue)
+        assertEquals("15% de desconto", success.loyalty.summary.rewardDescription)
         assertEquals("reservation-1", success.loyalty.stampHistory.single().id)
         assertEquals("Lavagem Premium", success.loyalty.stampHistory.single().serviceName)
         assertEquals("reward-0001", success.loyalty.redemptions.single().id)

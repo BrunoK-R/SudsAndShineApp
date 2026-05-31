@@ -10,6 +10,7 @@ val profileModule = module {
     viewModelOf(::AdminBookingsViewModel)
     viewModelOf(::AdminAvailabilityViewModel)
     viewModelOf(::AdminBookingPolicyViewModel)
+    viewModelOf(::AdminLoyaltySettingsViewModel)
     viewModelOf(::AdminBusinessInfoViewModel)
     viewModelOf(::AdminServiceCatalogViewModel)
     viewModelOf(::AdminServiceExtrasViewModel)

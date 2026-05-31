@@ -155,6 +155,13 @@ data class AdminBookingPolicyConfig(
     val paymentEligibilityCopy: String,
 )
 
+data class AdminLoyaltySettingsConfig(
+    val stampsRequired: Int,
+    val rewardType: String,
+    val rewardValue: Int,
+    val rewardDescription: String,
+)
+
 data class AdminAvailabilityUpdateRequest(
     val defaultMaxBookingsPerSlot: Int,
     val openingHours: List<AdminBusinessOpeningHours>,
@@ -165,6 +172,13 @@ data class AdminBookingPolicyUpdateRequest(
     val cancellationWindowMinutes: Int,
     val rescheduleWindowMinutes: Int,
     val paymentEligibilityCopy: String,
+)
+
+data class AdminLoyaltySettingsUpdateRequest(
+    val stampsRequired: Int,
+    val rewardType: String,
+    val rewardValue: Int,
+    val rewardDescription: String,
 )
 
 data class AdminCapacityOverrideItem(
@@ -248,6 +262,11 @@ sealed interface AdminBookingPolicyResult {
     data class Failure(val error: AdminError) : AdminBookingPolicyResult
 }
 
+sealed interface AdminLoyaltySettingsResult {
+    data class Success(val config: AdminLoyaltySettingsConfig) : AdminLoyaltySettingsResult
+    data class Failure(val error: AdminError) : AdminLoyaltySettingsResult
+}
+
 sealed interface AdminCapacityOverrideMutationResult {
     data class Success(val receipt: AdminCapacityOverrideMutationReceipt) : AdminCapacityOverrideMutationResult
     data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
@@ -272,6 +291,8 @@ interface AdminRepository {
     suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult
     suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult =
         AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
+    suspend fun getLoyaltySettingsConfiguration(): AdminLoyaltySettingsResult =
+        AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
     suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult
     suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult
     suspend fun updateBusinessInfoConfiguration(
@@ -282,6 +303,11 @@ interface AdminRepository {
         request: AdminBookingPolicyUpdateRequest,
     ): AdminBookingPolicyResult =
         AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
+
+    suspend fun updateLoyaltySettingsConfiguration(
+        request: AdminLoyaltySettingsUpdateRequest,
+    ): AdminLoyaltySettingsResult =
+        AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
 
     suspend fun updateAvailabilityConfiguration(
         request: AdminAvailabilityUpdateRequest,

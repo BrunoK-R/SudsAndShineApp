@@ -53,6 +53,9 @@ data class BookingLoyaltySummary(
     val completedRewards: Int,
     val claimedRewards: Int,
     val availableRewards: Int,
+    val rewardType: String = "free_wash",
+    val rewardValue: Int = 1,
+    val rewardDescription: String = "1 lavagem grátis",
 )
 
 data class BookingLoyalty(

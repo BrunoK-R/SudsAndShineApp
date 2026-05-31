@@ -43,6 +43,13 @@ class FirebaseAdminRepository(
         return api.getBookingPolicyConfiguration(idToken)
     }
 
+    override suspend fun getLoyaltySettingsConfiguration(): AdminLoyaltySettingsResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminLoyaltySettingsResult.Failure(unauthenticatedError())
+
+        return api.getLoyaltySettingsConfiguration(idToken)
+    }
+
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminServiceCatalogResult.Failure(unauthenticatedError())
@@ -94,6 +101,19 @@ class FirebaseAdminRepository(
             ?: return AdminBookingPolicyResult.Failure(unauthenticatedError())
 
         return api.updateBookingPolicyConfiguration(normalizedRequest, idToken)
+    }
+
+    override suspend fun updateLoyaltySettingsConfiguration(
+        request: AdminLoyaltySettingsUpdateRequest,
+    ): AdminLoyaltySettingsResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminLoyaltySettingsResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminLoyaltySettingsResult.Failure(unauthenticatedError())
+
+        return api.updateLoyaltySettingsConfiguration(normalizedRequest, idToken)
     }
 
     override suspend fun upsertCapacityOverride(
@@ -378,6 +398,23 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminLoyaltySettingsUpdateRequest): AdminError.Validation? {
+        val valueRange = request.rewardType.rewardValueRangeOrNull()
+        return when {
+            request.stampsRequired !in MinLoyaltyStampsRequired..MaxLoyaltyStampsRequired ->
+                AdminError.Validation("O prémio deve exigir entre 1 e 50 lavagens.")
+            valueRange == null ->
+                AdminError.Validation("Escolha um tipo de prémio válido.")
+            request.rewardValue !in valueRange ->
+                AdminError.Validation("O valor do prémio não é válido para o tipo selecionado.")
+            request.rewardDescription.isBlank() ->
+                AdminError.Validation("Indique a descrição do prémio.")
+            request.rewardDescription.length > MaxLoyaltyRewardDescriptionLength ->
+                AdminError.Validation("A descrição do prémio deve ter no máximo 200 caracteres.")
+            else -> null
+        }
+    }
+
     private fun AdminBookingDecisionRequest.normalized(): AdminBookingDecisionRequest = copy(
         reservationId = reservationId.trim(),
         rejectionReason = rejectionReason.trim().replace(Regex("\\s+"), " "),
@@ -454,6 +491,11 @@ class FirebaseAdminRepository(
     private fun AdminBookingPolicyUpdateRequest.normalized(): AdminBookingPolicyUpdateRequest = copy(
         paymentEligibilityCopy = paymentEligibilityCopy.normalizeAdminText(),
     )
+
+    private fun AdminLoyaltySettingsUpdateRequest.normalized(): AdminLoyaltySettingsUpdateRequest = copy(
+        rewardType = rewardType.normalizeRewardType(),
+        rewardDescription = rewardDescription.normalizeAdminText(),
+    )
 }
 
 private const val MaxRejectionReasonLength = 500
@@ -478,6 +520,9 @@ private const val MinPendingHoldMinutes = 15
 private const val MinPolicyWindowMinutes = 0
 private const val MaxPolicyWindowMinutes = 7 * 24 * 60
 private const val MaxPaymentEligibilityCopyLength = 500
+private const val MinLoyaltyStampsRequired = 1
+private const val MaxLoyaltyStampsRequired = 50
+private const val MaxLoyaltyRewardDescriptionLength = 200
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
 
@@ -491,6 +536,21 @@ private fun String.isValidCatalogId(): Boolean {
 
 private fun String.normalizeAdminText(): String {
     return trim().replace(Regex("\\s+"), " ")
+}
+
+private fun String.normalizeRewardType(): String {
+    return trim()
+        .lowercase()
+        .replace(Regex("[-\\s]+"), "_")
+}
+
+private fun String.rewardValueRangeOrNull(): IntRange? {
+    return when (this) {
+        "free_wash" -> 1..10
+        "discount_amount" -> 1..100000
+        "discount_percent" -> 1..100
+        else -> null
+    }
 }
 
 private fun String.isValidEmail(): Boolean {

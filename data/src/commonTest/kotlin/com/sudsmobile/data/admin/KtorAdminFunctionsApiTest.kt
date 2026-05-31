@@ -322,6 +322,76 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminLoyaltySettingsConfiguration() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "stampsRequired": 8,
+                    "rewardType": "discount_percent",
+                    "rewardValue": 15,
+                    "rewardDescription": "15% de desconto"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getLoyaltySettingsConfiguration("id-token-1")
+
+        val success = assertIs<AdminLoyaltySettingsResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getAdminLoyaltySettings", requestedPath)
+        assertEquals(8, success.config.stampsRequired)
+        assertEquals("discount_percent", success.config.rewardType)
+        assertEquals(15, success.config.rewardValue)
+        assertEquals("15% de desconto", success.config.rewardDescription)
+    }
+
+    @Test
+    fun postsLoyaltySettingsUpdateWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "stampsRequired": 8,
+                    "rewardType": "free_wash",
+                    "rewardValue": 1,
+                    "rewardDescription": "1 lavagem grátis"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.updateLoyaltySettingsConfiguration(
+            AdminLoyaltySettingsUpdateRequest(
+                stampsRequired = 8,
+                rewardType = "free_wash",
+                rewardValue = 1,
+                rewardDescription = "1 lavagem grátis",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminLoyaltySettingsResult.Success>(result)
+        assertEquals("/test-project/europe-west1/updateLoyaltySettings", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals(8, success.config.stampsRequired)
+    }
+
+    @Test
     fun postsAvailabilityUpdateWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

@@ -355,6 +355,67 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun loadsLoyaltySettingsWithCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getLoyaltySettingsConfiguration()
+
+        val success = assertIs<AdminLoyaltySettingsResult.Success>(result)
+        assertEquals(10, success.config.stampsRequired)
+        assertEquals("id-token-1", api.loyaltySettingsIdTokens.single())
+    }
+
+    @Test
+    fun updateLoyaltySettingsNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateLoyaltySettingsConfiguration(
+            AdminLoyaltySettingsUpdateRequest(
+                stampsRequired = 8,
+                rewardType = "discount percent",
+                rewardValue = 15,
+                rewardDescription = "  15%   de desconto  ",
+            ),
+        )
+
+        val success = assertIs<AdminLoyaltySettingsResult.Success>(result)
+        assertEquals(8, success.config.stampsRequired)
+        assertEquals("id-token-1", api.updateLoyaltySettingsIdTokens.single())
+        assertEquals("discount_percent", api.updateLoyaltySettingsRequests.single().rewardType)
+        assertEquals("15% de desconto", api.updateLoyaltySettingsRequests.single().rewardDescription)
+    }
+
+    @Test
+    fun updateLoyaltySettingsReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateLoyaltySettingsConfiguration(
+            AdminLoyaltySettingsUpdateRequest(
+                stampsRequired = 0,
+                rewardType = "free_wash",
+                rewardValue = 1,
+                rewardDescription = "1 lavagem grátis",
+            ),
+        )
+
+        val failure = assertIs<AdminLoyaltySettingsResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.updateLoyaltySettingsRequests.size)
+    }
+
+    @Test
     fun upsertCapacityOverrideNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -426,10 +487,13 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val archiveExtraIdTokens = mutableListOf<String>()
     val availabilityIdTokens = mutableListOf<String>()
     val bookingPolicyIdTokens = mutableListOf<String>()
+    val loyaltySettingsIdTokens = mutableListOf<String>()
     val updateAvailabilityRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
     val updateAvailabilityIdTokens = mutableListOf<String>()
     val updateBookingPolicyRequests = mutableListOf<AdminBookingPolicyUpdateRequest>()
     val updateBookingPolicyIdTokens = mutableListOf<String>()
+    val updateLoyaltySettingsRequests = mutableListOf<AdminLoyaltySettingsUpdateRequest>()
+    val updateLoyaltySettingsIdTokens = mutableListOf<String>()
     val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
     val upsertCapacityOverrideIdTokens = mutableListOf<String>()
     val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
@@ -514,6 +578,34 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
                 cancellationWindowMinutes = request.cancellationWindowMinutes,
                 rescheduleWindowMinutes = request.rescheduleWindowMinutes,
                 paymentEligibilityCopy = request.paymentEligibilityCopy,
+            ),
+        )
+    }
+
+    override suspend fun getLoyaltySettingsConfiguration(idToken: String): AdminLoyaltySettingsResult {
+        loyaltySettingsIdTokens += idToken
+        return AdminLoyaltySettingsResult.Success(
+            AdminLoyaltySettingsConfig(
+                stampsRequired = 10,
+                rewardType = "free_wash",
+                rewardValue = 1,
+                rewardDescription = "1 lavagem grátis",
+            ),
+        )
+    }
+
+    override suspend fun updateLoyaltySettingsConfiguration(
+        request: AdminLoyaltySettingsUpdateRequest,
+        idToken: String,
+    ): AdminLoyaltySettingsResult {
+        updateLoyaltySettingsRequests += request
+        updateLoyaltySettingsIdTokens += idToken
+        return AdminLoyaltySettingsResult.Success(
+            AdminLoyaltySettingsConfig(
+                stampsRequired = request.stampsRequired,
+                rewardType = request.rewardType,
+                rewardValue = request.rewardValue,
+                rewardDescription = request.rewardDescription,
             ),
         )
     }

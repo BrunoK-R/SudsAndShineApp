@@ -20,6 +20,9 @@ interface AdminFunctionsApi {
     suspend fun getBookingPolicyConfiguration(idToken: String): AdminBookingPolicyResult =
         AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
 
+    suspend fun getLoyaltySettingsConfiguration(idToken: String): AdminLoyaltySettingsResult =
+        AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
+
     suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult
 
     suspend fun getServiceExtrasConfiguration(idToken: String): AdminServiceExtrasResult
@@ -39,6 +42,12 @@ interface AdminFunctionsApi {
         idToken: String,
     ): AdminBookingPolicyResult =
         AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
+
+    suspend fun updateLoyaltySettingsConfiguration(
+        request: AdminLoyaltySettingsUpdateRequest,
+        idToken: String,
+    ): AdminLoyaltySettingsResult =
+        AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
 
     suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,

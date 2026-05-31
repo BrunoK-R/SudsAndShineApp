@@ -616,6 +616,9 @@ private data class LoyaltyPayload(
     val completedRewards: Int,
     val claimedRewards: Int,
     val availableRewards: Int,
+    val rewardType: String = "free_wash",
+    val rewardValue: Int = 1,
+    val rewardDescription: String = "",
     val stampHistory: List<LoyaltyStampPayload> = emptyList(),
     val redemptions: List<LoyaltyRedemptionPayload> = emptyList(),
 ) {
@@ -629,6 +632,9 @@ private data class LoyaltyPayload(
         completedRewards = completedRewards.coerceAtLeast(0),
         claimedRewards = claimedRewards.coerceAtLeast(0),
         availableRewards = availableRewards.coerceAtLeast(0),
+        rewardType = rewardType.trim().ifBlank { "free_wash" },
+        rewardValue = rewardValue.coerceAtLeast(1),
+        rewardDescription = rewardDescription.trim().ifBlank { "1 lavagem grátis" },
     )
 
     fun toLoyalty(): BookingLoyalty = BookingLoyalty(

@@ -156,6 +156,30 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getLoyaltySettingsConfiguration(idToken: String): AdminLoyaltySettingsResult {
+        return try {
+            val response = httpClient.post(config.getAdminLoyaltySettingsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableLoyaltySettingsResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminLoyaltySettingsResult.Failure(error.toAdminError())
+                body.result != null -> AdminLoyaltySettingsResult.Success(body.result.toAdminLoyaltySettingsConfig())
+                else -> AdminLoyaltySettingsResult.Failure(
+                    AdminError.Backend("A resposta da fidelização veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminLoyaltySettingsResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar a fidelização. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult {
         return try {
             val response = httpClient.post(config.getAdminServiceCatalogUrl) {
@@ -281,6 +305,33 @@ class KtorAdminFunctionsApi(
         } catch (cause: Throwable) {
             AdminBookingPolicyResult.Failure(
                 AdminError.Unavailable("Não foi possível guardar a política de marcações. Tente novamente."),
+            )
+        }
+    }
+
+    override suspend fun updateLoyaltySettingsConfiguration(
+        request: AdminLoyaltySettingsUpdateRequest,
+        idToken: String,
+    ): AdminLoyaltySettingsResult {
+        return try {
+            val response = httpClient.post(config.updateLoyaltySettingsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableLoyaltySettingsUpdateRequest(LoyaltySettingsPayload.from(request)))
+            }
+            val body = response.body<CallableLoyaltySettingsResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminLoyaltySettingsResult.Failure(error.toAdminError())
+                body.result != null -> AdminLoyaltySettingsResult.Success(body.result.toAdminLoyaltySettingsConfig())
+                else -> AdminLoyaltySettingsResult.Failure(
+                    AdminError.Backend("A resposta da fidelização veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminLoyaltySettingsResult.Failure(
+                AdminError.Unavailable("Não foi possível guardar a fidelização. Tente novamente."),
             )
         }
     }
@@ -485,6 +536,11 @@ private data class CallableBookingPolicyUpdateRequest(
 )
 
 @Serializable
+private data class CallableLoyaltySettingsUpdateRequest(
+    val data: LoyaltySettingsPayload,
+)
+
+@Serializable
 private data class CallableCapacityOverrideMutationRequest(
     val data: CapacityOverridePayload,
 )
@@ -563,6 +619,23 @@ private data class BookingPolicyPayload(
             cancellationWindowMinutes = request.cancellationWindowMinutes,
             rescheduleWindowMinutes = request.rescheduleWindowMinutes,
             paymentEligibilityCopy = request.paymentEligibilityCopy,
+        )
+    }
+}
+
+@Serializable
+private data class LoyaltySettingsPayload(
+    val stampsRequired: Int,
+    val rewardType: String,
+    val rewardValue: Int,
+    val rewardDescription: String,
+) {
+    companion object {
+        fun from(request: AdminLoyaltySettingsUpdateRequest): LoyaltySettingsPayload = LoyaltySettingsPayload(
+            stampsRequired = request.stampsRequired,
+            rewardType = request.rewardType,
+            rewardValue = request.rewardValue,
+            rewardDescription = request.rewardDescription,
         )
     }
 }
@@ -754,6 +827,12 @@ private data class CallableAvailabilityResponse(
 @Serializable
 private data class CallableBookingPolicyResponse(
     val result: BookingPolicyResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableLoyaltySettingsResponse(
+    val result: LoyaltySettingsResultPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -1036,6 +1115,21 @@ private data class BookingPolicyResultPayload(
         paymentEligibilityCopy = paymentEligibilityCopy.trim().ifBlank {
             "Pagamento confirmado no local após validação da marcação."
         },
+    )
+}
+
+@Serializable
+private data class LoyaltySettingsResultPayload(
+    val stampsRequired: Int = 10,
+    val rewardType: String = "free_wash",
+    val rewardValue: Int = 1,
+    val rewardDescription: String = "",
+) {
+    fun toAdminLoyaltySettingsConfig(): AdminLoyaltySettingsConfig = AdminLoyaltySettingsConfig(
+        stampsRequired = stampsRequired.coerceIn(1, 50),
+        rewardType = rewardType.trim().ifBlank { "free_wash" },
+        rewardValue = rewardValue.coerceAtLeast(1),
+        rewardDescription = rewardDescription.trim().ifBlank { "1 lavagem grátis" },
     )
 }
 
