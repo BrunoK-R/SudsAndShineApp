@@ -234,12 +234,14 @@ private fun ColumnScope.LoginContent(
     )
     Spacer(Modifier.height(28.dp))
     AuthErrorMessage(errorMessage)
-    PlatformGoogleSignInButton(
-        enabled = !isLoading,
-        onIdToken = onGoogleIdToken,
-        onError = onGoogleError,
-    )
-    AuthDivider()
+    if (isGoogleSignInAvailable()) {
+        PlatformGoogleSignInButton(
+            enabled = !isLoading,
+            onIdToken = onGoogleIdToken,
+            onError = onGoogleError,
+        )
+        AuthDivider()
+    }
 
     AuthTextField(
         label = "Email",

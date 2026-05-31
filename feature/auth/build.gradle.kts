@@ -1,4 +1,6 @@
+import groovy.json.JsonSlurper
 import java.util.Properties
+import org.gradle.api.GradleException
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 val localProperties = Properties().apply {
@@ -9,11 +11,37 @@ val localProperties = Properties().apply {
 }
 
 val googleWebClientId = providers
-    .gradleProperty("GOOGLE_WEB_CLIENT_ID")
-    .orElse(providers.provider { localProperties.getProperty("GOOGLE_WEB_CLIENT_ID").orEmpty() })
+    .provider {
+        providers.gradleProperty("GOOGLE_WEB_CLIENT_ID").orNull?.takeIf(String::isNotBlank)
+            ?: localProperties.getProperty("GOOGLE_WEB_CLIENT_ID")?.takeIf(String::isNotBlank)
+            ?: googleWebClientIdFromGoogleServices()
+    }
+
+val resolvedGoogleWebClientId = googleWebClientId.get().ifBlank {
+    throw GradleException(
+        "Missing GOOGLE_WEB_CLIENT_ID. Set it in local.properties or keep composeApp/google-services.json " +
+            "with the Firebase web client OAuth ID.",
+    )
+}
 
 fun String.asBuildConfigString(): String {
     return "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+}
+
+fun googleWebClientIdFromGoogleServices(): String {
+    val googleServicesFile = rootProject.file("composeApp/google-services.json")
+    if (!googleServicesFile.isFile) return ""
+
+    val root = JsonSlurper().parse(googleServicesFile) as? Map<*, *> ?: return ""
+    val clients = root["client"] as? List<*> ?: return ""
+    return clients.asSequence()
+        .mapNotNull { client -> (client as? Map<*, *>)?.get("oauth_client") as? List<*> }
+        .flatMap { oauthClients -> oauthClients.asSequence() }
+        .mapNotNull { oauthClient -> oauthClient as? Map<*, *> }
+        .firstOrNull { oauthClient ->
+            (oauthClient["client_type"] as? Number)?.toInt() == 3
+        }
+        ?.get("client_id") as? String ?: ""
 }
 
 plugins {
@@ -66,7 +94,9 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
-            implementation(libs.play.services.auth)
+            implementation(libs.androidx.credentials)
+            implementation(libs.androidx.credentials.play.services.auth)
+            implementation(libs.googleid)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -81,7 +111,7 @@ android {
 
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
-        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", googleWebClientId.get().asBuildConfigString())
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", resolvedGoogleWebClientId.asBuildConfigString())
     }
 
     buildFeatures {

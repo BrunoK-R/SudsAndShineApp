@@ -8,13 +8,20 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.content.TextContent
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlin.test.assertContains
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class KtorIdentityToolkitAuthApiTest {
     @Test
@@ -48,6 +55,7 @@ class KtorIdentityToolkitAuthApiTest {
     @Test
     fun mapsGoogleSignInResponseToAuthSession() = runTest {
         var requestUrl = ""
+        var requestBody = ""
         val api = KtorIdentityToolkitAuthApi(
             httpClient = mockClient(
                 """
@@ -60,7 +68,10 @@ class KtorIdentityToolkitAuthApiTest {
                   "expiresIn": "3600"
                 }
                 """.trimIndent(),
-                onRequest = { requestUrl = it.url.toString() },
+                onRequest = {
+                    requestUrl = it.url.toString()
+                    requestBody = it.bodyText()
+                },
             ),
             config = testConfig(),
         )
@@ -72,6 +83,13 @@ class KtorIdentityToolkitAuthApiTest {
             "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=test-api-key",
             requestUrl,
         )
+        val payload = Json.parseToJsonElement(requestBody).jsonObject
+        assertEquals("http://localhost", payload["requestUri"]?.jsonPrimitive?.contentOrNull)
+        assertEquals(true, payload["returnSecureToken"]?.jsonPrimitive?.boolean)
+        assertEquals(true, payload["returnIdpCredential"]?.jsonPrimitive?.boolean)
+        val postBody = payload["postBody"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        assertContains(postBody, "id_token=google-id-token")
+        assertContains(postBody, "providerId=google.com")
         assertEquals("google-user-1", success.session.user.uid)
         assertEquals("bruno@gmail.com", success.session.user.email)
         assertEquals("Bruno Ribeiro", success.session.user.displayName)
@@ -155,6 +173,14 @@ class KtorIdentityToolkitAuthApiTest {
         assertEquals("new-id-token", success.session.idToken)
         assertEquals("new-refresh-token", success.session.refreshToken)
         assertEquals(3600L, success.session.expiresInSeconds)
+    }
+}
+
+private fun io.ktor.client.request.HttpRequestData.bodyText(): String {
+    return when (val content = body) {
+        is TextContent -> content.text
+        is OutgoingContent.ByteArrayContent -> content.bytes().decodeToString()
+        else -> error("Unsupported request body: ${content::class}")
     }
 }
 

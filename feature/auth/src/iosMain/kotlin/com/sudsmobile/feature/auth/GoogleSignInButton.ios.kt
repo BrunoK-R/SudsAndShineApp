@@ -8,10 +8,7 @@ internal actual fun PlatformGoogleSignInButton(
     onIdToken: (String) -> Unit,
     onError: (String) -> Unit,
 ) {
-    GoogleAuthButton(
-        enabled = enabled,
-        onClick = {
-            onError("Google Sign-In para iOS ainda não está configurado.")
-        },
-    )
+    // Hidden until the iOS Firebase app, URL scheme, and native Google Sign-In flow are configured.
 }
+
+internal actual fun isGoogleSignInAvailable(): Boolean = false

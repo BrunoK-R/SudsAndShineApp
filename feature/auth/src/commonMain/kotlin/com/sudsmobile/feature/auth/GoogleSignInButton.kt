@@ -27,6 +27,8 @@ internal expect fun PlatformGoogleSignInButton(
     onError: (String) -> Unit,
 )
 
+internal expect fun isGoogleSignInAvailable(): Boolean
+
 @Composable
 internal fun GoogleAuthButton(
     enabled: Boolean,
