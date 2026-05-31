@@ -392,6 +392,114 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminNotificationSettingsConfiguration() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "bookingStatusEnabled": true,
+                    "appointmentReminderEnabled": true,
+                    "loyaltyEnabled": true,
+                    "adminPendingAlertEnabled": true,
+                    "marketingEnabled": false,
+                    "reminderLeadMinutes": 60,
+                    "quietHoursStart": "23:00",
+                    "quietHoursEnd": "06:00",
+                    "templates": [
+                      {
+                        "key": "booking_rejected",
+                        "label": "Marcação rejeitada",
+                        "enabled": false,
+                        "title": "Rejeitada",
+                        "body": "Escolha outro horário"
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getNotificationSettingsConfiguration("id-token-1")
+
+        val success = assertIs<AdminNotificationSettingsResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getAdminNotificationSettings", requestedPath)
+        assertEquals(60, success.config.reminderLeadMinutes)
+        assertEquals(false, success.config.templates.single().enabled)
+        assertEquals("23:00", success.config.quietHoursStart)
+    }
+
+    @Test
+    fun postsNotificationSettingsUpdateWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "bookingStatusEnabled": true,
+                    "appointmentReminderEnabled": true,
+                    "loyaltyEnabled": true,
+                    "adminPendingAlertEnabled": false,
+                    "marketingEnabled": false,
+                    "reminderLeadMinutes": 60,
+                    "quietHoursStart": "23:00",
+                    "quietHoursEnd": "06:00",
+                    "templates": [
+                      {
+                        "key": "booking_request",
+                        "label": "Pedido recebido",
+                        "enabled": true,
+                        "title": "Pedido",
+                        "body": "Recebido"
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.updateNotificationSettingsConfiguration(
+            AdminNotificationSettingsUpdateRequest(
+                bookingStatusEnabled = true,
+                appointmentReminderEnabled = true,
+                loyaltyEnabled = true,
+                adminPendingAlertEnabled = false,
+                marketingEnabled = false,
+                reminderLeadMinutes = 60,
+                quietHoursStart = "23:00",
+                quietHoursEnd = "06:00",
+                templates = listOf(
+                    AdminNotificationTemplateConfig(
+                        key = "booking_request",
+                        label = "Pedido recebido",
+                        enabled = true,
+                        title = "Pedido",
+                        body = "Recebido",
+                    ),
+                ),
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminNotificationSettingsResult.Success>(result)
+        assertEquals("/test-project/europe-west1/updateNotificationSettings", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals(false, success.config.adminPendingAlertEnabled)
+    }
+
+    @Test
     fun postsAvailabilityUpdateWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

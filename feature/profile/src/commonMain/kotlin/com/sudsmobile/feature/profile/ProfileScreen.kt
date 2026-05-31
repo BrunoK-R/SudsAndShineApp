@@ -83,6 +83,7 @@ private enum class ProfileMenuAction {
     AdminAvailability,
     AdminBookingPolicy,
     AdminLoyaltySettings,
+    AdminNotificationSettings,
     AdminBusinessInfo,
     AdminServiceCatalog,
     AdminServiceExtras,
@@ -115,6 +116,12 @@ private val adminLoyaltySettingsMenuItem = ProfileMenuItem(
     icon = Icons.Filled.CardGiftcard,
     label = "Fidelização",
     action = ProfileMenuAction.AdminLoyaltySettings,
+)
+
+private val adminNotificationSettingsMenuItem = ProfileMenuItem(
+    icon = Icons.Filled.Notifications,
+    label = "Notificações",
+    action = ProfileMenuAction.AdminNotificationSettings,
 )
 
 private val adminBusinessInfoMenuItem = ProfileMenuItem(
@@ -178,6 +185,7 @@ fun ProfileScreen(
     onOpenAdminAvailability: () -> Unit = {},
     onOpenAdminBookingPolicy: () -> Unit = {},
     onOpenAdminLoyaltySettings: () -> Unit = {},
+    onOpenAdminNotificationSettings: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
@@ -230,6 +238,7 @@ fun ProfileScreen(
         onOpenAdminAvailability = onOpenAdminAvailability,
         onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
         onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
+        onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
         onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
         onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
         onOpenAdminServiceExtras = onOpenAdminServiceExtras,
@@ -261,6 +270,7 @@ private fun ProfileScreenContent(
     onOpenAdminAvailability: () -> Unit = {},
     onOpenAdminBookingPolicy: () -> Unit = {},
     onOpenAdminLoyaltySettings: () -> Unit = {},
+    onOpenAdminNotificationSettings: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
@@ -313,6 +323,7 @@ private fun ProfileScreenContent(
                     onOpenAdminAvailability = onOpenAdminAvailability,
                     onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
                     onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
+                    onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
                     onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
                     onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
                     onOpenAdminServiceExtras = onOpenAdminServiceExtras,
@@ -1032,6 +1043,7 @@ private fun ProfileMenuCard(
     onOpenAdminAvailability: () -> Unit,
     onOpenAdminBookingPolicy: () -> Unit,
     onOpenAdminLoyaltySettings: () -> Unit,
+    onOpenAdminNotificationSettings: () -> Unit,
     onOpenAdminBusinessInfo: () -> Unit,
     onOpenAdminServiceCatalog: () -> Unit,
     onOpenAdminServiceExtras: () -> Unit,
@@ -1042,6 +1054,7 @@ private fun ProfileMenuCard(
             adminAvailabilityMenuItem,
             adminBookingPolicyMenuItem,
             adminLoyaltySettingsMenuItem,
+            adminNotificationSettingsMenuItem,
             adminBusinessInfoMenuItem,
             adminServiceCatalogMenuItem,
             adminServiceExtrasMenuItem,
@@ -1067,6 +1080,7 @@ private fun ProfileMenuCard(
                             ProfileMenuAction.AdminAvailability -> onOpenAdminAvailability()
                             ProfileMenuAction.AdminBookingPolicy -> onOpenAdminBookingPolicy()
                             ProfileMenuAction.AdminLoyaltySettings -> onOpenAdminLoyaltySettings()
+                            ProfileMenuAction.AdminNotificationSettings -> onOpenAdminNotificationSettings()
                             ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
                             ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
                             ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()

@@ -23,6 +23,9 @@ interface AdminFunctionsApi {
     suspend fun getLoyaltySettingsConfiguration(idToken: String): AdminLoyaltySettingsResult =
         AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
 
+    suspend fun getNotificationSettingsConfiguration(idToken: String): AdminNotificationSettingsResult =
+        AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
+
     suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult
 
     suspend fun getServiceExtrasConfiguration(idToken: String): AdminServiceExtrasResult
@@ -48,6 +51,12 @@ interface AdminFunctionsApi {
         idToken: String,
     ): AdminLoyaltySettingsResult =
         AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
+
+    suspend fun updateNotificationSettingsConfiguration(
+        request: AdminNotificationSettingsUpdateRequest,
+        idToken: String,
+    ): AdminNotificationSettingsResult =
+        AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
 
     suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,

@@ -76,6 +76,9 @@ data class FirebaseFunctionsConfig(
     val getAdminLoyaltySettingsUrl: String
         get() = functionUrl("getAdminLoyaltySettings")
 
+    val getAdminNotificationSettingsUrl: String
+        get() = functionUrl("getAdminNotificationSettings")
+
     val getAdminServiceCatalogUrl: String
         get() = functionUrl("getAdminServiceCatalog")
 
@@ -93,6 +96,9 @@ data class FirebaseFunctionsConfig(
 
     val updateLoyaltySettingsUrl: String
         get() = functionUrl("updateLoyaltySettings")
+
+    val updateNotificationSettingsUrl: String
+        get() = functionUrl("updateNotificationSettings")
 
     val upsertCapacityOverrideUrl: String
         get() = functionUrl("upsertCapacityOverride")

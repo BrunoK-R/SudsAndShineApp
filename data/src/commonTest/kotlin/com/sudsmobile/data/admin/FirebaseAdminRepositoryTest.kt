@@ -416,6 +416,65 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun loadsNotificationSettingsWithCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getNotificationSettingsConfiguration()
+
+        val success = assertIs<AdminNotificationSettingsResult.Success>(result)
+        assertEquals(120, success.config.reminderLeadMinutes)
+        assertEquals("booking_request", success.config.templates.first().key)
+        assertEquals("id-token-1", api.notificationSettingsIdTokens.single())
+    }
+
+    @Test
+    fun updateNotificationSettingsNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateNotificationSettingsConfiguration(
+            adminNotificationSettingsRequest(
+                reminderLeadMinutes = 60,
+                templates = adminNotificationTemplates().map {
+                    if (it.key == "booking_request") it.copy(title = "  Pedido   recebido  ") else it
+                },
+            ),
+        )
+
+        val success = assertIs<AdminNotificationSettingsResult.Success>(result)
+        assertEquals(60, success.config.reminderLeadMinutes)
+        assertEquals("id-token-1", api.updateNotificationSettingsIdTokens.single())
+        assertEquals(
+            "Pedido recebido",
+            api.updateNotificationSettingsRequests.single().templates.first { it.key == "booking_request" }.title,
+        )
+    }
+
+    @Test
+    fun updateNotificationSettingsReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateNotificationSettingsConfiguration(
+            adminNotificationSettingsRequest(reminderLeadMinutes = 5),
+        )
+
+        val failure = assertIs<AdminNotificationSettingsResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.updateNotificationSettingsRequests.size)
+    }
+
+    @Test
     fun upsertCapacityOverrideNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -488,12 +547,15 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val availabilityIdTokens = mutableListOf<String>()
     val bookingPolicyIdTokens = mutableListOf<String>()
     val loyaltySettingsIdTokens = mutableListOf<String>()
+    val notificationSettingsIdTokens = mutableListOf<String>()
     val updateAvailabilityRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
     val updateAvailabilityIdTokens = mutableListOf<String>()
     val updateBookingPolicyRequests = mutableListOf<AdminBookingPolicyUpdateRequest>()
     val updateBookingPolicyIdTokens = mutableListOf<String>()
     val updateLoyaltySettingsRequests = mutableListOf<AdminLoyaltySettingsUpdateRequest>()
     val updateLoyaltySettingsIdTokens = mutableListOf<String>()
+    val updateNotificationSettingsRequests = mutableListOf<AdminNotificationSettingsUpdateRequest>()
+    val updateNotificationSettingsIdTokens = mutableListOf<String>()
     val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
     val upsertCapacityOverrideIdTokens = mutableListOf<String>()
     val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
@@ -606,6 +668,32 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
                 rewardType = request.rewardType,
                 rewardValue = request.rewardValue,
                 rewardDescription = request.rewardDescription,
+            ),
+        )
+    }
+
+    override suspend fun getNotificationSettingsConfiguration(idToken: String): AdminNotificationSettingsResult {
+        notificationSettingsIdTokens += idToken
+        return AdminNotificationSettingsResult.Success(adminNotificationSettingsConfig())
+    }
+
+    override suspend fun updateNotificationSettingsConfiguration(
+        request: AdminNotificationSettingsUpdateRequest,
+        idToken: String,
+    ): AdminNotificationSettingsResult {
+        updateNotificationSettingsRequests += request
+        updateNotificationSettingsIdTokens += idToken
+        return AdminNotificationSettingsResult.Success(
+            AdminNotificationSettingsConfig(
+                bookingStatusEnabled = request.bookingStatusEnabled,
+                appointmentReminderEnabled = request.appointmentReminderEnabled,
+                loyaltyEnabled = request.loyaltyEnabled,
+                adminPendingAlertEnabled = request.adminPendingAlertEnabled,
+                marketingEnabled = request.marketingEnabled,
+                reminderLeadMinutes = request.reminderLeadMinutes,
+                quietHoursStart = request.quietHoursStart,
+                quietHoursEnd = request.quietHoursEnd,
+                templates = request.templates,
             ),
         )
     }
@@ -797,3 +885,82 @@ private class FakeAuthRepository(authenticated: Boolean) : AuthRepository {
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
 }
+
+private fun adminNotificationSettingsConfig(): AdminNotificationSettingsConfig = AdminNotificationSettingsConfig(
+    bookingStatusEnabled = true,
+    appointmentReminderEnabled = true,
+    loyaltyEnabled = true,
+    adminPendingAlertEnabled = true,
+    marketingEnabled = false,
+    reminderLeadMinutes = 120,
+    quietHoursStart = "22:00",
+    quietHoursEnd = "08:00",
+    templates = adminNotificationTemplates(),
+)
+
+private fun adminNotificationSettingsRequest(
+    bookingStatusEnabled: Boolean = true,
+    appointmentReminderEnabled: Boolean = true,
+    loyaltyEnabled: Boolean = true,
+    adminPendingAlertEnabled: Boolean = true,
+    marketingEnabled: Boolean = false,
+    reminderLeadMinutes: Int = 120,
+    quietHoursStart: String = "22:00",
+    quietHoursEnd: String = "08:00",
+    templates: List<AdminNotificationTemplateConfig> = adminNotificationTemplates(),
+): AdminNotificationSettingsUpdateRequest = AdminNotificationSettingsUpdateRequest(
+    bookingStatusEnabled = bookingStatusEnabled,
+    appointmentReminderEnabled = appointmentReminderEnabled,
+    loyaltyEnabled = loyaltyEnabled,
+    adminPendingAlertEnabled = adminPendingAlertEnabled,
+    marketingEnabled = marketingEnabled,
+    reminderLeadMinutes = reminderLeadMinutes,
+    quietHoursStart = quietHoursStart,
+    quietHoursEnd = quietHoursEnd,
+    templates = templates,
+)
+
+private fun adminNotificationTemplates(): List<AdminNotificationTemplateConfig> = listOf(
+    AdminNotificationTemplateConfig(
+        key = "booking_request",
+        label = "Pedido recebido",
+        enabled = true,
+        title = "Pedido de marcação recebido",
+        body = "Recebemos o seu pedido de marcação.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_accepted",
+        label = "Marcação aceite",
+        enabled = true,
+        title = "Marcação confirmada",
+        body = "A sua marcação foi aceite.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_rejected",
+        label = "Marcação rejeitada",
+        enabled = true,
+        title = "Marcação rejeitada",
+        body = "Não foi possível aceitar a marcação.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_expired",
+        label = "Pedido expirado",
+        enabled = true,
+        title = "Pedido expirado",
+        body = "O pedido expirou antes da confirmação.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_reminder",
+        label = "Lembrete de marcação",
+        enabled = true,
+        title = "Lembrete",
+        body = "Tem uma lavagem marcada em breve.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "review_prompt",
+        label = "Pedido de avaliação",
+        enabled = true,
+        title = "Avalie a lavagem",
+        body = "Diga-nos como correu o serviço.",
+    ),
+)

@@ -180,6 +180,32 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getNotificationSettingsConfiguration(idToken: String): AdminNotificationSettingsResult {
+        return try {
+            val response = httpClient.post(config.getAdminNotificationSettingsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableNotificationSettingsResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminNotificationSettingsResult.Failure(error.toAdminError())
+                body.result != null -> AdminNotificationSettingsResult.Success(
+                    body.result.toAdminNotificationSettingsConfig(),
+                )
+                else -> AdminNotificationSettingsResult.Failure(
+                    AdminError.Backend("A resposta das notificações veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminNotificationSettingsResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar as notificações. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult {
         return try {
             val response = httpClient.post(config.getAdminServiceCatalogUrl) {
@@ -332,6 +358,35 @@ class KtorAdminFunctionsApi(
         } catch (cause: Throwable) {
             AdminLoyaltySettingsResult.Failure(
                 AdminError.Unavailable("Não foi possível guardar a fidelização. Tente novamente."),
+            )
+        }
+    }
+
+    override suspend fun updateNotificationSettingsConfiguration(
+        request: AdminNotificationSettingsUpdateRequest,
+        idToken: String,
+    ): AdminNotificationSettingsResult {
+        return try {
+            val response = httpClient.post(config.updateNotificationSettingsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableNotificationSettingsUpdateRequest(NotificationSettingsPayload.from(request)))
+            }
+            val body = response.body<CallableNotificationSettingsResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminNotificationSettingsResult.Failure(error.toAdminError())
+                body.result != null -> AdminNotificationSettingsResult.Success(
+                    body.result.toAdminNotificationSettingsConfig(),
+                )
+                else -> AdminNotificationSettingsResult.Failure(
+                    AdminError.Backend("A resposta das notificações veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminNotificationSettingsResult.Failure(
+                AdminError.Unavailable("Não foi possível guardar as notificações. Tente novamente."),
             )
         }
     }
@@ -541,6 +596,11 @@ private data class CallableLoyaltySettingsUpdateRequest(
 )
 
 @Serializable
+private data class CallableNotificationSettingsUpdateRequest(
+    val data: NotificationSettingsPayload,
+)
+
+@Serializable
 private data class CallableCapacityOverrideMutationRequest(
     val data: CapacityOverridePayload,
 )
@@ -638,6 +698,63 @@ private data class LoyaltySettingsPayload(
             rewardDescription = request.rewardDescription,
         )
     }
+}
+
+@Serializable
+private data class NotificationSettingsPayload(
+    val bookingStatusEnabled: Boolean,
+    val appointmentReminderEnabled: Boolean,
+    val loyaltyEnabled: Boolean,
+    val adminPendingAlertEnabled: Boolean,
+    val marketingEnabled: Boolean,
+    val reminderLeadMinutes: Int,
+    val quietHoursStart: String,
+    val quietHoursEnd: String,
+    val templates: List<NotificationTemplatePayload>,
+) {
+    companion object {
+        fun from(request: AdminNotificationSettingsUpdateRequest): NotificationSettingsPayload =
+            NotificationSettingsPayload(
+                bookingStatusEnabled = request.bookingStatusEnabled,
+                appointmentReminderEnabled = request.appointmentReminderEnabled,
+                loyaltyEnabled = request.loyaltyEnabled,
+                adminPendingAlertEnabled = request.adminPendingAlertEnabled,
+                marketingEnabled = request.marketingEnabled,
+                reminderLeadMinutes = request.reminderLeadMinutes,
+                quietHoursStart = request.quietHoursStart,
+                quietHoursEnd = request.quietHoursEnd,
+                templates = request.templates.map { NotificationTemplatePayload.from(it) },
+            )
+    }
+}
+
+@Serializable
+private data class NotificationTemplatePayload(
+    val key: String,
+    val label: String = "",
+    val enabled: Boolean = true,
+    val title: String = "",
+    val body: String = "",
+) {
+    companion object {
+        fun from(template: AdminNotificationTemplateConfig): NotificationTemplatePayload {
+            return NotificationTemplatePayload(
+                key = template.key,
+                label = template.label,
+                enabled = template.enabled,
+                title = template.title,
+                body = template.body,
+            )
+        }
+    }
+
+    fun toAdminNotificationTemplate(): AdminNotificationTemplateConfig = AdminNotificationTemplateConfig(
+        key = key.trim(),
+        label = label.trim(),
+        enabled = enabled,
+        title = title.trim(),
+        body = body.trim(),
+    )
 }
 
 @Serializable
@@ -833,6 +950,12 @@ private data class CallableBookingPolicyResponse(
 @Serializable
 private data class CallableLoyaltySettingsResponse(
     val result: LoyaltySettingsResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableNotificationSettingsResponse(
+    val result: NotificationSettingsResultPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -1130,6 +1253,31 @@ private data class LoyaltySettingsResultPayload(
         rewardType = rewardType.trim().ifBlank { "free_wash" },
         rewardValue = rewardValue.coerceAtLeast(1),
         rewardDescription = rewardDescription.trim().ifBlank { "1 lavagem grátis" },
+    )
+}
+
+@Serializable
+private data class NotificationSettingsResultPayload(
+    val bookingStatusEnabled: Boolean = true,
+    val appointmentReminderEnabled: Boolean = true,
+    val loyaltyEnabled: Boolean = true,
+    val adminPendingAlertEnabled: Boolean = true,
+    val marketingEnabled: Boolean = false,
+    val reminderLeadMinutes: Int = 120,
+    val quietHoursStart: String = "22:00",
+    val quietHoursEnd: String = "08:00",
+    val templates: List<NotificationTemplatePayload> = emptyList(),
+) {
+    fun toAdminNotificationSettingsConfig(): AdminNotificationSettingsConfig = AdminNotificationSettingsConfig(
+        bookingStatusEnabled = bookingStatusEnabled,
+        appointmentReminderEnabled = appointmentReminderEnabled,
+        loyaltyEnabled = loyaltyEnabled,
+        adminPendingAlertEnabled = adminPendingAlertEnabled,
+        marketingEnabled = marketingEnabled,
+        reminderLeadMinutes = reminderLeadMinutes.coerceIn(15, 10080),
+        quietHoursStart = quietHoursStart.trim().ifBlank { "22:00" },
+        quietHoursEnd = quietHoursEnd.trim().ifBlank { "08:00" },
+        templates = templates.map { it.toAdminNotificationTemplate() },
     )
 }
 

@@ -50,6 +50,13 @@ class FirebaseAdminRepository(
         return api.getLoyaltySettingsConfiguration(idToken)
     }
 
+    override suspend fun getNotificationSettingsConfiguration(): AdminNotificationSettingsResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminNotificationSettingsResult.Failure(unauthenticatedError())
+
+        return api.getNotificationSettingsConfiguration(idToken)
+    }
+
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminServiceCatalogResult.Failure(unauthenticatedError())
@@ -114,6 +121,19 @@ class FirebaseAdminRepository(
             ?: return AdminLoyaltySettingsResult.Failure(unauthenticatedError())
 
         return api.updateLoyaltySettingsConfiguration(normalizedRequest, idToken)
+    }
+
+    override suspend fun updateNotificationSettingsConfiguration(
+        request: AdminNotificationSettingsUpdateRequest,
+    ): AdminNotificationSettingsResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminNotificationSettingsResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminNotificationSettingsResult.Failure(unauthenticatedError())
+
+        return api.updateNotificationSettingsConfiguration(normalizedRequest, idToken)
     }
 
     override suspend fun upsertCapacityOverride(
@@ -415,6 +435,24 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminNotificationSettingsUpdateRequest): AdminError.Validation? {
+        return when {
+            request.reminderLeadMinutes !in MinNotificationReminderLeadMinutes..MaxNotificationReminderLeadMinutes ->
+                AdminError.Validation("O lembrete deve ser enviado entre 15 minutos e 7 dias antes.")
+            !request.quietHoursStart.isValidAdminTime() || !request.quietHoursEnd.isValidAdminTime() ->
+                AdminError.Validation("As horas de silêncio devem estar no formato HH:MM.")
+            request.templates.map { it.key }.toSet() != NotificationTemplateKeys ->
+                AdminError.Validation("Preencha todos os modelos de notificação.")
+            request.templates.any { it.title.isBlank() || it.body.isBlank() } ->
+                AdminError.Validation("Preencha todos os modelos de notificação.")
+            request.templates.any { it.title.length > MaxNotificationTemplateTitleLength } ->
+                AdminError.Validation("Cada título de notificação deve ter no máximo 120 caracteres.")
+            request.templates.any { it.body.length > MaxNotificationTemplateBodyLength } ->
+                AdminError.Validation("Cada mensagem de notificação deve ter no máximo 500 caracteres.")
+            else -> null
+        }
+    }
+
     private fun AdminBookingDecisionRequest.normalized(): AdminBookingDecisionRequest = copy(
         reservationId = reservationId.trim(),
         rejectionReason = rejectionReason.trim().replace(Regex("\\s+"), " "),
@@ -496,6 +534,21 @@ class FirebaseAdminRepository(
         rewardType = rewardType.normalizeRewardType(),
         rewardDescription = rewardDescription.normalizeAdminText(),
     )
+
+    private fun AdminNotificationSettingsUpdateRequest.normalized(): AdminNotificationSettingsUpdateRequest = copy(
+        quietHoursStart = quietHoursStart.trim(),
+        quietHoursEnd = quietHoursEnd.trim(),
+        templates = templates
+            .map {
+                it.copy(
+                    key = it.key.trim(),
+                    label = it.label.normalizeAdminText(),
+                    title = it.title.normalizeAdminText(),
+                    body = it.body.normalizeAdminText(),
+                )
+            }
+            .distinctBy { it.key },
+    )
 }
 
 private const val MaxRejectionReasonLength = 500
@@ -523,8 +576,21 @@ private const val MaxPaymentEligibilityCopyLength = 500
 private const val MinLoyaltyStampsRequired = 1
 private const val MaxLoyaltyStampsRequired = 50
 private const val MaxLoyaltyRewardDescriptionLength = 200
+private const val MinNotificationReminderLeadMinutes = 15
+private const val MaxNotificationReminderLeadMinutes = 7 * 24 * 60
+private const val MaxNotificationTemplateTitleLength = 120
+private const val MaxNotificationTemplateBodyLength = 500
+private val NotificationTemplateKeys = setOf(
+    "booking_request",
+    "booking_accepted",
+    "booking_rejected",
+    "booking_expired",
+    "booking_reminder",
+    "review_prompt",
+)
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
+private val AdminTimeRegex = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
 
 private fun unauthenticatedError(): AdminError.Unauthenticated {
     return AdminError.Unauthenticated("Inicie sessão para gerir a área administrativa.")
@@ -594,4 +660,8 @@ private fun String.hasAvailabilityTimeRange(): Boolean {
         val close = closeHour * 60 + closeMinute
         open in 0 until (24 * 60) && close in 1..(24 * 60) && close > open
     }
+}
+
+private fun String.isValidAdminTime(): Boolean {
+    return AdminTimeRegex.matches(trim())
 }

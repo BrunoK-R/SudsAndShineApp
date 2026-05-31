@@ -162,6 +162,26 @@ data class AdminLoyaltySettingsConfig(
     val rewardDescription: String,
 )
 
+data class AdminNotificationTemplateConfig(
+    val key: String,
+    val label: String,
+    val enabled: Boolean,
+    val title: String,
+    val body: String,
+)
+
+data class AdminNotificationSettingsConfig(
+    val bookingStatusEnabled: Boolean,
+    val appointmentReminderEnabled: Boolean,
+    val loyaltyEnabled: Boolean,
+    val adminPendingAlertEnabled: Boolean,
+    val marketingEnabled: Boolean,
+    val reminderLeadMinutes: Int,
+    val quietHoursStart: String,
+    val quietHoursEnd: String,
+    val templates: List<AdminNotificationTemplateConfig>,
+)
+
 data class AdminAvailabilityUpdateRequest(
     val defaultMaxBookingsPerSlot: Int,
     val openingHours: List<AdminBusinessOpeningHours>,
@@ -179,6 +199,18 @@ data class AdminLoyaltySettingsUpdateRequest(
     val rewardType: String,
     val rewardValue: Int,
     val rewardDescription: String,
+)
+
+data class AdminNotificationSettingsUpdateRequest(
+    val bookingStatusEnabled: Boolean,
+    val appointmentReminderEnabled: Boolean,
+    val loyaltyEnabled: Boolean,
+    val adminPendingAlertEnabled: Boolean,
+    val marketingEnabled: Boolean,
+    val reminderLeadMinutes: Int,
+    val quietHoursStart: String,
+    val quietHoursEnd: String,
+    val templates: List<AdminNotificationTemplateConfig>,
 )
 
 data class AdminCapacityOverrideItem(
@@ -267,6 +299,11 @@ sealed interface AdminLoyaltySettingsResult {
     data class Failure(val error: AdminError) : AdminLoyaltySettingsResult
 }
 
+sealed interface AdminNotificationSettingsResult {
+    data class Success(val config: AdminNotificationSettingsConfig) : AdminNotificationSettingsResult
+    data class Failure(val error: AdminError) : AdminNotificationSettingsResult
+}
+
 sealed interface AdminCapacityOverrideMutationResult {
     data class Success(val receipt: AdminCapacityOverrideMutationReceipt) : AdminCapacityOverrideMutationResult
     data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
@@ -293,6 +330,8 @@ interface AdminRepository {
         AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
     suspend fun getLoyaltySettingsConfiguration(): AdminLoyaltySettingsResult =
         AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
+    suspend fun getNotificationSettingsConfiguration(): AdminNotificationSettingsResult =
+        AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
     suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult
     suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult
     suspend fun updateBusinessInfoConfiguration(
@@ -308,6 +347,11 @@ interface AdminRepository {
         request: AdminLoyaltySettingsUpdateRequest,
     ): AdminLoyaltySettingsResult =
         AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
+
+    suspend fun updateNotificationSettingsConfiguration(
+        request: AdminNotificationSettingsUpdateRequest,
+    ): AdminNotificationSettingsResult =
+        AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
 
     suspend fun updateAvailabilityConfiguration(
         request: AdminAvailabilityUpdateRequest,

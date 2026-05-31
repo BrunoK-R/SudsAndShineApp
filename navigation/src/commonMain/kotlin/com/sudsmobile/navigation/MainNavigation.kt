@@ -42,6 +42,7 @@ import com.sudsmobile.feature.profile.AdminBookingPolicyScreen
 import com.sudsmobile.feature.profile.AdminBusinessInfoScreen
 import com.sudsmobile.feature.profile.AdminBookingsScreen
 import com.sudsmobile.feature.profile.AdminLoyaltySettingsScreen
+import com.sudsmobile.feature.profile.AdminNotificationSettingsScreen
 import com.sudsmobile.feature.profile.AdminServiceCatalogScreen
 import com.sudsmobile.feature.profile.AdminServiceExtrasScreen
 import com.sudsmobile.feature.profile.ContactScreen
@@ -202,6 +203,7 @@ fun MainNavigation(
                     onOpenAdminBookingPolicy = { navController.navigate(Routes.AdminBookingPolicy) },
                     onOpenAdminBusinessInfo = { navController.navigate(Routes.AdminBusinessInfo) },
                     onOpenAdminLoyaltySettings = { navController.navigate(Routes.AdminLoyaltySettings) },
+                    onOpenAdminNotificationSettings = { navController.navigate(Routes.AdminNotificationSettings) },
                     onOpenAdminServiceCatalog = { navController.navigate(Routes.AdminServiceCatalog) },
                     onOpenAdminServiceExtras = { navController.navigate(Routes.AdminServiceExtras) },
                 )
@@ -229,6 +231,13 @@ fun MainNavigation(
             }
             composable(Routes.AdminLoyaltySettings) {
                 AdminLoyaltySettingsScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
+                )
+            }
+            composable(Routes.AdminNotificationSettings) {
+                AdminNotificationSettingsScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,
