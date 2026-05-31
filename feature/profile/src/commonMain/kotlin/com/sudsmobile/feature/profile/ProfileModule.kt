@@ -15,6 +15,7 @@ val profileModule = module {
     viewModelOf(::AdminBusinessInfoViewModel)
     viewModelOf(::AdminServiceCatalogViewModel)
     viewModelOf(::AdminServiceExtrasViewModel)
+    viewModelOf(::NotificationPreferencesViewModel)
     viewModelOf(::PersonalDataViewModel)
     viewModelOf(::VehiclesViewModel)
     viewModelOf(::ContactViewModel)

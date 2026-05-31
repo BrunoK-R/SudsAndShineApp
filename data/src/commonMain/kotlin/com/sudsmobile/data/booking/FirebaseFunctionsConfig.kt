@@ -136,6 +136,18 @@ data class FirebaseFunctionsConfig(
     val updateMyProfileUrl: String
         get() = functionUrl("updateMyProfile")
 
+    val getMyNotificationPreferencesUrl: String
+        get() = functionUrl("getMyNotificationPreferences")
+
+    val updateMyNotificationPreferencesUrl: String
+        get() = functionUrl("updateMyNotificationPreferences")
+
+    val registerNotificationTokenUrl: String
+        get() = functionUrl("registerNotificationToken")
+
+    val deleteNotificationTokenUrl: String
+        get() = functionUrl("deleteNotificationToken")
+
     private fun functionUrl(functionName: String): String {
         return if (useEmulator) {
             "http://$emulatorHost:5001/$projectId/$region/$functionName"

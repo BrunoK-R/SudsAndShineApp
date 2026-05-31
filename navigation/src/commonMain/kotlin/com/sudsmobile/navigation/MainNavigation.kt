@@ -47,6 +47,7 @@ import com.sudsmobile.feature.profile.AdminServiceCatalogScreen
 import com.sudsmobile.feature.profile.AdminServiceExtrasScreen
 import com.sudsmobile.feature.profile.ContactScreen
 import com.sudsmobile.feature.profile.HistoryScreen
+import com.sudsmobile.feature.profile.NotificationPreferencesScreen
 import com.sudsmobile.feature.profile.PersonalDataScreen
 import com.sudsmobile.feature.products.ProductsScreen
 import com.sudsmobile.feature.products.ServicesScreen
@@ -194,6 +195,7 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onRequestSignIn = onRequestSignIn,
                     onOpenPersonalData = { navController.navigate(Routes.PersonalData) },
+                    onOpenNotificationPreferences = { navController.navigate(Routes.NotificationPreferences) },
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
                     onOpenHistory = { navController.navigate(Routes.History) },
                     onOpenContact = { navController.navigate(Routes.Contact) },
@@ -266,6 +268,13 @@ fun MainNavigation(
             }
             composable(Routes.PersonalData) {
                 PersonalDataScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
+                )
+            }
+            composable(Routes.NotificationPreferences) {
+                NotificationPreferencesScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,

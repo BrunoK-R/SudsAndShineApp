@@ -88,6 +88,7 @@ private enum class ProfileMenuAction {
     AdminServiceCatalog,
     AdminServiceExtras,
     PersonalData,
+    NotificationPreferences,
     Vehicles,
     Loyalty,
     History,
@@ -163,7 +164,11 @@ private val menuItems = listOf(
         label = "Histórico de Lavagens",
         action = ProfileMenuAction.History,
     ),
-    ProfileMenuItem(icon = Icons.Filled.Notifications, label = "Notificações"),
+    ProfileMenuItem(
+        icon = Icons.Filled.Notifications,
+        label = "Notificações",
+        action = ProfileMenuAction.NotificationPreferences,
+    ),
     ProfileMenuItem(
         icon = Icons.AutoMirrored.Filled.Help,
         label = "Ajuda e Suporte",
@@ -177,6 +182,7 @@ fun ProfileScreen(
     contentPadding: PaddingValues,
     onRequestSignIn: () -> Unit,
     onOpenPersonalData: () -> Unit = {},
+    onOpenNotificationPreferences: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
@@ -230,6 +236,7 @@ fun ProfileScreen(
         onMarketingOptInChange = viewModel::updateMarketingOptIn,
         onAppointmentReminderOptInChange = viewModel::updateAppointmentReminderOptIn,
         onOpenPersonalData = onOpenPersonalData,
+        onOpenNotificationPreferences = onOpenNotificationPreferences,
         onManageVehicles = onManageVehicles,
         onOpenHistory = onOpenHistory,
         onOpenContact = onOpenContact,
@@ -262,6 +269,7 @@ private fun ProfileScreenContent(
     onMarketingOptInChange: (Boolean) -> Unit,
     onAppointmentReminderOptInChange: (Boolean) -> Unit,
     onOpenPersonalData: () -> Unit = {},
+    onOpenNotificationPreferences: () -> Unit = {},
     onManageVehicles: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
@@ -315,6 +323,7 @@ private fun ProfileScreenContent(
                 ProfileMenuCard(
                     showAdminBookings = adminAccessState is AdminAccessUiState.Admin,
                     onOpenPersonalData = onOpenPersonalData,
+                    onOpenNotificationPreferences = onOpenNotificationPreferences,
                     onManageVehicles = onManageVehicles,
                     onOpenHistory = onOpenHistory,
                     onOpenContact = onOpenContact,
@@ -1035,6 +1044,7 @@ private fun ContactBusinessInfoUi.mapPreviewLabel(): String {
 private fun ProfileMenuCard(
     showAdminBookings: Boolean,
     onOpenPersonalData: () -> Unit,
+    onOpenNotificationPreferences: () -> Unit,
     onManageVehicles: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenContact: () -> Unit,
@@ -1085,6 +1095,7 @@ private fun ProfileMenuCard(
                             ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
                             ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()
                             ProfileMenuAction.PersonalData -> onOpenPersonalData()
+                            ProfileMenuAction.NotificationPreferences -> onOpenNotificationPreferences()
                             ProfileMenuAction.Vehicles -> onManageVehicles()
                             ProfileMenuAction.Loyalty -> onOpenRewards()
                             ProfileMenuAction.History -> onOpenHistory()
