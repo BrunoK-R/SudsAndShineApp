@@ -212,6 +212,160 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminAvailabilityConfiguration() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "defaultMaxBookingsPerSlot": 3,
+                    "openingHours": [
+                      {
+                        "dayLabel": "Segunda a Sexta",
+                        "hoursLabel": "09:00 - 13:00, 14:00 - 19:00",
+                        "closed": false
+                      }
+                    ],
+                    "capacityOverrides": [
+                      {
+                        "date": "2026-06-10",
+                        "maxBookingsPerSlot": 0
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getAvailabilityConfiguration("id-token-1")
+
+        val success = assertIs<AdminAvailabilityResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getAdminAvailabilityConfiguration", requestedPath)
+        assertEquals(3, success.config.defaultMaxBookingsPerSlot)
+        assertEquals("Segunda a Sexta", success.config.openingHours.single().dayLabel)
+        assertEquals("2026-06-10", success.config.capacityOverrides.single().date)
+        assertEquals(0, success.config.capacityOverrides.single().maxBookingsPerSlot)
+    }
+
+    @Test
+    fun postsAvailabilityUpdateWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "defaultMaxBookingsPerSlot": 4,
+                    "openingHours": [
+                      {
+                        "dayLabel": "Segunda a Sexta",
+                        "hoursLabel": "09:00 - 13:00, 14:00 - 19:00",
+                        "closed": false
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.updateAvailabilityConfiguration(
+            AdminAvailabilityUpdateRequest(
+                defaultMaxBookingsPerSlot = 4,
+                openingHours = listOf(
+                    AdminBusinessOpeningHours(
+                        dayLabel = "Segunda a Sexta",
+                        hoursLabel = "09:00 - 13:00, 14:00 - 19:00",
+                        closed = false,
+                    ),
+                ),
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminAvailabilityResult.Success>(result)
+        assertEquals("/test-project/europe-west1/updateAvailabilityConfiguration", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals(4, success.config.defaultMaxBookingsPerSlot)
+    }
+
+    @Test
+    fun postsCapacityOverrideMutationWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "date": "2026-06-10",
+                    "maxBookingsPerSlot": 0,
+                    "status": "updated"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.upsertCapacityOverride(
+            AdminCapacityOverrideUpsertRequest(
+                date = "2026-06-10",
+                maxBookingsPerSlot = 0,
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminCapacityOverrideMutationResult.Success>(result)
+        assertEquals("/test-project/europe-west1/upsertCapacityOverride", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("2026-06-10", success.receipt.date)
+        assertEquals(0, success.receipt.maxBookingsPerSlot)
+    }
+
+    @Test
+    fun postsCapacityOverrideClearWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "date": "2026-06-10",
+                    "status": "cleared"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.clearCapacityOverride(
+            AdminCapacityOverrideClearRequest(date = "2026-06-10"),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminCapacityOverrideMutationResult.Success>(result)
+        assertEquals("/test-project/europe-west1/clearCapacityOverride", requestedPath)
+        assertEquals("cleared", success.receipt.status)
+    }
+
+    @Test
     fun mapsAdminServiceCatalogConfiguration() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

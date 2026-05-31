@@ -142,6 +142,37 @@ data class AdminBusinessSocialLink(
     val uri: String,
 )
 
+data class AdminAvailabilityConfig(
+    val defaultMaxBookingsPerSlot: Int,
+    val openingHours: List<AdminBusinessOpeningHours>,
+    val capacityOverrides: List<AdminCapacityOverrideItem> = emptyList(),
+)
+
+data class AdminAvailabilityUpdateRequest(
+    val defaultMaxBookingsPerSlot: Int,
+    val openingHours: List<AdminBusinessOpeningHours>,
+)
+
+data class AdminCapacityOverrideItem(
+    val date: String,
+    val maxBookingsPerSlot: Int,
+)
+
+data class AdminCapacityOverrideUpsertRequest(
+    val date: String,
+    val maxBookingsPerSlot: Int,
+)
+
+data class AdminCapacityOverrideClearRequest(
+    val date: String,
+)
+
+data class AdminCapacityOverrideMutationReceipt(
+    val date: String,
+    val status: String,
+    val maxBookingsPerSlot: Int? = null,
+)
+
 data class AdminBusinessInfoUpdateRequest(
     val phone: String,
     val email: String,
@@ -193,6 +224,16 @@ sealed interface AdminBusinessInfoResult {
     data class Failure(val error: AdminError) : AdminBusinessInfoResult
 }
 
+sealed interface AdminAvailabilityResult {
+    data class Success(val config: AdminAvailabilityConfig) : AdminAvailabilityResult
+    data class Failure(val error: AdminError) : AdminAvailabilityResult
+}
+
+sealed interface AdminCapacityOverrideMutationResult {
+    data class Success(val receipt: AdminCapacityOverrideMutationReceipt) : AdminCapacityOverrideMutationResult
+    data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
+}
+
 sealed interface AdminError {
     val message: String
 
@@ -209,11 +250,24 @@ interface AdminRepository {
     suspend fun syncMyRole(): AdminRoleResult
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
     suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
+    suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult
     suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult
     suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult
     suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult
+
+    suspend fun updateAvailabilityConfiguration(
+        request: AdminAvailabilityUpdateRequest,
+    ): AdminAvailabilityResult
+
+    suspend fun upsertCapacityOverride(
+        request: AdminCapacityOverrideUpsertRequest,
+    ): AdminCapacityOverrideMutationResult
+
+    suspend fun clearCapacityOverride(
+        request: AdminCapacityOverrideClearRequest,
+    ): AdminCapacityOverrideMutationResult
 
     suspend fun acceptBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult
     suspend fun rejectBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult

@@ -80,6 +80,7 @@ private data class ProfileMenuItem(
 private enum class ProfileMenuAction {
     None,
     AdminBookings,
+    AdminAvailability,
     AdminBusinessInfo,
     AdminServiceCatalog,
     AdminServiceExtras,
@@ -94,6 +95,12 @@ private val adminMenuItem = ProfileMenuItem(
     icon = Icons.Filled.Security,
     label = "Gestão de marcações",
     action = ProfileMenuAction.AdminBookings,
+)
+
+private val adminAvailabilityMenuItem = ProfileMenuItem(
+    icon = Icons.Filled.CalendarMonth,
+    label = "Disponibilidade",
+    action = ProfileMenuAction.AdminAvailability,
 )
 
 private val adminBusinessInfoMenuItem = ProfileMenuItem(
@@ -154,6 +161,7 @@ fun ProfileScreen(
     onOpenContact: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
     onOpenAdminBookings: () -> Unit = {},
+    onOpenAdminAvailability: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
@@ -203,6 +211,7 @@ fun ProfileScreen(
         onOpenContact = onOpenContact,
         onOpenRewards = onOpenRewards,
         onOpenAdminBookings = onOpenAdminBookings,
+        onOpenAdminAvailability = onOpenAdminAvailability,
         onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
         onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
         onOpenAdminServiceExtras = onOpenAdminServiceExtras,
@@ -231,6 +240,7 @@ private fun ProfileScreenContent(
     onOpenContact: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
     onOpenAdminBookings: () -> Unit = {},
+    onOpenAdminAvailability: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
@@ -280,6 +290,7 @@ private fun ProfileScreenContent(
                     onOpenContact = onOpenContact,
                     onOpenRewards = onOpenRewards,
                     onOpenAdminBookings = onOpenAdminBookings,
+                    onOpenAdminAvailability = onOpenAdminAvailability,
                     onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
                     onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
                     onOpenAdminServiceExtras = onOpenAdminServiceExtras,
@@ -996,6 +1007,7 @@ private fun ProfileMenuCard(
     onOpenContact: () -> Unit,
     onOpenRewards: () -> Unit,
     onOpenAdminBookings: () -> Unit,
+    onOpenAdminAvailability: () -> Unit,
     onOpenAdminBusinessInfo: () -> Unit,
     onOpenAdminServiceCatalog: () -> Unit,
     onOpenAdminServiceExtras: () -> Unit,
@@ -1003,6 +1015,7 @@ private fun ProfileMenuCard(
     val visibleItems = if (showAdminBookings) {
         listOf(
             adminMenuItem,
+            adminAvailabilityMenuItem,
             adminBusinessInfoMenuItem,
             adminServiceCatalogMenuItem,
             adminServiceExtrasMenuItem,
@@ -1025,6 +1038,7 @@ private fun ProfileMenuCard(
                         when (item.action) {
                             ProfileMenuAction.None -> Unit
                             ProfileMenuAction.AdminBookings -> onOpenAdminBookings()
+                            ProfileMenuAction.AdminAvailability -> onOpenAdminAvailability()
                             ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
                             ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
                             ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()

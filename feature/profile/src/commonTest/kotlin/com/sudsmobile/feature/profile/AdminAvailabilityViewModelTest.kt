@@ -1,16 +1,17 @@
 package com.sudsmobile.feature.profile
 
+import com.sudsmobile.data.admin.AdminAvailabilityConfig
 import com.sudsmobile.data.admin.AdminAvailabilityResult
 import com.sudsmobile.data.admin.AdminAvailabilityUpdateRequest
 import com.sudsmobile.data.admin.AdminBookingDecisionRequest
 import com.sudsmobile.data.admin.AdminBookingDecisionResult
 import com.sudsmobile.data.admin.AdminBookingRequestsResult
-import com.sudsmobile.data.admin.AdminBusinessInfoConfig
 import com.sudsmobile.data.admin.AdminBusinessInfoResult
 import com.sudsmobile.data.admin.AdminBusinessInfoUpdateRequest
 import com.sudsmobile.data.admin.AdminBusinessOpeningHours
-import com.sudsmobile.data.admin.AdminBusinessSocialLink
 import com.sudsmobile.data.admin.AdminCapacityOverrideClearRequest
+import com.sudsmobile.data.admin.AdminCapacityOverrideItem
+import com.sudsmobile.data.admin.AdminCapacityOverrideMutationReceipt
 import com.sudsmobile.data.admin.AdminCapacityOverrideMutationResult
 import com.sudsmobile.data.admin.AdminCapacityOverrideUpsertRequest
 import com.sudsmobile.data.admin.AdminError
@@ -48,7 +49,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class AdminBusinessInfoViewModelTest {
+class AdminAvailabilityViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
     @BeforeTest
@@ -63,41 +64,40 @@ class AdminBusinessInfoViewModelTest {
 
     @Test
     fun loadConfigurationRequiresAuthenticatedSessionBeforeRepositoryCall() = runTest {
-        val repository = FakeBusinessInfoAdminRepository()
-        val viewModel = AdminBusinessInfoViewModel(
-            authRepository = FakeBusinessInfoAuthRepository(authenticated = false),
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = false),
             adminRepository = repository,
         )
 
         viewModel.loadConfiguration()
         runCurrent()
 
-        assertIs<AdminBusinessInfoUiState.Unauthenticated>(viewModel.uiState.value)
+        assertIs<AdminAvailabilityUiState.Unauthenticated>(viewModel.uiState.value)
         assertEquals(0, repository.loadCalls)
     }
 
     @Test
     fun loadConfigurationMapsPermissionFailureToNotAdmin() = runTest {
-        val repository = FakeBusinessInfoAdminRepository(
-            loadResult = AdminBusinessInfoResult.Failure(AdminError.Permission("denied")),
-        )
-        val viewModel = AdminBusinessInfoViewModel(
-            authRepository = FakeBusinessInfoAuthRepository(authenticated = true),
-            adminRepository = repository,
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = FakeAvailabilityAdminRepository(
+                loadResult = AdminAvailabilityResult.Failure(AdminError.Permission("denied")),
+            ),
         )
 
         viewModel.loadConfiguration()
         runCurrent()
 
-        assertIs<AdminBusinessInfoUiState.NotAdmin>(viewModel.uiState.value)
+        assertIs<AdminAvailabilityUiState.NotAdmin>(viewModel.uiState.value)
     }
 
     @Test
     fun loadConfigurationIgnoresStaleResponseAfterSignOut() = runTest {
-        val deferred = CompletableDeferred<AdminBusinessInfoResult>()
-        val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
-        val repository = FakeBusinessInfoAdminRepository(loadResultDeferred = deferred)
-        val viewModel = AdminBusinessInfoViewModel(
+        val deferred = CompletableDeferred<AdminAvailabilityResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(loadResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
             authRepository = authRepository,
             adminRepository = repository,
         )
@@ -105,99 +105,136 @@ class AdminBusinessInfoViewModelTest {
         viewModel.loadConfiguration()
         runCurrent()
         authRepository.signOut()
-        deferred.complete(AdminBusinessInfoResult.Success(adminBusinessInfoConfig()))
+        deferred.complete(AdminAvailabilityResult.Success(adminAvailabilityConfig()))
         runCurrent()
 
-        assertIs<AdminBusinessInfoUiState.Unauthenticated>(viewModel.uiState.value)
+        assertIs<AdminAvailabilityUiState.Unauthenticated>(viewModel.uiState.value)
     }
 
     @Test
-    fun saveSendsBusinessInfoUpdateAndShowsSuccess() = runTest {
-        val repository = FakeBusinessInfoAdminRepository(
-            loadResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
-            updateResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig(phone = "244 000 222")),
-        )
-        val viewModel = AdminBusinessInfoViewModel(
-            authRepository = FakeBusinessInfoAuthRepository(authenticated = true),
+    fun saveValidatesBeforeRepositoryCall() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
             adminRepository = repository,
         )
 
         viewModel.loadConfiguration()
         runCurrent()
-        val loaded = assertIs<AdminBusinessInfoUiState.Loaded>(viewModel.uiState.value)
         viewModel.updateForm(
-            loaded.form.copy(
-                phone = " 244 000 222 ",
-                openingHoursText = "Dias úteis | 10:00 - 18:00\nDomingo | Encerrado | fechado",
-                socialLinksText = "Instagram | https://instagram.com/sudsshine",
+            AdminAvailabilityForm(
+                defaultMaxBookingsPerSlot = "abc",
+                openingHoursText = "Segunda | 09:00 - 19:00",
             ),
         )
         viewModel.save()
         runCurrent()
 
-        val request = repository.updateRequests.single()
-        assertEquals(" 244 000 222 ", request.phone)
-        assertEquals(2, request.openingHours.size)
-        assertEquals(true, request.openingHours[1].closed)
-        assertEquals("Instagram", request.socialLinks.single().label)
-        assertIs<AdminBusinessInfoSaveState.Success>(viewModel.saveState.value)
-        val reloaded = assertIs<AdminBusinessInfoUiState.Loaded>(viewModel.uiState.value)
-        assertEquals("244 000 222", reloaded.form.phone)
+        assertIs<AdminAvailabilitySaveState.Error>(viewModel.saveState.value)
+        assertEquals(0, repository.updateRequests.size)
     }
 
     @Test
-    fun saveValidationErrorDoesNotCallRepository() = runTest {
-        val repository = FakeBusinessInfoAdminRepository(
-            loadResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
-        )
-        val viewModel = AdminBusinessInfoViewModel(
-            authRepository = FakeBusinessInfoAuthRepository(authenticated = true),
+    fun saveSubmitsParsedAvailabilityConfiguration() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
             adminRepository = repository,
         )
 
         viewModel.loadConfiguration()
         runCurrent()
-        val loaded = assertIs<AdminBusinessInfoUiState.Loaded>(viewModel.uiState.value)
-        viewModel.updateForm(loaded.form.copy(openingHoursText = "Sem separador"))
+        viewModel.updateForm(
+            AdminAvailabilityForm(
+                defaultMaxBookingsPerSlot = "4",
+                openingHoursText = "Segunda a Sexta | 09:00 - 13:00, 14:00 - 19:00\nDomingo | Encerrado | fechado",
+            ),
+        )
         viewModel.save()
         runCurrent()
 
-        assertEquals(0, repository.updateRequests.size)
-        assertIs<AdminBusinessInfoSaveState.Error>(viewModel.saveState.value)
+        assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
+        val request = repository.updateRequests.single()
+        assertEquals(4, request.defaultMaxBookingsPerSlot)
+        assertEquals("Segunda a Sexta", request.openingHours.first().dayLabel)
+        assertEquals(true, request.openingHours.last().closed)
     }
 
     @Test
-    fun saveRechecksSessionBeforeRepositoryCall() = runTest {
-        val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
-        val repository = FakeBusinessInfoAdminRepository(
-            loadResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
-        )
-        val viewModel = AdminBusinessInfoViewModel(
+    fun saveStopsWhenSessionChangesBeforeRepositoryCall() = runTest {
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
             authRepository = authRepository,
             adminRepository = repository,
         )
 
         viewModel.loadConfiguration()
         runCurrent()
-        assertIs<AdminBusinessInfoUiState.Loaded>(viewModel.uiState.value)
-
         viewModel.save()
         authRepository.signOut()
         runCurrent()
 
         assertEquals(0, repository.updateRequests.size)
-        assertIs<AdminBusinessInfoUiState.Unauthenticated>(viewModel.uiState.value)
+        assertIs<AdminAvailabilityUiState.Unauthenticated>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun saveCapacityOverrideSubmitsParsedDateCapacityAndReloads() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(
+            loaded.form.copy(
+                overrideDate = "2026-06-10",
+                overrideMaxBookingsPerSlot = "0",
+            ),
+        )
+        viewModel.saveCapacityOverride()
+        runCurrent()
+
+        val request = repository.upsertCapacityOverrideRequests.single()
+        assertEquals("2026-06-10", request.date)
+        assertEquals(0, request.maxBookingsPerSlot)
+        assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
+        assertEquals(2, repository.loadCalls)
+    }
+
+    @Test
+    fun clearCapacityOverrideSubmitsDateAndReloads() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.clearCapacityOverride("2026-06-10")
+        runCurrent()
+
+        assertEquals("2026-06-10", repository.clearCapacityOverrideRequests.single().date)
+        assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
+        assertEquals(2, repository.loadCalls)
     }
 }
 
-private class FakeBusinessInfoAdminRepository(
-    var loadResult: AdminBusinessInfoResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
-    var updateResult: AdminBusinessInfoResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
-    private val loadResultDeferred: CompletableDeferred<AdminBusinessInfoResult>? = null,
+private class FakeAvailabilityAdminRepository(
+    var loadResult: AdminAvailabilityResult = AdminAvailabilityResult.Success(adminAvailabilityConfig()),
+    var updateResult: AdminAvailabilityResult = AdminAvailabilityResult.Success(adminAvailabilityConfig()),
+    private val loadResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
-    val updateRequests = mutableListOf<AdminBusinessInfoUpdateRequest>()
+    val updateRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
+    val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
+    val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
 
     override suspend fun syncMyRole(): AdminRoleResult {
         return AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin"))
@@ -208,12 +245,12 @@ private class FakeBusinessInfoAdminRepository(
     }
 
     override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {
-        loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResult
+        return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
     }
 
     override suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult {
-        return AdminAvailabilityResult.Failure(AdminError.Backend("unused"))
+        loadCalls += 1
+        return loadResultDeferred?.await() ?: loadResult
     }
 
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
@@ -227,26 +264,39 @@ private class FakeBusinessInfoAdminRepository(
     override suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult {
-        updateRequests += request
-        return updateResult
+        return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
     }
 
     override suspend fun updateAvailabilityConfiguration(
         request: AdminAvailabilityUpdateRequest,
     ): AdminAvailabilityResult {
-        return AdminAvailabilityResult.Failure(AdminError.Backend("unused"))
+        updateRequests += request
+        return updateResult
     }
 
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
     ): AdminCapacityOverrideMutationResult {
-        return AdminCapacityOverrideMutationResult.Failure(AdminError.Backend("unused"))
+        upsertCapacityOverrideRequests += request
+        return AdminCapacityOverrideMutationResult.Success(
+            AdminCapacityOverrideMutationReceipt(
+                date = request.date,
+                status = "updated",
+                maxBookingsPerSlot = request.maxBookingsPerSlot,
+            ),
+        )
     }
 
     override suspend fun clearCapacityOverride(
         request: AdminCapacityOverrideClearRequest,
     ): AdminCapacityOverrideMutationResult {
-        return AdminCapacityOverrideMutationResult.Failure(AdminError.Backend("unused"))
+        clearCapacityOverrideRequests += request
+        return AdminCapacityOverrideMutationResult.Success(
+            AdminCapacityOverrideMutationReceipt(
+                date = request.date,
+                status = "cleared",
+            ),
+        )
     }
 
     override suspend fun acceptBookingRequest(
@@ -286,25 +336,32 @@ private class FakeBusinessInfoAdminRepository(
     }
 }
 
-private class FakeBusinessInfoAuthRepository(
-    authenticated: Boolean,
-) : AuthRepository {
-    private val mutableSessionState = MutableStateFlow(
-        if (authenticated) businessInfoAuthenticatedSession() else AuthSessionState.Unauthenticated,
+private class FakeAvailabilityAuthRepository(authenticated: Boolean) : AuthRepository {
+    private val authSession = AuthSession(
+        user = AuthUser(
+            uid = "uid-1",
+            email = "admin@example.com",
+            displayName = "Admin",
+            phoneNumber = "",
+        ),
+        idToken = "id-token-1",
+        refreshToken = "refresh-token-1",
+        expiresInSeconds = 3600,
     )
-    override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
+    override val sessionState: MutableStateFlow<AuthSessionState> = MutableStateFlow(
+        if (authenticated) AuthSessionState.Authenticated(authSession) else AuthSessionState.Unauthenticated,
+    )
 
     override suspend fun currentSession(): AuthSession? {
-        return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
+        return (sessionState.value as? AuthSessionState.Authenticated)?.session
     }
 
     override fun signOut() {
-        mutableSessionState.value = AuthSessionState.Unauthenticated
+        sessionState.value = AuthSessionState.Unauthenticated
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
-        mutableSessionState.value = businessInfoAuthenticatedSession()
-        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
+        error("unused")
     }
 
     override suspend fun register(
@@ -313,40 +370,19 @@ private class FakeBusinessInfoAuthRepository(
         phoneNumber: String,
         password: String,
     ): AuthResult {
-        mutableSessionState.value = businessInfoAuthenticatedSession()
-        return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
+        error("unused")
     }
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
-        return AuthActionResult.Success
+        error("unused")
     }
+
 }
 
-private fun businessInfoAuthenticatedSession(): AuthSessionState.Authenticated {
-    return AuthSessionState.Authenticated(
-        AuthSession(
-            user = AuthUser(
-                uid = "uid-1",
-                email = "admin@example.com",
-                displayName = "Admin",
-                phoneNumber = "",
-            ),
-            idToken = "id-token-uid-1",
-            refreshToken = "refresh-token-uid-1",
-            expiresInSeconds = 3600,
-        ),
-    )
-}
-
-private fun adminBusinessInfoConfig(
-    phone: String = "913 005 855",
-): AdminBusinessInfoConfig = AdminBusinessInfoConfig(
-    phone = phone,
-    email = "info@sudsshine.pt",
-    addressLine1 = "Shopping Norte Sul",
-    addressLine2 = "Leiria, Portugal",
-    mapsUri = "https://maps.example.test",
-    whatsappUri = "https://wa.me/351913005855",
+private fun adminAvailabilityConfig(
+    defaultMaxBookingsPerSlot: Int = 2,
+): AdminAvailabilityConfig = AdminAvailabilityConfig(
+    defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot,
     openingHours = listOf(
         AdminBusinessOpeningHours(
             dayLabel = "Segunda a Sexta",
@@ -354,10 +390,10 @@ private fun adminBusinessInfoConfig(
             closed = false,
         ),
     ),
-    socialLinks = listOf(
-        AdminBusinessSocialLink(
-            label = "Instagram",
-            uri = "https://instagram.com/sudsshine",
+    capacityOverrides = listOf(
+        AdminCapacityOverrideItem(
+            date = "2026-06-10",
+            maxBookingsPerSlot = 0,
         ),
     ),
 )

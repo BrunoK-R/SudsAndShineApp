@@ -1,10 +1,15 @@
 package com.sudsmobile.feature.profile
 
+import com.sudsmobile.data.admin.AdminAvailabilityResult
+import com.sudsmobile.data.admin.AdminAvailabilityUpdateRequest
 import com.sudsmobile.data.admin.AdminBookingDecisionRequest
 import com.sudsmobile.data.admin.AdminBookingDecisionResult
 import com.sudsmobile.data.admin.AdminBookingRequestsResult
 import com.sudsmobile.data.admin.AdminBusinessInfoResult
 import com.sudsmobile.data.admin.AdminBusinessInfoUpdateRequest
+import com.sudsmobile.data.admin.AdminCapacityOverrideClearRequest
+import com.sudsmobile.data.admin.AdminCapacityOverrideMutationResult
+import com.sudsmobile.data.admin.AdminCapacityOverrideUpsertRequest
 import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.admin.AdminRole
@@ -264,6 +269,10 @@ private class FakeServiceExtrasAdminRepository(
         return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
     }
 
+    override suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult {
+        return AdminAvailabilityResult.Failure(AdminError.Backend("unused"))
+    }
+
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
         return AdminServiceCatalogResult.Failure(AdminError.Backend("unused"))
     }
@@ -277,6 +286,24 @@ private class FakeServiceExtrasAdminRepository(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult {
         return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun updateAvailabilityConfiguration(
+        request: AdminAvailabilityUpdateRequest,
+    ): AdminAvailabilityResult {
+        return AdminAvailabilityResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun upsertCapacityOverride(
+        request: AdminCapacityOverrideUpsertRequest,
+    ): AdminCapacityOverrideMutationResult {
+        return AdminCapacityOverrideMutationResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun clearCapacityOverride(
+        request: AdminCapacityOverrideClearRequest,
+    ): AdminCapacityOverrideMutationResult {
+        return AdminCapacityOverrideMutationResult.Failure(AdminError.Backend("unused"))
     }
 
     override suspend fun acceptBookingRequest(

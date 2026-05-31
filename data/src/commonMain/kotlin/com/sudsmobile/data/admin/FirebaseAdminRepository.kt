@@ -29,6 +29,13 @@ class FirebaseAdminRepository(
         return api.getBusinessInfoConfiguration(idToken)
     }
 
+    override suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminAvailabilityResult.Failure(unauthenticatedError())
+
+        return api.getAvailabilityConfiguration(idToken)
+    }
+
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminServiceCatalogResult.Failure(unauthenticatedError())
@@ -54,6 +61,45 @@ class FirebaseAdminRepository(
             ?: return AdminBusinessInfoResult.Failure(unauthenticatedError())
 
         return api.updateBusinessInfoConfiguration(normalizedRequest, idToken)
+    }
+
+    override suspend fun updateAvailabilityConfiguration(
+        request: AdminAvailabilityUpdateRequest,
+    ): AdminAvailabilityResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminAvailabilityResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminAvailabilityResult.Failure(unauthenticatedError())
+
+        return api.updateAvailabilityConfiguration(normalizedRequest, idToken)
+    }
+
+    override suspend fun upsertCapacityOverride(
+        request: AdminCapacityOverrideUpsertRequest,
+    ): AdminCapacityOverrideMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminCapacityOverrideMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminCapacityOverrideMutationResult.Failure(unauthenticatedError())
+
+        return api.upsertCapacityOverride(normalizedRequest, idToken)
+    }
+
+    override suspend fun clearCapacityOverride(
+        request: AdminCapacityOverrideClearRequest,
+    ): AdminCapacityOverrideMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminCapacityOverrideMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminCapacityOverrideMutationResult.Failure(unauthenticatedError())
+
+        return api.clearCapacityOverride(normalizedRequest, idToken)
     }
 
     override suspend fun acceptBookingRequest(
@@ -257,6 +303,45 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminAvailabilityUpdateRequest): AdminError.Validation? {
+        return when {
+            request.defaultMaxBookingsPerSlot !in MinAvailabilityCapacity..MaxAvailabilityCapacity ->
+                AdminError.Validation("A capacidade deve estar entre 0 e 20 marcações por horário.")
+            request.openingHours.isEmpty() ->
+                AdminError.Validation("Indique pelo menos um horário.")
+            request.openingHours.size > MaxBusinessOpeningRows ->
+                AdminError.Validation("Indique no máximo 10 horários.")
+            request.openingHours.any { it.dayLabel.isBlank() || it.hoursLabel.isBlank() } ->
+                AdminError.Validation("Preencha o dia e o horário em todas as linhas.")
+            request.openingHours.any {
+                it.dayLabel.length > MaxBusinessHoursLabelLength ||
+                    it.hoursLabel.length > MaxBusinessHoursLabelLength
+            } ->
+                AdminError.Validation("Cada horário deve ter no máximo 80 caracteres.")
+            request.openingHours.any { !it.closed && !it.hoursLabel.hasAvailabilityTimeRange() } ->
+                AdminError.Validation("Cada dia aberto deve ter um intervalo HH:MM válido.")
+            else -> null
+        }
+    }
+
+    private fun validate(request: AdminCapacityOverrideUpsertRequest): AdminError.Validation? {
+        return when {
+            !request.date.isValidDateId() ->
+                AdminError.Validation("Indique uma data válida para a exceção.")
+            request.maxBookingsPerSlot !in MinAvailabilityCapacity..MaxAvailabilityCapacity ->
+                AdminError.Validation("A capacidade da exceção deve estar entre 0 e 20 marcações.")
+            else -> null
+        }
+    }
+
+    private fun validate(request: AdminCapacityOverrideClearRequest): AdminError.Validation? {
+        return when {
+            !request.date.isValidDateId() ->
+                AdminError.Validation("Indique uma data válida para limpar a exceção.")
+            else -> null
+        }
+    }
+
     private fun AdminBookingDecisionRequest.normalized(): AdminBookingDecisionRequest = copy(
         reservationId = reservationId.trim(),
         rejectionReason = rejectionReason.trim().replace(Regex("\\s+"), " "),
@@ -312,6 +397,23 @@ class FirebaseAdminRepository(
             )
         },
     )
+
+    private fun AdminAvailabilityUpdateRequest.normalized(): AdminAvailabilityUpdateRequest = copy(
+        openingHours = openingHours.map {
+            it.copy(
+                dayLabel = it.dayLabel.normalizeAdminText(),
+                hoursLabel = it.hoursLabel.normalizeAdminText(),
+            )
+        },
+    )
+
+    private fun AdminCapacityOverrideUpsertRequest.normalized(): AdminCapacityOverrideUpsertRequest = copy(
+        date = date.trim(),
+    )
+
+    private fun AdminCapacityOverrideClearRequest.normalized(): AdminCapacityOverrideClearRequest = copy(
+        date = date.trim(),
+    )
 }
 
 private const val MaxRejectionReasonLength = 500
@@ -330,7 +432,10 @@ private const val MaxBusinessAddressLength = 160
 private const val MaxBusinessHoursLabelLength = 80
 private const val MaxBusinessOpeningRows = 10
 private const val MaxBusinessSocialLinks = 8
+private const val MinAvailabilityCapacity = 0
+private const val MaxAvailabilityCapacity = 20
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
+private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
 
 private fun unauthenticatedError(): AdminError.Unauthenticated {
     return AdminError.Unauthenticated("Inicie sessão para gerir a área administrativa.")
@@ -353,4 +458,36 @@ private fun String.isValidWebUrl(): Boolean {
     return value.length in 8..1000 &&
         (value.startsWith("https://") || value.startsWith("http://")) &&
         !value.startsWith("javascript:")
+}
+
+private fun String.isValidDateId(): Boolean {
+    val value = trim()
+    if (!Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(value)) return false
+    val year = value.substring(0, 4).toIntOrNull() ?: return false
+    val month = value.substring(5, 7).toIntOrNull() ?: return false
+    val day = value.substring(8, 10).toIntOrNull() ?: return false
+    if (month !in 1..12) return false
+    val maxDay = when (month) {
+        1, 3, 5, 7, 8, 10, 12 -> 31
+        4, 6, 9, 11 -> 30
+        2 -> if (year.isLeapYear()) 29 else 28
+        else -> return false
+    }
+    return day in 1..maxDay
+}
+
+private fun Int.isLeapYear(): Boolean {
+    return this % 4 == 0 && (this % 100 != 0 || this % 400 == 0)
+}
+
+private fun String.hasAvailabilityTimeRange(): Boolean {
+    return AvailabilityTimeRangeRegex.findAll(this).any { match ->
+        val openHour = match.groupValues[1].toIntOrNull() ?: return@any false
+        val openMinute = match.groupValues[2].toIntOrNull() ?: return@any false
+        val closeHour = match.groupValues[3].toIntOrNull() ?: return@any false
+        val closeMinute = match.groupValues[4].toIntOrNull() ?: return@any false
+        val open = openHour * 60 + openMinute
+        val close = closeHour * 60 + closeMinute
+        open in 0 until (24 * 60) && close in 1..(24 * 60) && close > open
+    }
 }

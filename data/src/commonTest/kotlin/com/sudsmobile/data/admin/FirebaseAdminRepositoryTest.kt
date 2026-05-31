@@ -224,6 +224,133 @@ class FirebaseAdminRepositoryTest {
         assertEquals("wax", success.config.extras.single().id)
         assertEquals("id-token-1", api.extrasIdTokens.single())
     }
+
+    @Test
+    fun updateAvailabilityConfigurationNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateAvailabilityConfiguration(
+            AdminAvailabilityUpdateRequest(
+                defaultMaxBookingsPerSlot = 4,
+                openingHours = listOf(
+                    AdminBusinessOpeningHours(
+                        dayLabel = " Segunda   a Sexta ",
+                        hoursLabel = " 09:00 - 13:00, 14:00 - 19:00 ",
+                        closed = false,
+                    ),
+                    AdminBusinessOpeningHours(
+                        dayLabel = " Domingo ",
+                        hoursLabel = " Encerrado ",
+                        closed = true,
+                    ),
+                ),
+            ),
+        )
+
+        val success = assertIs<AdminAvailabilityResult.Success>(result)
+        assertEquals(4, success.config.defaultMaxBookingsPerSlot)
+        assertEquals("id-token-1", api.updateAvailabilityIdTokens.single())
+        assertEquals("Segunda a Sexta", api.updateAvailabilityRequests.single().openingHours.first().dayLabel)
+    }
+
+    @Test
+    fun updateAvailabilityConfigurationReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateAvailabilityConfiguration(
+            AdminAvailabilityUpdateRequest(
+                defaultMaxBookingsPerSlot = 21,
+                openingHours = listOf(
+                    AdminBusinessOpeningHours("Segunda", "09:00 - 19:00", closed = false),
+                ),
+            ),
+        )
+
+        val failure = assertIs<AdminAvailabilityResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.updateAvailabilityRequests.size)
+    }
+
+    @Test
+    fun getAvailabilityConfigurationUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getAvailabilityConfiguration()
+
+        val success = assertIs<AdminAvailabilityResult.Success>(result)
+        assertEquals(2, success.config.defaultMaxBookingsPerSlot)
+        assertEquals("id-token-1", api.availabilityIdTokens.single())
+    }
+
+    @Test
+    fun upsertCapacityOverrideNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertCapacityOverride(
+            AdminCapacityOverrideUpsertRequest(
+                date = " 2026-06-10 ",
+                maxBookingsPerSlot = 0,
+            ),
+        )
+
+        val success = assertIs<AdminCapacityOverrideMutationResult.Success>(result)
+        assertEquals("2026-06-10", success.receipt.date)
+        assertEquals("id-token-1", api.upsertCapacityOverrideIdTokens.single())
+        assertEquals("2026-06-10", api.upsertCapacityOverrideRequests.single().date)
+    }
+
+    @Test
+    fun upsertCapacityOverrideReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertCapacityOverride(
+            AdminCapacityOverrideUpsertRequest(
+                date = "2026-02-31",
+                maxBookingsPerSlot = 2,
+            ),
+        )
+
+        val failure = assertIs<AdminCapacityOverrideMutationResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.upsertCapacityOverrideRequests.size)
+    }
+
+    @Test
+    fun clearCapacityOverrideRequiresAuthenticatedSession() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = false),
+        )
+
+        val result = repository.clearCapacityOverride(
+            AdminCapacityOverrideClearRequest(date = "2026-06-10"),
+        )
+
+        val failure = assertIs<AdminCapacityOverrideMutationResult.Failure>(result)
+        assertIs<AdminError.Unauthenticated>(failure.error)
+        assertEquals(0, api.clearCapacityOverrideRequests.size)
+    }
 }
 
 private class FakeAdminFunctionsApi : AdminFunctionsApi {
@@ -237,6 +364,13 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val upsertExtraIdTokens = mutableListOf<String>()
     val archiveExtraRequests = mutableListOf<AdminServiceExtraArchiveRequest>()
     val archiveExtraIdTokens = mutableListOf<String>()
+    val availabilityIdTokens = mutableListOf<String>()
+    val updateAvailabilityRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
+    val updateAvailabilityIdTokens = mutableListOf<String>()
+    val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
+    val upsertCapacityOverrideIdTokens = mutableListOf<String>()
+    val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
+    val clearCapacityOverrideIdTokens = mutableListOf<String>()
 
     override suspend fun syncMyRole(idToken: String): AdminRoleResult {
         return AdminRoleResult.Failure(AdminError.Backend("unused"))
@@ -264,11 +398,76 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
     }
 
+    override suspend fun getAvailabilityConfiguration(idToken: String): AdminAvailabilityResult {
+        availabilityIdTokens += idToken
+        return AdminAvailabilityResult.Success(
+            AdminAvailabilityConfig(
+                defaultMaxBookingsPerSlot = 2,
+                openingHours = listOf(
+                    AdminBusinessOpeningHours(
+                        dayLabel = "Segunda a Sexta",
+                        hoursLabel = "09:00 - 19:00",
+                        closed = false,
+                    ),
+                ),
+                capacityOverrides = listOf(
+                    AdminCapacityOverrideItem(
+                        date = "2026-06-10",
+                        maxBookingsPerSlot = 0,
+                    ),
+                ),
+            ),
+        )
+    }
+
     override suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
         idToken: String,
     ): AdminBusinessInfoResult {
         return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun updateAvailabilityConfiguration(
+        request: AdminAvailabilityUpdateRequest,
+        idToken: String,
+    ): AdminAvailabilityResult {
+        updateAvailabilityRequests += request
+        updateAvailabilityIdTokens += idToken
+        return AdminAvailabilityResult.Success(
+            AdminAvailabilityConfig(
+                defaultMaxBookingsPerSlot = request.defaultMaxBookingsPerSlot,
+                openingHours = request.openingHours,
+            ),
+        )
+    }
+
+    override suspend fun upsertCapacityOverride(
+        request: AdminCapacityOverrideUpsertRequest,
+        idToken: String,
+    ): AdminCapacityOverrideMutationResult {
+        upsertCapacityOverrideRequests += request
+        upsertCapacityOverrideIdTokens += idToken
+        return AdminCapacityOverrideMutationResult.Success(
+            AdminCapacityOverrideMutationReceipt(
+                date = request.date,
+                status = "updated",
+                maxBookingsPerSlot = request.maxBookingsPerSlot,
+            ),
+        )
+    }
+
+    override suspend fun clearCapacityOverride(
+        request: AdminCapacityOverrideClearRequest,
+        idToken: String,
+    ): AdminCapacityOverrideMutationResult {
+        clearCapacityOverrideRequests += request
+        clearCapacityOverrideIdTokens += idToken
+        return AdminCapacityOverrideMutationResult.Success(
+            AdminCapacityOverrideMutationReceipt(
+                date = request.date,
+                status = "cleared",
+            ),
+        )
     }
 
     override suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult {

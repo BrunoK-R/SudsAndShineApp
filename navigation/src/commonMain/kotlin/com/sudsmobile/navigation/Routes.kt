@@ -14,6 +14,7 @@ object Routes {
     const val PaymentReservation = "payment/{$PaymentReservationIdArg}"
     const val Profile = "profile"
     const val AdminBookings = "admin_bookings"
+    const val AdminAvailability = "admin_availability"
     const val AdminBusinessInfo = "admin_business_info"
     const val AdminServiceCatalog = "admin_service_catalog"
     const val AdminServiceExtras = "admin_service_extras"

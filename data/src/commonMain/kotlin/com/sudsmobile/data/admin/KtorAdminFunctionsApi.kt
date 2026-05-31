@@ -108,6 +108,30 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getAvailabilityConfiguration(idToken: String): AdminAvailabilityResult {
+        return try {
+            val response = httpClient.post(config.getAdminAvailabilityConfigurationUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableAvailabilityResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminAvailabilityResult.Failure(error.toAdminError())
+                body.result != null -> AdminAvailabilityResult.Success(body.result.toAdminAvailabilityConfig())
+                else -> AdminAvailabilityResult.Failure(
+                    AdminError.Backend("A resposta da disponibilidade veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminAvailabilityResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar a disponibilidade. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult {
         return try {
             val response = httpClient.post(config.getAdminServiceCatalogUrl) {
@@ -182,6 +206,53 @@ class KtorAdminFunctionsApi(
             )
         }
     }
+
+    override suspend fun updateAvailabilityConfiguration(
+        request: AdminAvailabilityUpdateRequest,
+        idToken: String,
+    ): AdminAvailabilityResult {
+        return try {
+            val response = httpClient.post(config.updateAvailabilityConfigurationUrl) {
+                callableHeaders(idToken)
+                setBody(CallableAvailabilityUpdateRequest(AvailabilityPayload.from(request)))
+            }
+            val body = response.body<CallableAvailabilityResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminAvailabilityResult.Failure(error.toAdminError())
+                body.result != null -> AdminAvailabilityResult.Success(body.result.toAdminAvailabilityConfig())
+                else -> AdminAvailabilityResult.Failure(
+                    AdminError.Backend("A resposta da disponibilidade veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminAvailabilityResult.Failure(
+                AdminError.Unavailable("Não foi possível guardar a disponibilidade. Tente novamente."),
+            )
+        }
+    }
+
+    override suspend fun upsertCapacityOverride(
+        request: AdminCapacityOverrideUpsertRequest,
+        idToken: String,
+    ): AdminCapacityOverrideMutationResult = postCapacityOverrideMutation(
+        url = config.upsertCapacityOverrideUrl,
+        payload = CapacityOverrideUpsertPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível guardar a exceção de capacidade. Tente novamente.",
+    )
+
+    override suspend fun clearCapacityOverride(
+        request: AdminCapacityOverrideClearRequest,
+        idToken: String,
+    ): AdminCapacityOverrideMutationResult = postCapacityOverrideMutation(
+        url = config.clearCapacityOverrideUrl,
+        payload = CapacityOverrideClearPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível limpar a exceção de capacidade. Tente novamente.",
+    )
 
     override suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
@@ -277,6 +348,33 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    private suspend fun postCapacityOverrideMutation(
+        url: String,
+        payload: CapacityOverridePayload,
+        idToken: String,
+        unavailableMessage: String,
+    ): AdminCapacityOverrideMutationResult {
+        return try {
+            val response = httpClient.post(url) {
+                callableHeaders(idToken)
+                setBody(CallableCapacityOverrideMutationRequest(payload))
+            }
+            val body = response.body<CallableCapacityOverrideMutationResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminCapacityOverrideMutationResult.Failure(error.toAdminError())
+                body.result != null -> AdminCapacityOverrideMutationResult.Success(body.result.toReceipt())
+                else -> AdminCapacityOverrideMutationResult.Failure(
+                    AdminError.Backend("A resposta da capacidade veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminCapacityOverrideMutationResult.Failure(AdminError.Unavailable(unavailableMessage))
+        }
+    }
+
     private suspend fun postServiceExtraMutation(
         url: String,
         payload: ServiceExtraMutationPayload,
@@ -326,6 +424,16 @@ private data class CallableBusinessInfoUpdateRequest(
 )
 
 @Serializable
+private data class CallableAvailabilityUpdateRequest(
+    val data: AvailabilityPayload,
+)
+
+@Serializable
+private data class CallableCapacityOverrideMutationRequest(
+    val data: CapacityOverridePayload,
+)
+
+@Serializable
 private data class CallableServiceCatalogMutationRequest(
     val data: ServiceCatalogMutationPayload,
 )
@@ -370,6 +478,48 @@ private data class BusinessInfoPayload(
             openingHours = request.openingHours.map { BusinessOpeningHoursPayload.from(it) },
             socialLinks = request.socialLinks.map { BusinessSocialLinkPayload.from(it) },
         )
+    }
+}
+
+@Serializable
+private data class AvailabilityPayload(
+    val defaultMaxBookingsPerSlot: Int,
+    val openingHours: List<BusinessOpeningHoursPayload>,
+) {
+    companion object {
+        fun from(request: AdminAvailabilityUpdateRequest): AvailabilityPayload = AvailabilityPayload(
+            defaultMaxBookingsPerSlot = request.defaultMaxBookingsPerSlot,
+            openingHours = request.openingHours.map { BusinessOpeningHoursPayload.from(it) },
+        )
+    }
+}
+
+@Serializable
+private sealed interface CapacityOverridePayload
+
+@Serializable
+private data class CapacityOverrideUpsertPayload(
+    val date: String,
+    val maxBookingsPerSlot: Int,
+) : CapacityOverridePayload {
+    companion object {
+        fun from(request: AdminCapacityOverrideUpsertRequest): CapacityOverrideUpsertPayload {
+            return CapacityOverrideUpsertPayload(
+                date = request.date,
+                maxBookingsPerSlot = request.maxBookingsPerSlot,
+            )
+        }
+    }
+}
+
+@Serializable
+private data class CapacityOverrideClearPayload(
+    val date: String,
+) : CapacityOverridePayload {
+    companion object {
+        fun from(request: AdminCapacityOverrideClearRequest): CapacityOverrideClearPayload {
+            return CapacityOverrideClearPayload(date = request.date)
+        }
     }
 }
 
@@ -523,6 +673,18 @@ private data class CallableBusinessInfoResponse(
 )
 
 @Serializable
+private data class CallableAvailabilityResponse(
+    val result: AvailabilityResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableCapacityOverrideMutationResponse(
+    val result: CapacityOverrideMutationResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class CallableServiceCatalogMutationResponse(
     val result: ServiceCatalogMutationResultPayload? = null,
     val error: CallableError? = null,
@@ -662,6 +824,19 @@ private data class ServiceExtraMutationResultPayload(
 }
 
 @Serializable
+private data class CapacityOverrideMutationResultPayload(
+    val date: String,
+    val status: String = "",
+    val maxBookingsPerSlot: Int? = null,
+) {
+    fun toReceipt(): AdminCapacityOverrideMutationReceipt = AdminCapacityOverrideMutationReceipt(
+        date = date.trim(),
+        status = status.trim(),
+        maxBookingsPerSlot = maxBookingsPerSlot?.coerceIn(0, 20),
+    )
+}
+
+@Serializable
 private data class AdminServiceCatalogPayload(
     val services: List<AdminServiceCatalogItemPayload> = emptyList(),
 ) {
@@ -752,6 +927,30 @@ private data class BusinessInfoResultPayload(
         whatsappUri = whatsappUri.trim(),
         openingHours = openingHours.map { it.toAdminOpeningHours() },
         socialLinks = socialLinks.map { it.toAdminSocialLink() },
+    )
+}
+
+@Serializable
+private data class AvailabilityResultPayload(
+    val defaultMaxBookingsPerSlot: Int = 2,
+    val openingHours: List<BusinessOpeningHoursPayload> = emptyList(),
+    val capacityOverrides: List<CapacityOverrideItemPayload> = emptyList(),
+) {
+    fun toAdminAvailabilityConfig(): AdminAvailabilityConfig = AdminAvailabilityConfig(
+        defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot.coerceIn(0, 20),
+        openingHours = openingHours.map { it.toAdminOpeningHours() },
+        capacityOverrides = capacityOverrides.map { it.toAdminCapacityOverrideItem() },
+    )
+}
+
+@Serializable
+private data class CapacityOverrideItemPayload(
+    val date: String,
+    val maxBookingsPerSlot: Int = 0,
+) {
+    fun toAdminCapacityOverrideItem(): AdminCapacityOverrideItem = AdminCapacityOverrideItem(
+        date = date.trim(),
+        maxBookingsPerSlot = maxBookingsPerSlot.coerceIn(0, 20),
     )
 }
 

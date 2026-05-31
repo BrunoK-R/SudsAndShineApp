@@ -67,6 +67,9 @@ data class FirebaseFunctionsConfig(
     val getAdminBusinessInfoUrl: String
         get() = functionUrl("getAdminBusinessInfo")
 
+    val getAdminAvailabilityConfigurationUrl: String
+        get() = functionUrl("getAdminAvailabilityConfiguration")
+
     val getAdminServiceCatalogUrl: String
         get() = functionUrl("getAdminServiceCatalog")
 
@@ -75,6 +78,15 @@ data class FirebaseFunctionsConfig(
 
     val updateBusinessInfoUrl: String
         get() = functionUrl("updateBusinessInfo")
+
+    val updateAvailabilityConfigurationUrl: String
+        get() = functionUrl("updateAvailabilityConfiguration")
+
+    val upsertCapacityOverrideUrl: String
+        get() = functionUrl("upsertCapacityOverride")
+
+    val clearCapacityOverrideUrl: String
+        get() = functionUrl("clearCapacityOverride")
 
     val upsertServiceCatalogItemUrl: String
         get() = functionUrl("upsertServiceCatalogItem")

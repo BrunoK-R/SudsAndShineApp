@@ -15,6 +15,8 @@ interface AdminFunctionsApi {
 
     suspend fun getBusinessInfoConfiguration(idToken: String): AdminBusinessInfoResult
 
+    suspend fun getAvailabilityConfiguration(idToken: String): AdminAvailabilityResult
+
     suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult
 
     suspend fun getServiceExtrasConfiguration(idToken: String): AdminServiceExtrasResult
@@ -23,6 +25,21 @@ interface AdminFunctionsApi {
         request: AdminBusinessInfoUpdateRequest,
         idToken: String,
     ): AdminBusinessInfoResult
+
+    suspend fun updateAvailabilityConfiguration(
+        request: AdminAvailabilityUpdateRequest,
+        idToken: String,
+    ): AdminAvailabilityResult
+
+    suspend fun upsertCapacityOverride(
+        request: AdminCapacityOverrideUpsertRequest,
+        idToken: String,
+    ): AdminCapacityOverrideMutationResult
+
+    suspend fun clearCapacityOverride(
+        request: AdminCapacityOverrideClearRequest,
+        idToken: String,
+    ): AdminCapacityOverrideMutationResult
 
     suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
