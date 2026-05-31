@@ -43,6 +43,7 @@ data class ProductExtraUi(
     val priceCents: Int,
     val price: String,
     val icon: ImageVector,
+    val eligibleServiceIds: List<String> = emptyList(),
 )
 
 sealed interface ProductCatalogUiState {
@@ -119,6 +120,7 @@ private fun ServiceCatalogExtra.toUiModelOrNull(): ProductExtraUi? {
         priceCents = priceCents.coerceAtLeast(0),
         price = priceCents.coerceAtLeast(0).toEuroLabel(),
         icon = iconKey.toServiceIcon(),
+        eligibleServiceIds = eligibleServiceIds,
     )
 }
 

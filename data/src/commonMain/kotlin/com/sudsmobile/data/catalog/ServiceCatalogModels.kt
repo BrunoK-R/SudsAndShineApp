@@ -22,6 +22,7 @@ data class ServiceCatalogExtra(
     val description: String,
     val priceCents: Int,
     val iconKey: String,
+    val eligibleServiceIds: List<String> = emptyList(),
 )
 
 sealed interface ServiceCatalogResult {

@@ -258,7 +258,8 @@ private fun ProductsScreenContent(
     val loadedServices = (catalogState as? ProductCatalogUiState.Loaded)?.services.orEmpty()
     val loadedExtras = (catalogState as? ProductCatalogUiState.Loaded)?.extras.orEmpty()
     val selectedService = loadedServices.firstOrNull { it.id == selectedServiceId }
-    val selectedExtras = loadedExtras.filter { extra -> extra.id in selectedExtraIds }
+    val eligibleExtras = loadedExtras.filter { extra -> extra.isEligibleFor(selectedServiceId) }
+    val selectedExtras = eligibleExtras.filter { extra -> extra.id in selectedExtraIds }
     val savedVehicles = (vehiclesState as? BookingVehiclesUiState.Loaded)?.vehicles.orEmpty()
     val vehicleOptions = savedVehicles + bookingVehicleCategories
     val selectedVehicle = vehicleOptions.firstOrNull { it.id == selectedVehicleId }
@@ -357,7 +358,7 @@ private fun ProductsScreenContent(
         }
     }
 
-    LaunchedEffect(catalogState) {
+    LaunchedEffect(catalogState, selectedServiceId) {
         if (catalogState is ProductCatalogUiState.Loaded &&
             selectedServiceId != null &&
             catalogState.services.none { it.id == selectedServiceId }
@@ -367,7 +368,10 @@ private fun ProductsScreenContent(
             selectedTime = null
         }
         if (catalogState is ProductCatalogUiState.Loaded) {
-            val availableExtraIds = catalogState.extras.map { it.id }.toSet()
+            val availableExtraIds = catalogState.extras
+                .filter { it.isEligibleFor(selectedServiceId) }
+                .map { it.id }
+                .toSet()
             val validSelectedExtraIds = selectedExtraIds.filter { it in availableExtraIds }
             if (validSelectedExtraIds.size != selectedExtraIds.size) {
                 selectedExtraIds = validSelectedExtraIds
@@ -3206,7 +3210,7 @@ private fun BookingServiceStepContent(
                 )
             }
             BookingExtrasSelectionSection(
-                extras = catalogState.extras,
+                extras = catalogState.extras.filter { it.isEligibleFor(selectedServiceId) },
                 selectedExtraIds = selectedExtraIds,
                 onExtraToggled = onExtraToggled,
             )
@@ -3897,6 +3901,10 @@ private fun String?.normalizedInitialServiceId(): String? = this
 
 private fun ProductServiceUi.priceCentsForVehicle(vehicleType: String?): Int {
     return if (vehicleType == "suv") suvPriceCents else passengerPriceCents
+}
+
+private fun ProductExtraUi.isEligibleFor(serviceId: String?): Boolean {
+    return eligibleServiceIds.isEmpty() || serviceId in eligibleServiceIds
 }
 
 private fun List<ProductExtraUi>.countLabel(): String {

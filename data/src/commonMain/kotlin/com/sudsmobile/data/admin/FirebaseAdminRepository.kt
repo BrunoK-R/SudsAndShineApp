@@ -36,6 +36,13 @@ class FirebaseAdminRepository(
         return api.getServiceCatalogConfiguration(idToken)
     }
 
+    override suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminServiceExtrasResult.Failure(unauthenticatedError())
+
+        return api.getServiceExtrasConfiguration(idToken)
+    }
+
     override suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult {
@@ -111,6 +118,32 @@ class FirebaseAdminRepository(
         return api.archiveServiceCatalogItem(normalizedRequest, idToken)
     }
 
+    override suspend fun upsertServiceExtra(
+        request: AdminServiceExtraMutationRequest,
+    ): AdminServiceExtraMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminServiceExtraMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminServiceExtraMutationResult.Failure(unauthenticatedError())
+
+        return api.upsertServiceExtra(normalizedRequest, idToken)
+    }
+
+    override suspend fun archiveServiceExtra(
+        request: AdminServiceExtraArchiveRequest,
+    ): AdminServiceExtraMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminServiceExtraMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminServiceExtraMutationResult.Failure(unauthenticatedError())
+
+        return api.archiveServiceExtra(normalizedRequest, idToken)
+    }
+
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken
 
     private fun validate(request: AdminBookingDecisionRequest): AdminError.Validation? {
@@ -152,6 +185,38 @@ class FirebaseAdminRepository(
         return when {
             request.serviceId.isBlank() || !request.serviceId.isValidCatalogId() ->
                 AdminError.Validation("O identificador do serviço é inválido.")
+            else -> null
+        }
+    }
+
+    private fun validate(request: AdminServiceExtraMutationRequest): AdminError.Validation? {
+        return when {
+            request.extraId.isNotBlank() && !request.extraId.isValidCatalogId() ->
+                AdminError.Validation("O identificador do extra é inválido.")
+            request.name.isBlank() ->
+                AdminError.Validation("Indique o nome do extra.")
+            request.name.length > MaxServiceNameLength ->
+                AdminError.Validation("O nome do extra deve ter no máximo 120 caracteres.")
+            request.description.length > MaxServiceDescriptionLength ->
+                AdminError.Validation("A descrição do extra deve ter no máximo 1000 caracteres.")
+            request.priceCents !in MinServicePriceCents..MaxServicePriceCents ->
+                AdminError.Validation("O preço deve estar entre 0,00 € e 1000,00 €.")
+            request.iconKey.length > MaxServiceIconKeyLength ->
+                AdminError.Validation("O ícone deve ter no máximo 40 caracteres.")
+            request.eligibleServiceIds.size > MaxEligibleServiceLinks ->
+                AdminError.Validation("Indique no máximo 40 serviços elegíveis.")
+            request.eligibleServiceIds.any { !it.isValidCatalogId() } ->
+                AdminError.Validation("Um dos serviços elegíveis é inválido.")
+            request.sortOrder !in MinServiceSortOrder..MaxServiceSortOrder ->
+                AdminError.Validation("A ordenação deve estar entre 0 e 9999.")
+            else -> null
+        }
+    }
+
+    private fun validate(request: AdminServiceExtraArchiveRequest): AdminError.Validation? {
+        return when {
+            request.extraId.isBlank() || !request.extraId.isValidCatalogId() ->
+                AdminError.Validation("O identificador do extra é inválido.")
             else -> null
         }
     }
@@ -208,6 +273,25 @@ class FirebaseAdminRepository(
         serviceId = serviceId.trim(),
     )
 
+    private fun AdminServiceExtraMutationRequest.normalized(): AdminServiceExtraMutationRequest {
+        val seen = mutableSetOf<String>()
+        val normalizedEligibleServiceIds = eligibleServiceIds
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .filter { seen.add(it) }
+        return copy(
+            extraId = extraId.trim(),
+            name = name.normalizeAdminText(),
+            description = description.normalizeAdminText(),
+            iconKey = iconKey.trim().ifBlank { "auto_awesome" },
+            eligibleServiceIds = normalizedEligibleServiceIds,
+        )
+    }
+
+    private fun AdminServiceExtraArchiveRequest.normalized(): AdminServiceExtraArchiveRequest = copy(
+        extraId = extraId.trim(),
+    )
+
     private fun AdminBusinessInfoUpdateRequest.normalized(): AdminBusinessInfoUpdateRequest = copy(
         phone = phone.normalizeAdminText(),
         email = email.trim().lowercase(),
@@ -238,6 +322,7 @@ private const val MaxServiceDurationMinutes = 480
 private const val MinServicePriceCents = 0
 private const val MaxServicePriceCents = 100000
 private const val MaxServiceIconKeyLength = 40
+private const val MaxEligibleServiceLinks = 40
 private const val MinServiceSortOrder = 0
 private const val MaxServiceSortOrder = 9999
 private const val MaxBusinessPhoneLength = 60

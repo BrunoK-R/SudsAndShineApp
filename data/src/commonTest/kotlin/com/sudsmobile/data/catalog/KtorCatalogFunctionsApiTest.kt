@@ -42,7 +42,8 @@ class KtorCatalogFunctionsApiTest {
                         "name": "Enceramento",
                         "description": "Proteção extra",
                         "priceCents": 1500,
-                        "iconKey": "shield"
+                        "iconKey": "shield",
+                        "eligibleServiceIds": ["premium", "basic", "premium"]
                       }
                     ]
                   }
@@ -69,6 +70,7 @@ class KtorCatalogFunctionsApiTest {
         assertEquals("Proteção extra", extra.description)
         assertEquals(1500, extra.priceCents)
         assertEquals("shield", extra.iconKey)
+        assertEquals(listOf("premium", "basic"), extra.eligibleServiceIds)
     }
 
     @Test

@@ -40,6 +40,7 @@ import com.sudsmobile.feature.payment.PaymentScreen
 import com.sudsmobile.feature.profile.AdminBusinessInfoScreen
 import com.sudsmobile.feature.profile.AdminBookingsScreen
 import com.sudsmobile.feature.profile.AdminServiceCatalogScreen
+import com.sudsmobile.feature.profile.AdminServiceExtrasScreen
 import com.sudsmobile.feature.profile.ContactScreen
 import com.sudsmobile.feature.profile.HistoryScreen
 import com.sudsmobile.feature.profile.PersonalDataScreen
@@ -196,6 +197,7 @@ fun MainNavigation(
                     onOpenAdminBookings = { navController.navigate(Routes.AdminBookings) },
                     onOpenAdminBusinessInfo = { navController.navigate(Routes.AdminBusinessInfo) },
                     onOpenAdminServiceCatalog = { navController.navigate(Routes.AdminServiceCatalog) },
+                    onOpenAdminServiceExtras = { navController.navigate(Routes.AdminServiceExtras) },
                 )
             }
             composable(Routes.AdminBookings) {
@@ -214,6 +216,13 @@ fun MainNavigation(
             }
             composable(Routes.AdminServiceCatalog) {
                 AdminServiceCatalogScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
+                )
+            }
+            composable(Routes.AdminServiceExtras) {
+                AdminServiceExtrasScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,

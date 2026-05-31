@@ -259,6 +259,51 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminServiceExtrasConfiguration() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "extras": [
+                      {
+                        "id": "wax",
+                        "name": "Enceramento",
+                        "description": "Proteção extra",
+                        "priceCents": 1500,
+                        "iconKey": "shield",
+                        "eligibleServiceIds": ["premium", "standard"],
+                        "active": false,
+                        "sortOrder": 30
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getServiceExtrasConfiguration("id-token-1")
+
+        val success = assertIs<AdminServiceExtrasResult.Success>(result)
+        val extra = success.config.extras.single()
+        assertEquals("/test-project/europe-west1/getAdminServiceExtras", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("wax", extra.id)
+        assertEquals("Enceramento", extra.name)
+        assertEquals(1500, extra.priceCents)
+        assertEquals(listOf("premium", "standard"), extra.eligibleServiceIds)
+        assertEquals(false, extra.active)
+        assertEquals(30, extra.sortOrder)
+    }
+
+    @Test
     fun postsRejectDecisionWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null
@@ -394,6 +439,81 @@ class KtorAdminFunctionsApiTest {
 
         val failure = assertIs<AdminServiceCatalogMutationResult.Failure>(result)
         assertEquals("/test-project/europe-west1/archiveServiceCatalogItem", requestedPath)
+        assertIs<AdminError.NotFound>(failure.error)
+        assertEquals("O item selecionado já não existe.", failure.error.message)
+    }
+
+    @Test
+    fun postsServiceExtraUpsertWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "extraId": "wax",
+                    "status": "active",
+                    "created": false
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.upsertServiceExtra(
+            AdminServiceExtraMutationRequest(
+                extraId = "wax",
+                name = "Enceramento",
+                description = "Proteção extra",
+                priceCents = 1500,
+                iconKey = "shield",
+                eligibleServiceIds = listOf("premium"),
+                active = true,
+                sortOrder = 30,
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminServiceExtraMutationResult.Success>(result)
+        assertEquals("/test-project/europe-west1/upsertServiceExtra", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("wax", success.receipt.extraId)
+        assertEquals("active", success.receipt.status)
+        assertEquals(false, success.receipt.created)
+    }
+
+    @Test
+    fun mapsServiceExtraArchiveNotFound() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "NOT_FOUND",
+                    "message": "Service extra not found"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.archiveServiceExtra(
+            AdminServiceExtraArchiveRequest(extraId = "wax"),
+            idToken = "id-token-1",
+        )
+
+        val failure = assertIs<AdminServiceExtraMutationResult.Failure>(result)
+        assertEquals("/test-project/europe-west1/archiveServiceExtra", requestedPath)
         assertIs<AdminError.NotFound>(failure.error)
         assertEquals("O item selecionado já não existe.", failure.error.message)
     }

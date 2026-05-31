@@ -82,6 +82,7 @@ private enum class ProfileMenuAction {
     AdminBookings,
     AdminBusinessInfo,
     AdminServiceCatalog,
+    AdminServiceExtras,
     PersonalData,
     Vehicles,
     Loyalty,
@@ -105,6 +106,12 @@ private val adminServiceCatalogMenuItem = ProfileMenuItem(
     icon = Icons.Filled.Build,
     label = "Catálogo de serviços",
     action = ProfileMenuAction.AdminServiceCatalog,
+)
+
+private val adminServiceExtrasMenuItem = ProfileMenuItem(
+    icon = Icons.Filled.Build,
+    label = "Extras de serviço",
+    action = ProfileMenuAction.AdminServiceExtras,
 )
 
 private val menuItems = listOf(
@@ -149,6 +156,7 @@ fun ProfileScreen(
     onOpenAdminBookings: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
+    onOpenAdminServiceExtras: () -> Unit = {},
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
     val adminAccessViewModel: AdminAccessViewModel = koinViewModel()
@@ -197,6 +205,7 @@ fun ProfileScreen(
         onOpenAdminBookings = onOpenAdminBookings,
         onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
         onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
+        onOpenAdminServiceExtras = onOpenAdminServiceExtras,
     )
 }
 
@@ -224,6 +233,7 @@ private fun ProfileScreenContent(
     onOpenAdminBookings: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
+    onOpenAdminServiceExtras: () -> Unit = {},
 ) {
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
     val isRestoringSession = sessionState == AuthSessionState.Restoring
@@ -272,6 +282,7 @@ private fun ProfileScreenContent(
                     onOpenAdminBookings = onOpenAdminBookings,
                     onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
                     onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
+                    onOpenAdminServiceExtras = onOpenAdminServiceExtras,
                 )
                 PreferencesCard(
                     preferencesState = preferencesState,
@@ -987,9 +998,15 @@ private fun ProfileMenuCard(
     onOpenAdminBookings: () -> Unit,
     onOpenAdminBusinessInfo: () -> Unit,
     onOpenAdminServiceCatalog: () -> Unit,
+    onOpenAdminServiceExtras: () -> Unit,
 ) {
     val visibleItems = if (showAdminBookings) {
-        listOf(adminMenuItem, adminBusinessInfoMenuItem, adminServiceCatalogMenuItem) + menuItems
+        listOf(
+            adminMenuItem,
+            adminBusinessInfoMenuItem,
+            adminServiceCatalogMenuItem,
+            adminServiceExtrasMenuItem,
+        ) + menuItems
     } else {
         menuItems
     }
@@ -1010,6 +1027,7 @@ private fun ProfileMenuCard(
                             ProfileMenuAction.AdminBookings -> onOpenAdminBookings()
                             ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
                             ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
+                            ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()
                             ProfileMenuAction.PersonalData -> onOpenPersonalData()
                             ProfileMenuAction.Vehicles -> onManageVehicles()
                             ProfileMenuAction.Loyalty -> onOpenRewards()

@@ -74,12 +74,48 @@ data class AdminServiceCatalogConfig(
     val services: List<AdminServiceCatalogItem>,
 )
 
+data class AdminServiceExtraMutationRequest(
+    val extraId: String = "",
+    val name: String,
+    val description: String = "",
+    val priceCents: Int,
+    val iconKey: String = "auto_awesome",
+    val eligibleServiceIds: List<String> = emptyList(),
+    val active: Boolean = true,
+    val sortOrder: Int = 999,
+)
+
+data class AdminServiceExtraItem(
+    val id: String,
+    val name: String,
+    val description: String,
+    val priceCents: Int,
+    val iconKey: String,
+    val eligibleServiceIds: List<String>,
+    val active: Boolean,
+    val sortOrder: Int,
+)
+
+data class AdminServiceExtrasConfig(
+    val extras: List<AdminServiceExtraItem>,
+)
+
 data class AdminServiceCatalogArchiveRequest(
     val serviceId: String,
 )
 
+data class AdminServiceExtraArchiveRequest(
+    val extraId: String,
+)
+
 data class AdminServiceCatalogMutationReceipt(
     val serviceId: String,
+    val status: String,
+    val created: Boolean = false,
+)
+
+data class AdminServiceExtraMutationReceipt(
+    val extraId: String,
     val status: String,
     val created: Boolean = false,
 )
@@ -142,6 +178,16 @@ sealed interface AdminServiceCatalogResult {
     data class Failure(val error: AdminError) : AdminServiceCatalogResult
 }
 
+sealed interface AdminServiceExtrasResult {
+    data class Success(val config: AdminServiceExtrasConfig) : AdminServiceExtrasResult
+    data class Failure(val error: AdminError) : AdminServiceExtrasResult
+}
+
+sealed interface AdminServiceExtraMutationResult {
+    data class Success(val receipt: AdminServiceExtraMutationReceipt) : AdminServiceExtraMutationResult
+    data class Failure(val error: AdminError) : AdminServiceExtraMutationResult
+}
+
 sealed interface AdminBusinessInfoResult {
     data class Success(val config: AdminBusinessInfoConfig) : AdminBusinessInfoResult
     data class Failure(val error: AdminError) : AdminBusinessInfoResult
@@ -164,6 +210,7 @@ interface AdminRepository {
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
     suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
     suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult
+    suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult
     suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult
@@ -177,4 +224,12 @@ interface AdminRepository {
     suspend fun archiveServiceCatalogItem(
         request: AdminServiceCatalogArchiveRequest,
     ): AdminServiceCatalogMutationResult
+
+    suspend fun upsertServiceExtra(
+        request: AdminServiceExtraMutationRequest,
+    ): AdminServiceExtraMutationResult
+
+    suspend fun archiveServiceExtra(
+        request: AdminServiceExtraArchiveRequest,
+    ): AdminServiceExtraMutationResult
 }

@@ -94,6 +94,7 @@ private data class GetServiceCatalogExtra(
     val description: String = "",
     val priceCents: Int,
     val iconKey: String = "auto_awesome",
+    val eligibleServiceIds: List<String> = emptyList(),
 ) {
     fun toExtra(): ServiceCatalogExtra = ServiceCatalogExtra(
         id = id,
@@ -101,6 +102,10 @@ private data class GetServiceCatalogExtra(
         description = description,
         priceCents = priceCents.coerceAtLeast(0),
         iconKey = iconKey.ifBlank { "auto_awesome" },
+        eligibleServiceIds = eligibleServiceIds
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct(),
     )
 }
 

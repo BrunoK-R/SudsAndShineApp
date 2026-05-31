@@ -132,6 +132,30 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getServiceExtrasConfiguration(idToken: String): AdminServiceExtrasResult {
+        return try {
+            val response = httpClient.post(config.getAdminServiceExtrasUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableAdminServiceExtrasResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminServiceExtrasResult.Failure(error.toAdminError())
+                body.result != null -> AdminServiceExtrasResult.Success(body.result.toAdminServiceExtrasConfig())
+                else -> AdminServiceExtrasResult.Failure(
+                    AdminError.Backend("A resposta dos extras veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminServiceExtrasResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar a configuração dos extras. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
         idToken: String,
@@ -177,6 +201,26 @@ class KtorAdminFunctionsApi(
         payload = ServiceCatalogArchivePayload.from(request),
         idToken = idToken,
         unavailableMessage = "Não foi possível arquivar o serviço. Tente novamente.",
+    )
+
+    override suspend fun upsertServiceExtra(
+        request: AdminServiceExtraMutationRequest,
+        idToken: String,
+    ): AdminServiceExtraMutationResult = postServiceExtraMutation(
+        url = config.upsertServiceExtraUrl,
+        payload = ServiceExtraUpsertPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível guardar o extra. Tente novamente.",
+    )
+
+    override suspend fun archiveServiceExtra(
+        request: AdminServiceExtraArchiveRequest,
+        idToken: String,
+    ): AdminServiceExtraMutationResult = postServiceExtraMutation(
+        url = config.archiveServiceExtraUrl,
+        payload = ServiceExtraArchivePayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível arquivar o extra. Tente novamente.",
     )
 
     private suspend fun postDecision(
@@ -233,6 +277,33 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    private suspend fun postServiceExtraMutation(
+        url: String,
+        payload: ServiceExtraMutationPayload,
+        idToken: String,
+        unavailableMessage: String,
+    ): AdminServiceExtraMutationResult {
+        return try {
+            val response = httpClient.post(url) {
+                callableHeaders(idToken)
+                setBody(CallableServiceExtraMutationRequest(payload))
+            }
+            val body = response.body<CallableServiceExtraMutationResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminServiceExtraMutationResult.Failure(error.toAdminError())
+                body.result != null -> AdminServiceExtraMutationResult.Success(body.result.toReceipt())
+                else -> AdminServiceExtraMutationResult.Failure(
+                    AdminError.Backend("A resposta dos extras veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminServiceExtraMutationResult.Failure(AdminError.Unavailable(unavailableMessage))
+        }
+    }
+
     private fun io.ktor.client.request.HttpRequestBuilder.callableHeaders(idToken: String) {
         header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
         header(HttpHeaders.Authorization, "Bearer $idToken")
@@ -257,6 +328,11 @@ private data class CallableBusinessInfoUpdateRequest(
 @Serializable
 private data class CallableServiceCatalogMutationRequest(
     val data: ServiceCatalogMutationPayload,
+)
+
+@Serializable
+private data class CallableServiceExtraMutationRequest(
+    val data: ServiceExtraMutationPayload,
 )
 
 @Serializable
@@ -382,6 +458,47 @@ private data class ServiceCatalogArchivePayload(
 }
 
 @Serializable
+private sealed interface ServiceExtraMutationPayload
+
+@Serializable
+private data class ServiceExtraUpsertPayload(
+    val extraId: String = "",
+    val name: String,
+    val description: String = "",
+    val priceCents: Int,
+    val iconKey: String = "auto_awesome",
+    val eligibleServiceIds: List<String> = emptyList(),
+    val active: Boolean = true,
+    val sortOrder: Int = 999,
+) : ServiceExtraMutationPayload {
+    companion object {
+        fun from(request: AdminServiceExtraMutationRequest): ServiceExtraUpsertPayload {
+            return ServiceExtraUpsertPayload(
+                extraId = request.extraId,
+                name = request.name,
+                description = request.description,
+                priceCents = request.priceCents,
+                iconKey = request.iconKey,
+                eligibleServiceIds = request.eligibleServiceIds,
+                active = request.active,
+                sortOrder = request.sortOrder,
+            )
+        }
+    }
+}
+
+@Serializable
+private data class ServiceExtraArchivePayload(
+    val extraId: String,
+) : ServiceExtraMutationPayload {
+    companion object {
+        fun from(request: AdminServiceExtraArchiveRequest): ServiceExtraArchivePayload {
+            return ServiceExtraArchivePayload(extraId = request.extraId)
+        }
+    }
+}
+
+@Serializable
 private data class CallableRoleResponse(
     val result: RolePayload? = null,
     val error: CallableError? = null,
@@ -412,8 +529,20 @@ private data class CallableServiceCatalogMutationResponse(
 )
 
 @Serializable
+private data class CallableServiceExtraMutationResponse(
+    val result: ServiceExtraMutationResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class CallableAdminServiceCatalogResponse(
     val result: AdminServiceCatalogPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableAdminServiceExtrasResponse(
+    val result: AdminServiceExtrasPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -520,11 +649,33 @@ private data class ServiceCatalogMutationResultPayload(
 }
 
 @Serializable
+private data class ServiceExtraMutationResultPayload(
+    val extraId: String,
+    val status: String = "",
+    val created: Boolean = false,
+) {
+    fun toReceipt(): AdminServiceExtraMutationReceipt = AdminServiceExtraMutationReceipt(
+        extraId = extraId,
+        status = status,
+        created = created,
+    )
+}
+
+@Serializable
 private data class AdminServiceCatalogPayload(
     val services: List<AdminServiceCatalogItemPayload> = emptyList(),
 ) {
     fun toAdminServiceCatalogConfig(): AdminServiceCatalogConfig = AdminServiceCatalogConfig(
         services = services.map { it.toAdminServiceCatalogItem() },
+    )
+}
+
+@Serializable
+private data class AdminServiceExtrasPayload(
+    val extras: List<AdminServiceExtraItemPayload> = emptyList(),
+) {
+    fun toAdminServiceExtrasConfig(): AdminServiceExtrasConfig = AdminServiceExtrasConfig(
+        extras = extras.map { it.toAdminServiceExtraItem() },
     )
 }
 
@@ -550,6 +701,32 @@ private data class AdminServiceCatalogItemPayload(
         suvPriceCents = suvPriceCents.coerceIn(0, 100000),
         iconKey = iconKey.trim().ifBlank { "car" },
         popular = popular,
+        active = active,
+        sortOrder = sortOrder.coerceIn(0, 9999),
+    )
+}
+
+@Serializable
+private data class AdminServiceExtraItemPayload(
+    val id: String,
+    val name: String,
+    val description: String = "",
+    val priceCents: Int = 0,
+    val iconKey: String = "auto_awesome",
+    val eligibleServiceIds: List<String> = emptyList(),
+    val active: Boolean = true,
+    val sortOrder: Int = 999,
+) {
+    fun toAdminServiceExtraItem(): AdminServiceExtraItem = AdminServiceExtraItem(
+        id = id.trim(),
+        name = name.trim(),
+        description = description.trim(),
+        priceCents = priceCents.coerceIn(0, 100000),
+        iconKey = iconKey.trim().ifBlank { "auto_awesome" },
+        eligibleServiceIds = eligibleServiceIds
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct(),
         active = active,
         sortOrder = sortOrder.coerceIn(0, 9999),
     )

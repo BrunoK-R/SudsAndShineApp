@@ -70,6 +70,9 @@ data class FirebaseFunctionsConfig(
     val getAdminServiceCatalogUrl: String
         get() = functionUrl("getAdminServiceCatalog")
 
+    val getAdminServiceExtrasUrl: String
+        get() = functionUrl("getAdminServiceExtras")
+
     val updateBusinessInfoUrl: String
         get() = functionUrl("updateBusinessInfo")
 
@@ -78,6 +81,12 @@ data class FirebaseFunctionsConfig(
 
     val archiveServiceCatalogItemUrl: String
         get() = functionUrl("archiveServiceCatalogItem")
+
+    val upsertServiceExtraUrl: String
+        get() = functionUrl("upsertServiceExtra")
+
+    val archiveServiceExtraUrl: String
+        get() = functionUrl("archiveServiceExtra")
 
     val getMyVehiclesUrl: String
         get() = functionUrl("getMyVehicles")

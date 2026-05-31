@@ -15,6 +15,10 @@ import com.sudsmobile.data.admin.AdminServiceCatalogArchiveRequest
 import com.sudsmobile.data.admin.AdminServiceCatalogMutationRequest
 import com.sudsmobile.data.admin.AdminServiceCatalogMutationResult
 import com.sudsmobile.data.admin.AdminServiceCatalogResult
+import com.sudsmobile.data.admin.AdminServiceExtraArchiveRequest
+import com.sudsmobile.data.admin.AdminServiceExtraMutationRequest
+import com.sudsmobile.data.admin.AdminServiceExtraMutationResult
+import com.sudsmobile.data.admin.AdminServiceExtrasResult
 import com.sudsmobile.data.auth.AuthActionResult
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
@@ -289,6 +293,10 @@ private class FakeAdminRepository(
         return AdminServiceCatalogResult.Failure(AdminError.Backend("unused"))
     }
 
+    override suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult {
+        return AdminServiceExtrasResult.Failure(AdminError.Backend("unused"))
+    }
+
     override suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult {
@@ -305,6 +313,18 @@ private class FakeAdminRepository(
         request: AdminServiceCatalogArchiveRequest,
     ): AdminServiceCatalogMutationResult {
         return AdminServiceCatalogMutationResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun upsertServiceExtra(
+        request: AdminServiceExtraMutationRequest,
+    ): AdminServiceExtraMutationResult {
+        return AdminServiceExtraMutationResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun archiveServiceExtra(
+        request: AdminServiceExtraArchiveRequest,
+    ): AdminServiceExtraMutationResult {
+        return AdminServiceExtraMutationResult.Failure(AdminError.Backend("unused"))
     }
 }
 

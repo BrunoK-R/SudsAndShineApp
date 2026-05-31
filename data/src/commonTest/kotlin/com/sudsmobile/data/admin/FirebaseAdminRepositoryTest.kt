@@ -138,6 +138,92 @@ class FirebaseAdminRepositoryTest {
         assertEquals("premium", success.config.services.single().id)
         assertEquals("id-token-1", api.catalogIdTokens.single())
     }
+
+    @Test
+    fun upsertServiceExtraNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertServiceExtra(
+            AdminServiceExtraMutationRequest(
+                extraId = " wax ",
+                name = " Enceramento   Premium ",
+                description = " Proteção   extra ",
+                priceCents = 1500,
+                iconKey = "",
+                eligibleServiceIds = listOf(" premium ", "standard", "premium"),
+                active = true,
+                sortOrder = 30,
+            ),
+        )
+
+        val success = assertIs<AdminServiceExtraMutationResult.Success>(result)
+        assertEquals("wax", success.receipt.extraId)
+        assertEquals("id-token-1", api.upsertExtraIdTokens.single())
+        val request = api.upsertExtraRequests.single()
+        assertEquals("wax", request.extraId)
+        assertEquals("Enceramento Premium", request.name)
+        assertEquals("Proteção extra", request.description)
+        assertEquals("auto_awesome", request.iconKey)
+        assertEquals(listOf("premium", "standard"), request.eligibleServiceIds)
+    }
+
+    @Test
+    fun upsertServiceExtraReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertServiceExtra(
+            AdminServiceExtraMutationRequest(
+                extraId = "service_extras/wax",
+                name = "Wax",
+                priceCents = 1500,
+            ),
+        )
+
+        val failure = assertIs<AdminServiceExtraMutationResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.upsertExtraRequests.size)
+    }
+
+    @Test
+    fun archiveServiceExtraNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.archiveServiceExtra(
+            AdminServiceExtraArchiveRequest(extraId = " wax "),
+        )
+
+        val success = assertIs<AdminServiceExtraMutationResult.Success>(result)
+        assertEquals("wax", success.receipt.extraId)
+        assertEquals("id-token-1", api.archiveExtraIdTokens.single())
+        assertEquals("wax", api.archiveExtraRequests.single().extraId)
+    }
+
+    @Test
+    fun getServiceExtrasConfigurationUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getServiceExtrasConfiguration()
+
+        val success = assertIs<AdminServiceExtrasResult.Success>(result)
+        assertEquals("wax", success.config.extras.single().id)
+        assertEquals("id-token-1", api.extrasIdTokens.single())
+    }
 }
 
 private class FakeAdminFunctionsApi : AdminFunctionsApi {
@@ -146,6 +232,11 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val archiveRequests = mutableListOf<AdminServiceCatalogArchiveRequest>()
     val archiveIdTokens = mutableListOf<String>()
     val catalogIdTokens = mutableListOf<String>()
+    val extrasIdTokens = mutableListOf<String>()
+    val upsertExtraRequests = mutableListOf<AdminServiceExtraMutationRequest>()
+    val upsertExtraIdTokens = mutableListOf<String>()
+    val archiveExtraRequests = mutableListOf<AdminServiceExtraArchiveRequest>()
+    val archiveExtraIdTokens = mutableListOf<String>()
 
     override suspend fun syncMyRole(idToken: String): AdminRoleResult {
         return AdminRoleResult.Failure(AdminError.Backend("unused"))
@@ -202,6 +293,26 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         )
     }
 
+    override suspend fun getServiceExtrasConfiguration(idToken: String): AdminServiceExtrasResult {
+        extrasIdTokens += idToken
+        return AdminServiceExtrasResult.Success(
+            AdminServiceExtrasConfig(
+                extras = listOf(
+                    AdminServiceExtraItem(
+                        id = "wax",
+                        name = "Enceramento",
+                        description = "Proteção",
+                        priceCents = 1500,
+                        iconKey = "shield",
+                        eligibleServiceIds = listOf("premium"),
+                        active = true,
+                        sortOrder = 30,
+                    ),
+                ),
+            ),
+        )
+    }
+
     override suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
         idToken: String,
@@ -216,6 +327,20 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         )
     }
 
+    override suspend fun upsertServiceExtra(
+        request: AdminServiceExtraMutationRequest,
+        idToken: String,
+    ): AdminServiceExtraMutationResult {
+        upsertExtraRequests += request
+        upsertExtraIdTokens += idToken
+        return AdminServiceExtraMutationResult.Success(
+            AdminServiceExtraMutationReceipt(
+                extraId = request.extraId.ifBlank { "generated-extra" },
+                status = if (request.active) "active" else "inactive",
+            ),
+        )
+    }
+
     override suspend fun archiveServiceCatalogItem(
         request: AdminServiceCatalogArchiveRequest,
         idToken: String,
@@ -225,6 +350,20 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         return AdminServiceCatalogMutationResult.Success(
             AdminServiceCatalogMutationReceipt(
                 serviceId = request.serviceId,
+                status = "archived",
+            ),
+        )
+    }
+
+    override suspend fun archiveServiceExtra(
+        request: AdminServiceExtraArchiveRequest,
+        idToken: String,
+    ): AdminServiceExtraMutationResult {
+        archiveExtraRequests += request
+        archiveExtraIdTokens += idToken
+        return AdminServiceExtraMutationResult.Success(
+            AdminServiceExtraMutationReceipt(
+                extraId = request.extraId,
                 status = "archived",
             ),
         )

@@ -17,6 +17,8 @@ interface AdminFunctionsApi {
 
     suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult
 
+    suspend fun getServiceExtrasConfiguration(idToken: String): AdminServiceExtrasResult
+
     suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
         idToken: String,
@@ -31,4 +33,14 @@ interface AdminFunctionsApi {
         request: AdminServiceCatalogArchiveRequest,
         idToken: String,
     ): AdminServiceCatalogMutationResult
+
+    suspend fun upsertServiceExtra(
+        request: AdminServiceExtraMutationRequest,
+        idToken: String,
+    ): AdminServiceExtraMutationResult
+
+    suspend fun archiveServiceExtra(
+        request: AdminServiceExtraArchiveRequest,
+        idToken: String,
+    ): AdminServiceExtraMutationResult
 }
