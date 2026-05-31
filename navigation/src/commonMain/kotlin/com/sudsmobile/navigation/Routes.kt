@@ -15,6 +15,7 @@ object Routes {
     const val Profile = "profile"
     const val AdminBookings = "admin_bookings"
     const val AdminAvailability = "admin_availability"
+    const val AdminBookingPolicy = "admin_booking_policy"
     const val AdminBusinessInfo = "admin_business_info"
     const val AdminServiceCatalog = "admin_service_catalog"
     const val AdminServiceExtras = "admin_service_extras"

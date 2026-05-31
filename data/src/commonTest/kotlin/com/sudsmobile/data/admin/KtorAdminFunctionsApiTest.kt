@@ -253,6 +253,75 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminBookingPolicyConfiguration() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "pendingHoldMinutes": 240,
+                    "cancellationWindowMinutes": 120,
+                    "rescheduleWindowMinutes": 60,
+                    "paymentEligibilityCopy": "Pagamento no local"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getBookingPolicyConfiguration("id-token-1")
+
+        val success = assertIs<AdminBookingPolicyResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getAdminBookingPolicy", requestedPath)
+        assertEquals(240, success.config.pendingHoldMinutes)
+        assertEquals(120, success.config.cancellationWindowMinutes)
+        assertEquals("Pagamento no local", success.config.paymentEligibilityCopy)
+    }
+
+    @Test
+    fun postsBookingPolicyUpdateWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "pendingHoldMinutes": 240,
+                    "cancellationWindowMinutes": 120,
+                    "rescheduleWindowMinutes": 60,
+                    "paymentEligibilityCopy": "Pagamento no local"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.updateBookingPolicyConfiguration(
+            AdminBookingPolicyUpdateRequest(
+                pendingHoldMinutes = 240,
+                cancellationWindowMinutes = 120,
+                rescheduleWindowMinutes = 60,
+                paymentEligibilityCopy = "Pagamento no local",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminBookingPolicyResult.Success>(result)
+        assertEquals("/test-project/europe-west1/updateBookingPolicy", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals(60, success.config.rescheduleWindowMinutes)
+    }
+
+    @Test
     fun postsAvailabilityUpdateWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

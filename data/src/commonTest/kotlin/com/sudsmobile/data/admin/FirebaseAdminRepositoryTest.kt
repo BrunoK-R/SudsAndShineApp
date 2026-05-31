@@ -295,6 +295,66 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun getBookingPolicyConfigurationUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getBookingPolicyConfiguration()
+
+        val success = assertIs<AdminBookingPolicyResult.Success>(result)
+        assertEquals(1440, success.config.pendingHoldMinutes)
+        assertEquals("id-token-1", api.bookingPolicyIdTokens.single())
+    }
+
+    @Test
+    fun updateBookingPolicyConfigurationNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateBookingPolicyConfiguration(
+            AdminBookingPolicyUpdateRequest(
+                pendingHoldMinutes = 240,
+                cancellationWindowMinutes = 120,
+                rescheduleWindowMinutes = 60,
+                paymentEligibilityCopy = "  Pagamento   no local  ",
+            ),
+        )
+
+        val success = assertIs<AdminBookingPolicyResult.Success>(result)
+        assertEquals(240, success.config.pendingHoldMinutes)
+        assertEquals("id-token-1", api.updateBookingPolicyIdTokens.single())
+        assertEquals("Pagamento no local", api.updateBookingPolicyRequests.single().paymentEligibilityCopy)
+    }
+
+    @Test
+    fun updateBookingPolicyConfigurationReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateBookingPolicyConfiguration(
+            AdminBookingPolicyUpdateRequest(
+                pendingHoldMinutes = 5,
+                cancellationWindowMinutes = 120,
+                rescheduleWindowMinutes = 60,
+                paymentEligibilityCopy = "Pagamento no local",
+            ),
+        )
+
+        val failure = assertIs<AdminBookingPolicyResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.updateBookingPolicyRequests.size)
+    }
+
+    @Test
     fun upsertCapacityOverrideNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -365,8 +425,11 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val archiveExtraRequests = mutableListOf<AdminServiceExtraArchiveRequest>()
     val archiveExtraIdTokens = mutableListOf<String>()
     val availabilityIdTokens = mutableListOf<String>()
+    val bookingPolicyIdTokens = mutableListOf<String>()
     val updateAvailabilityRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
     val updateAvailabilityIdTokens = mutableListOf<String>()
+    val updateBookingPolicyRequests = mutableListOf<AdminBookingPolicyUpdateRequest>()
+    val updateBookingPolicyIdTokens = mutableListOf<String>()
     val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
     val upsertCapacityOverrideIdTokens = mutableListOf<String>()
     val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
@@ -425,6 +488,34 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         idToken: String,
     ): AdminBusinessInfoResult {
         return AdminBusinessInfoResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun getBookingPolicyConfiguration(idToken: String): AdminBookingPolicyResult {
+        bookingPolicyIdTokens += idToken
+        return AdminBookingPolicyResult.Success(
+            AdminBookingPolicyConfig(
+                pendingHoldMinutes = 1440,
+                cancellationWindowMinutes = 0,
+                rescheduleWindowMinutes = 0,
+                paymentEligibilityCopy = "Pagamento no local",
+            ),
+        )
+    }
+
+    override suspend fun updateBookingPolicyConfiguration(
+        request: AdminBookingPolicyUpdateRequest,
+        idToken: String,
+    ): AdminBookingPolicyResult {
+        updateBookingPolicyRequests += request
+        updateBookingPolicyIdTokens += idToken
+        return AdminBookingPolicyResult.Success(
+            AdminBookingPolicyConfig(
+                pendingHoldMinutes = request.pendingHoldMinutes,
+                cancellationWindowMinutes = request.cancellationWindowMinutes,
+                rescheduleWindowMinutes = request.rescheduleWindowMinutes,
+                paymentEligibilityCopy = request.paymentEligibilityCopy,
+            ),
+        )
     }
 
     override suspend fun updateAvailabilityConfiguration(

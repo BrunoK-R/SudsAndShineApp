@@ -38,6 +38,7 @@ import com.sudsmobile.feature.cart.RatingScreen
 import com.sudsmobile.feature.home.HomeScreen
 import com.sudsmobile.feature.payment.PaymentScreen
 import com.sudsmobile.feature.profile.AdminAvailabilityScreen
+import com.sudsmobile.feature.profile.AdminBookingPolicyScreen
 import com.sudsmobile.feature.profile.AdminBusinessInfoScreen
 import com.sudsmobile.feature.profile.AdminBookingsScreen
 import com.sudsmobile.feature.profile.AdminServiceCatalogScreen
@@ -197,6 +198,7 @@ fun MainNavigation(
                     onOpenRewards = { navController.navigate(Routes.Loyalty) },
                     onOpenAdminBookings = { navController.navigate(Routes.AdminBookings) },
                     onOpenAdminAvailability = { navController.navigate(Routes.AdminAvailability) },
+                    onOpenAdminBookingPolicy = { navController.navigate(Routes.AdminBookingPolicy) },
                     onOpenAdminBusinessInfo = { navController.navigate(Routes.AdminBusinessInfo) },
                     onOpenAdminServiceCatalog = { navController.navigate(Routes.AdminServiceCatalog) },
                     onOpenAdminServiceExtras = { navController.navigate(Routes.AdminServiceExtras) },
@@ -211,6 +213,13 @@ fun MainNavigation(
             }
             composable(Routes.AdminAvailability) {
                 AdminAvailabilityScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
+                )
+            }
+            composable(Routes.AdminBookingPolicy) {
+                AdminBookingPolicyScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,

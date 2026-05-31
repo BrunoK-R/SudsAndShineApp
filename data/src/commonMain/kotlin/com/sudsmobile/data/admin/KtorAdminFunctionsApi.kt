@@ -132,6 +132,30 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getBookingPolicyConfiguration(idToken: String): AdminBookingPolicyResult {
+        return try {
+            val response = httpClient.post(config.getAdminBookingPolicyUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableBookingPolicyResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminBookingPolicyResult.Failure(error.toAdminError())
+                body.result != null -> AdminBookingPolicyResult.Success(body.result.toAdminBookingPolicyConfig())
+                else -> AdminBookingPolicyResult.Failure(
+                    AdminError.Backend("A resposta da política veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminBookingPolicyResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar a política de marcações. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult {
         return try {
             val response = httpClient.post(config.getAdminServiceCatalogUrl) {
@@ -230,6 +254,33 @@ class KtorAdminFunctionsApi(
         } catch (cause: Throwable) {
             AdminAvailabilityResult.Failure(
                 AdminError.Unavailable("Não foi possível guardar a disponibilidade. Tente novamente."),
+            )
+        }
+    }
+
+    override suspend fun updateBookingPolicyConfiguration(
+        request: AdminBookingPolicyUpdateRequest,
+        idToken: String,
+    ): AdminBookingPolicyResult {
+        return try {
+            val response = httpClient.post(config.updateBookingPolicyUrl) {
+                callableHeaders(idToken)
+                setBody(CallableBookingPolicyUpdateRequest(BookingPolicyPayload.from(request)))
+            }
+            val body = response.body<CallableBookingPolicyResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminBookingPolicyResult.Failure(error.toAdminError())
+                body.result != null -> AdminBookingPolicyResult.Success(body.result.toAdminBookingPolicyConfig())
+                else -> AdminBookingPolicyResult.Failure(
+                    AdminError.Backend("A resposta da política veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminBookingPolicyResult.Failure(
+                AdminError.Unavailable("Não foi possível guardar a política de marcações. Tente novamente."),
             )
         }
     }
@@ -429,6 +480,11 @@ private data class CallableAvailabilityUpdateRequest(
 )
 
 @Serializable
+private data class CallableBookingPolicyUpdateRequest(
+    val data: BookingPolicyPayload,
+)
+
+@Serializable
 private data class CallableCapacityOverrideMutationRequest(
     val data: CapacityOverridePayload,
 )
@@ -490,6 +546,23 @@ private data class AvailabilityPayload(
         fun from(request: AdminAvailabilityUpdateRequest): AvailabilityPayload = AvailabilityPayload(
             defaultMaxBookingsPerSlot = request.defaultMaxBookingsPerSlot,
             openingHours = request.openingHours.map { BusinessOpeningHoursPayload.from(it) },
+        )
+    }
+}
+
+@Serializable
+private data class BookingPolicyPayload(
+    val pendingHoldMinutes: Int,
+    val cancellationWindowMinutes: Int,
+    val rescheduleWindowMinutes: Int,
+    val paymentEligibilityCopy: String,
+) {
+    companion object {
+        fun from(request: AdminBookingPolicyUpdateRequest): BookingPolicyPayload = BookingPolicyPayload(
+            pendingHoldMinutes = request.pendingHoldMinutes,
+            cancellationWindowMinutes = request.cancellationWindowMinutes,
+            rescheduleWindowMinutes = request.rescheduleWindowMinutes,
+            paymentEligibilityCopy = request.paymentEligibilityCopy,
         )
     }
 }
@@ -675,6 +748,12 @@ private data class CallableBusinessInfoResponse(
 @Serializable
 private data class CallableAvailabilityResponse(
     val result: AvailabilityResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableBookingPolicyResponse(
+    val result: BookingPolicyResultPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -940,6 +1019,23 @@ private data class AvailabilityResultPayload(
         defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot.coerceIn(0, 20),
         openingHours = openingHours.map { it.toAdminOpeningHours() },
         capacityOverrides = capacityOverrides.map { it.toAdminCapacityOverrideItem() },
+    )
+}
+
+@Serializable
+private data class BookingPolicyResultPayload(
+    val pendingHoldMinutes: Int = 1440,
+    val cancellationWindowMinutes: Int = 0,
+    val rescheduleWindowMinutes: Int = 0,
+    val paymentEligibilityCopy: String = "",
+) {
+    fun toAdminBookingPolicyConfig(): AdminBookingPolicyConfig = AdminBookingPolicyConfig(
+        pendingHoldMinutes = pendingHoldMinutes.coerceIn(15, 10080),
+        cancellationWindowMinutes = cancellationWindowMinutes.coerceIn(0, 10080),
+        rescheduleWindowMinutes = rescheduleWindowMinutes.coerceIn(0, 10080),
+        paymentEligibilityCopy = paymentEligibilityCopy.trim().ifBlank {
+            "Pagamento confirmado no local após validação da marcação."
+        },
     )
 }
 

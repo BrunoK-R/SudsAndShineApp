@@ -36,6 +36,13 @@ class FirebaseAdminRepository(
         return api.getAvailabilityConfiguration(idToken)
     }
 
+    override suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBookingPolicyResult.Failure(unauthenticatedError())
+
+        return api.getBookingPolicyConfiguration(idToken)
+    }
+
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminServiceCatalogResult.Failure(unauthenticatedError())
@@ -74,6 +81,19 @@ class FirebaseAdminRepository(
             ?: return AdminAvailabilityResult.Failure(unauthenticatedError())
 
         return api.updateAvailabilityConfiguration(normalizedRequest, idToken)
+    }
+
+    override suspend fun updateBookingPolicyConfiguration(
+        request: AdminBookingPolicyUpdateRequest,
+    ): AdminBookingPolicyResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminBookingPolicyResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBookingPolicyResult.Failure(unauthenticatedError())
+
+        return api.updateBookingPolicyConfiguration(normalizedRequest, idToken)
     }
 
     override suspend fun upsertCapacityOverride(
@@ -342,6 +362,22 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminBookingPolicyUpdateRequest): AdminError.Validation? {
+        return when {
+            request.pendingHoldMinutes !in MinPendingHoldMinutes..MaxPolicyWindowMinutes ->
+                AdminError.Validation("A reserva pendente deve ficar ativa entre 15 minutos e 7 dias.")
+            request.cancellationWindowMinutes !in MinPolicyWindowMinutes..MaxPolicyWindowMinutes ->
+                AdminError.Validation("A antecedência de cancelamento deve estar entre 0 minutos e 7 dias.")
+            request.rescheduleWindowMinutes !in MinPolicyWindowMinutes..MaxPolicyWindowMinutes ->
+                AdminError.Validation("A antecedência de remarcação deve estar entre 0 minutos e 7 dias.")
+            request.paymentEligibilityCopy.isBlank() ->
+                AdminError.Validation("Indique a mensagem de pagamento.")
+            request.paymentEligibilityCopy.length > MaxPaymentEligibilityCopyLength ->
+                AdminError.Validation("A mensagem de pagamento deve ter no máximo 500 caracteres.")
+            else -> null
+        }
+    }
+
     private fun AdminBookingDecisionRequest.normalized(): AdminBookingDecisionRequest = copy(
         reservationId = reservationId.trim(),
         rejectionReason = rejectionReason.trim().replace(Regex("\\s+"), " "),
@@ -414,6 +450,10 @@ class FirebaseAdminRepository(
     private fun AdminCapacityOverrideClearRequest.normalized(): AdminCapacityOverrideClearRequest = copy(
         date = date.trim(),
     )
+
+    private fun AdminBookingPolicyUpdateRequest.normalized(): AdminBookingPolicyUpdateRequest = copy(
+        paymentEligibilityCopy = paymentEligibilityCopy.normalizeAdminText(),
+    )
 }
 
 private const val MaxRejectionReasonLength = 500
@@ -434,6 +474,10 @@ private const val MaxBusinessOpeningRows = 10
 private const val MaxBusinessSocialLinks = 8
 private const val MinAvailabilityCapacity = 0
 private const val MaxAvailabilityCapacity = 20
+private const val MinPendingHoldMinutes = 15
+private const val MinPolicyWindowMinutes = 0
+private const val MaxPolicyWindowMinutes = 7 * 24 * 60
+private const val MaxPaymentEligibilityCopyLength = 500
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
 

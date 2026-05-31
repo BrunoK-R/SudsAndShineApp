@@ -17,6 +17,9 @@ interface AdminFunctionsApi {
 
     suspend fun getAvailabilityConfiguration(idToken: String): AdminAvailabilityResult
 
+    suspend fun getBookingPolicyConfiguration(idToken: String): AdminBookingPolicyResult =
+        AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
+
     suspend fun getServiceCatalogConfiguration(idToken: String): AdminServiceCatalogResult
 
     suspend fun getServiceExtrasConfiguration(idToken: String): AdminServiceExtrasResult
@@ -30,6 +33,12 @@ interface AdminFunctionsApi {
         request: AdminAvailabilityUpdateRequest,
         idToken: String,
     ): AdminAvailabilityResult
+
+    suspend fun updateBookingPolicyConfiguration(
+        request: AdminBookingPolicyUpdateRequest,
+        idToken: String,
+    ): AdminBookingPolicyResult =
+        AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
 
     suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,

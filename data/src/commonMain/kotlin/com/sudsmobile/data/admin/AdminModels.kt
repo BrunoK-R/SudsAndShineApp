@@ -148,9 +148,23 @@ data class AdminAvailabilityConfig(
     val capacityOverrides: List<AdminCapacityOverrideItem> = emptyList(),
 )
 
+data class AdminBookingPolicyConfig(
+    val pendingHoldMinutes: Int,
+    val cancellationWindowMinutes: Int,
+    val rescheduleWindowMinutes: Int,
+    val paymentEligibilityCopy: String,
+)
+
 data class AdminAvailabilityUpdateRequest(
     val defaultMaxBookingsPerSlot: Int,
     val openingHours: List<AdminBusinessOpeningHours>,
+)
+
+data class AdminBookingPolicyUpdateRequest(
+    val pendingHoldMinutes: Int,
+    val cancellationWindowMinutes: Int,
+    val rescheduleWindowMinutes: Int,
+    val paymentEligibilityCopy: String,
 )
 
 data class AdminCapacityOverrideItem(
@@ -229,6 +243,11 @@ sealed interface AdminAvailabilityResult {
     data class Failure(val error: AdminError) : AdminAvailabilityResult
 }
 
+sealed interface AdminBookingPolicyResult {
+    data class Success(val config: AdminBookingPolicyConfig) : AdminBookingPolicyResult
+    data class Failure(val error: AdminError) : AdminBookingPolicyResult
+}
+
 sealed interface AdminCapacityOverrideMutationResult {
     data class Success(val receipt: AdminCapacityOverrideMutationReceipt) : AdminCapacityOverrideMutationResult
     data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
@@ -251,11 +270,18 @@ interface AdminRepository {
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
     suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
     suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult
+    suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult =
+        AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
     suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult
     suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult
     suspend fun updateBusinessInfoConfiguration(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult
+
+    suspend fun updateBookingPolicyConfiguration(
+        request: AdminBookingPolicyUpdateRequest,
+    ): AdminBookingPolicyResult =
+        AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
 
     suspend fun updateAvailabilityConfiguration(
         request: AdminAvailabilityUpdateRequest,
