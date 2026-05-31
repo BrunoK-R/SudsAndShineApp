@@ -22,6 +22,8 @@ data class BookingCreateRequest(
 data class BookingReceipt(
     val reservationId: String,
     val reservationCode: String,
+    val status: String = "",
+    val pendingExpiresAtIso: String? = null,
     val loyaltyRewardApplied: Boolean = false,
     val loyaltyRewardCode: String? = null,
     val priceCents: Int? = null,
@@ -97,6 +99,10 @@ data class BookingHistoryReservation(
     val createdAtIso: String = "",
     val updatedAtIso: String = "",
     val cancelledAtIso: String? = null,
+    val rejectedAtIso: String? = null,
+    val rejectionReason: String = "",
+    val acceptedAtIso: String? = null,
+    val pendingExpiresAtIso: String? = null,
     val rescheduledAtIso: String? = null,
     val previousSlotStartIso: String? = null,
     val previousSlotEndIso: String? = null,
@@ -109,6 +115,8 @@ enum class BookingReservationStatus {
     InProgress,
     Completed,
     Cancelled,
+    Rejected,
+    Expired,
     Unknown,
 }
 
@@ -376,6 +384,8 @@ fun String.toBookingReservationStatus(): BookingReservationStatus {
         "in_progress", "em_execucao", "em_execução" -> BookingReservationStatus.InProgress
         "completed", "complete", "done", "concluido", "concluído" -> BookingReservationStatus.Completed
         "cancelled", "canceled", "cancelado" -> BookingReservationStatus.Cancelled
+        "rejected", "rejeitado" -> BookingReservationStatus.Rejected
+        "expired", "expirado" -> BookingReservationStatus.Expired
         else -> BookingReservationStatus.Unknown
     }
 }
@@ -406,7 +416,7 @@ fun BookingHistoryReservation.bookingPaymentStatus(): BookingPaymentStatus {
 
 fun BookingHistoryReservation.requiresPayment(): Boolean {
     return upcoming &&
-        !isCancelledReservation() &&
+        bookingReservationStatus() !in nonPayableReservationStatuses &&
         (priceCents ?: 0) > 0 &&
         bookingPaymentStatus() in payableBookingPaymentStatuses
 }
@@ -416,8 +426,9 @@ fun BookingHistoryReservation.isCancelledReservation(): Boolean {
 }
 
 fun BookingHistoryReservation.isCompletedReservation(): Boolean {
-    return bookingReservationStatus() == BookingReservationStatus.Completed ||
-        (!upcoming && !isCancelledReservation())
+    val status = bookingReservationStatus()
+    return status == BookingReservationStatus.Completed ||
+        (!upcoming && status !in nonCompletedClosedReservationStatuses)
 }
 
 fun BookingHistoryReservation.isReviewableReservation(): Boolean {
@@ -431,6 +442,19 @@ fun BookingHistoryReservation.isCancelableReservation(): Boolean {
 private val cancelableReservationStatuses = setOf(
     BookingReservationStatus.Pending,
     BookingReservationStatus.Confirmed,
+)
+
+private val nonCompletedClosedReservationStatuses = setOf(
+    BookingReservationStatus.Cancelled,
+    BookingReservationStatus.Rejected,
+    BookingReservationStatus.Expired,
+)
+
+private val nonPayableReservationStatuses = setOf(
+    BookingReservationStatus.Pending,
+    BookingReservationStatus.Cancelled,
+    BookingReservationStatus.Rejected,
+    BookingReservationStatus.Expired,
 )
 
 private val payableBookingPaymentStatuses = setOf(

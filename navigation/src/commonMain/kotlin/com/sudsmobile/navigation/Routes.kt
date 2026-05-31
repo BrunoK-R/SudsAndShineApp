@@ -13,6 +13,7 @@ object Routes {
     const val PaymentReservationIdArg = "reservationId"
     const val PaymentReservation = "payment/{$PaymentReservationIdArg}"
     const val Profile = "profile"
+    const val AdminBookings = "admin_bookings"
     const val PersonalData = "personal_data"
     const val Vehicles = "vehicles"
     const val History = "history"

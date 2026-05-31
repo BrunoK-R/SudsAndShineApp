@@ -77,12 +77,19 @@ private data class ProfileMenuItem(
 
 private enum class ProfileMenuAction {
     None,
+    AdminBookings,
     PersonalData,
     Vehicles,
     Loyalty,
     History,
     Contact,
 }
+
+private val adminMenuItem = ProfileMenuItem(
+    icon = Icons.Filled.Security,
+    label = "Gestão de marcações",
+    action = ProfileMenuAction.AdminBookings,
+)
 
 private val menuItems = listOf(
     ProfileMenuItem(
@@ -123,10 +130,13 @@ fun ProfileScreen(
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
+    onOpenAdminBookings: () -> Unit = {},
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
+    val adminAccessViewModel: AdminAccessViewModel = koinViewModel()
     val contactViewModel: ContactViewModel = koinViewModel()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val adminAccessState by adminAccessViewModel.uiState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     val vehicleRevision by viewModel.vehicleRevision.collectAsStateWithLifecycle()
     val profileRevision by viewModel.profileRevision.collectAsStateWithLifecycle()
@@ -138,6 +148,10 @@ fun ProfileScreen(
         viewModel.refreshForSession()
     }
 
+    LaunchedEffect(sessionState) {
+        adminAccessViewModel.refreshForSession()
+    }
+
     LaunchedEffect(Unit) {
         contactViewModel.loadBusinessInfo()
     }
@@ -145,6 +159,7 @@ fun ProfileScreen(
     ProfileScreenContent(
         contentPadding = contentPadding,
         sessionState = sessionState,
+        adminAccessState = adminAccessState,
         statsState = statsState,
         preferencesState = preferencesState,
         businessInfoState = businessInfoState,
@@ -161,6 +176,7 @@ fun ProfileScreen(
         onOpenHistory = onOpenHistory,
         onOpenContact = onOpenContact,
         onOpenRewards = onOpenRewards,
+        onOpenAdminBookings = onOpenAdminBookings,
     )
 }
 
@@ -168,6 +184,7 @@ fun ProfileScreen(
 private fun ProfileScreenContent(
     contentPadding: PaddingValues,
     sessionState: AuthSessionState,
+    adminAccessState: AdminAccessUiState,
     statsState: ProfileStatsUiState,
     preferencesState: ProfilePreferencesUiState,
     businessInfoState: ContactBusinessInfoUiState,
@@ -184,6 +201,7 @@ private fun ProfileScreenContent(
     onOpenHistory: () -> Unit = {},
     onOpenContact: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
+    onOpenAdminBookings: () -> Unit = {},
 ) {
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
     val isRestoringSession = sessionState == AuthSessionState.Restoring
@@ -223,11 +241,13 @@ private fun ProfileScreenContent(
             )
             if (authenticatedUser != null) {
                 ProfileMenuCard(
+                    showAdminBookings = adminAccessState is AdminAccessUiState.Admin,
                     onOpenPersonalData = onOpenPersonalData,
                     onManageVehicles = onManageVehicles,
                     onOpenHistory = onOpenHistory,
                     onOpenContact = onOpenContact,
                     onOpenRewards = onOpenRewards,
+                    onOpenAdminBookings = onOpenAdminBookings,
                 )
                 PreferencesCard(
                     preferencesState = preferencesState,
@@ -934,12 +954,20 @@ private fun ContactBusinessInfoUi.mapPreviewLabel(): String {
 
 @Composable
 private fun ProfileMenuCard(
+    showAdminBookings: Boolean,
     onOpenPersonalData: () -> Unit,
     onManageVehicles: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenContact: () -> Unit,
     onOpenRewards: () -> Unit,
+    onOpenAdminBookings: () -> Unit,
 ) {
+    val visibleItems = if (showAdminBookings) {
+        listOf(adminMenuItem) + menuItems
+    } else {
+        menuItems
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -947,12 +975,13 @@ private fun ProfileMenuCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
     ) {
         Column {
-            menuItems.forEachIndexed { index, item ->
+            visibleItems.forEachIndexed { index, item ->
                 ProfileMenuRow(
                     item = item,
                     onClick = {
                         when (item.action) {
                             ProfileMenuAction.None -> Unit
+                            ProfileMenuAction.AdminBookings -> onOpenAdminBookings()
                             ProfileMenuAction.PersonalData -> onOpenPersonalData()
                             ProfileMenuAction.Vehicles -> onManageVehicles()
                             ProfileMenuAction.Loyalty -> onOpenRewards()
@@ -961,7 +990,7 @@ private fun ProfileMenuCard(
                         }
                     },
                 )
-                if (index != menuItems.lastIndex) {
+                if (index != visibleItems.lastIndex) {
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 68.dp),
                         color = MaterialTheme.colorScheme.outlineVariant,

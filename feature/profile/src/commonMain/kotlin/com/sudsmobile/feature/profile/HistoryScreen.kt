@@ -623,12 +623,16 @@ private fun HistoryAuditNotes(notes: List<ProfileHistoryAuditNoteUi>) {
 private fun HistoryStatusBadge(status: ProfileHistoryStatusUi) {
     val containerColor = when (status) {
         ProfileHistoryStatusUi.Completed -> MaterialTheme.colorScheme.primaryContainer
-        ProfileHistoryStatusUi.Cancelled -> MaterialTheme.colorScheme.errorContainer
+        ProfileHistoryStatusUi.Cancelled,
+        ProfileHistoryStatusUi.Rejected -> MaterialTheme.colorScheme.errorContainer
+        ProfileHistoryStatusUi.Expired,
         ProfileHistoryStatusUi.Past -> MaterialTheme.colorScheme.secondaryContainer
     }
     val contentColor = when (status) {
         ProfileHistoryStatusUi.Completed -> MaterialTheme.colorScheme.onPrimaryContainer
-        ProfileHistoryStatusUi.Cancelled -> MaterialTheme.colorScheme.onErrorContainer
+        ProfileHistoryStatusUi.Cancelled,
+        ProfileHistoryStatusUi.Rejected -> MaterialTheme.colorScheme.onErrorContainer
+        ProfileHistoryStatusUi.Expired,
         ProfileHistoryStatusUi.Past -> MaterialTheme.colorScheme.onSecondaryContainer
     }
 
@@ -643,7 +647,11 @@ private fun HistoryStatusBadge(status: ProfileHistoryStatusUi) {
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Icon(
-                imageVector = if (status == ProfileHistoryStatusUi.Cancelled) {
+                imageVector = if (
+                    status == ProfileHistoryStatusUi.Cancelled ||
+                    status == ProfileHistoryStatusUi.Rejected ||
+                    status == ProfileHistoryStatusUi.Expired
+                ) {
                     Icons.Filled.ErrorOutline
                 } else {
                     Icons.Filled.CheckCircle

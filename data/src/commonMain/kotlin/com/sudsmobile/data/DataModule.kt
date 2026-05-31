@@ -13,6 +13,10 @@ import com.sudsmobile.data.auth.AuthSessionStore
 import com.sudsmobile.data.auth.FirebaseAuthConfig
 import com.sudsmobile.data.auth.FirebaseAuthRepository
 import com.sudsmobile.data.auth.KtorIdentityToolkitAuthApi
+import com.sudsmobile.data.admin.AdminFunctionsApi
+import com.sudsmobile.data.admin.AdminRepository
+import com.sudsmobile.data.admin.FirebaseAdminRepository
+import com.sudsmobile.data.admin.KtorAdminFunctionsApi
 import com.sudsmobile.data.business.BusinessInfoFunctionsApi
 import com.sudsmobile.data.business.BusinessInfoRepository
 import com.sudsmobile.data.business.FirebaseBusinessInfoRepository
@@ -59,6 +63,8 @@ val dataModule = module {
     single { MutableBookingChangeNotifier() }
     single<BookingChangeNotifier> { get<MutableBookingChangeNotifier>() }
     single<BookingRepository> { FirebaseBookingRepository(get(), get(), get()) }
+    single<AdminFunctionsApi> { KtorAdminFunctionsApi(get(), get()) }
+    single<AdminRepository> { FirebaseAdminRepository(get(), get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }
     single<ServiceCatalogRepository> { FirebaseServiceCatalogRepository(get()) }
     single<BusinessInfoFunctionsApi> { KtorBusinessInfoFunctionsApi(get(), get()) }

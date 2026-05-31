@@ -88,7 +88,9 @@ import com.sudsmobile.data.booking.BookingAvailabilityDay
 import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import com.sudsmobile.data.booking.BookingPaymentStatus
+import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.toBookingPaymentStatus
+import com.sudsmobile.data.booking.toBookingReservationStatus
 import org.koin.compose.viewmodel.koinViewModel
 
 private enum class BookingStep {
@@ -244,6 +246,8 @@ private fun ProductsScreenContent(
     var successLoyaltyRewardApplied by rememberSaveable { mutableStateOf(false) }
     var successLoyaltyRewardCode by rememberSaveable { mutableStateOf<String?>(null) }
     var successPaymentStatus by rememberSaveable { mutableStateOf("") }
+    var successReservationStatus by rememberSaveable { mutableStateOf("") }
+    var successPendingExpiresAt by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedInitialServiceRequestKey by rememberSaveable { mutableStateOf<Long?>(null) }
     var unavailableInitialServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     val currentStep = BookingStep.valueOf(currentStepName)
@@ -311,6 +315,8 @@ private fun ProductsScreenContent(
             successLoyaltyRewardApplied = state.receipt.loyaltyRewardApplied
             successLoyaltyRewardCode = state.receipt.loyaltyRewardCode
             successPaymentStatus = state.receipt.paymentStatus
+            successReservationStatus = state.receipt.status
+            successPendingExpiresAt = state.receipt.pendingExpiresAtIso
             currentStepName = BookingStep.Success.name
             onSubmitSuccessConsumed()
         }
@@ -679,6 +685,8 @@ private fun ProductsScreenContent(
                         loyaltyRewardApplied = successLoyaltyRewardApplied,
                         loyaltyRewardCode = successLoyaltyRewardCode,
                         paymentStatus = successPaymentStatus,
+                        reservationStatus = successReservationStatus,
+                        pendingExpiresAtIso = successPendingExpiresAt,
                         onAddToCalendar = {},
                         onViewBooking = onViewBooking,
                         onHome = onHome,
@@ -1824,11 +1832,21 @@ private fun BookingSuccessContent(
     loyaltyRewardApplied: Boolean,
     loyaltyRewardCode: String?,
     paymentStatus: String,
+    reservationStatus: String,
+    pendingExpiresAtIso: String?,
     onAddToCalendar: () -> Unit,
     onViewBooking: () -> Unit,
     onHome: () -> Unit,
     onOpenPayment: (String?) -> Unit,
 ) {
+    val pendingValidation = reservationStatus.isPendingValidationStatus()
+    val title = if (pendingValidation) "Pedido recebido" else "Marcação Confirmada!"
+    val body = if (pendingValidation) {
+        "A aguardar validação"
+    } else {
+        "A sua marcação foi criada com sucesso"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1866,14 +1884,14 @@ private fun BookingSuccessContent(
         Spacer(Modifier.height(28.dp))
 
         Text(
-            text = "Marcação Confirmada!",
+            text = title,
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "A sua marcação foi criada com sucesso",
+            text = body,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1913,7 +1931,13 @@ private fun BookingSuccessContent(
 
         Spacer(Modifier.height(16.dp))
 
-        if (loyaltyRewardApplied) {
+        if (pendingValidation) {
+            BookingValidationPendingCard(
+                pendingExpiresAtIso = pendingExpiresAtIso,
+                loyaltyRewardApplied = loyaltyRewardApplied,
+            )
+            Spacer(Modifier.height(16.dp))
+        } else if (loyaltyRewardApplied) {
             LoyaltyRewardAppliedCard(rewardCode = loyaltyRewardCode)
             Spacer(Modifier.height(16.dp))
         } else if (paymentStatus.requiresPaymentAction()) {
@@ -1931,6 +1955,7 @@ private fun BookingSuccessContent(
         ) {
             OutlinedButton(
                 onClick = onAddToCalendar,
+                enabled = !pendingValidation,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
@@ -1997,6 +2022,61 @@ private fun String.requiresPaymentAction(): Boolean {
     )
 }
 
+private fun String.isPendingValidationStatus(): Boolean {
+    return trim().isBlank() || toBookingReservationStatus() == BookingReservationStatus.Pending
+}
+
+@Composable
+private fun BookingValidationPendingCard(
+    pendingExpiresAtIso: String?,
+    loyaltyRewardApplied: Boolean,
+) {
+    val expiryLabel = pendingExpiresAtIso?.toPendingExpiryLabel()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f),
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.MarkEmailRead,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(22.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "A aguardar validação",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = buildString {
+                        append("A equipa vai validar o pedido antes da confirmação final.")
+                        if (expiryLabel != null) {
+                            append(" O lugar fica reservado até ")
+                            append(expiryLabel)
+                            append(".")
+                        }
+                        if (loyaltyRewardApplied) {
+                            append(" A recompensa de fidelização fica reservada até à decisão.")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PaymentPendingCard(onOpenPayment: () -> Unit) {
     Card(
@@ -2052,6 +2132,22 @@ private fun PaymentPendingCard(onOpenPayment: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+private fun String.toPendingExpiryLabel(): String? {
+    if (isBlank()) return null
+    val date = substringBefore("T")
+    val parts = date.split("-")
+    if (parts.size != 3) return null
+    val time = substringAfter("T", missingDelimiterValue = "").takeIf { it.length >= 5 }?.take(5)
+    val day = parts[2].toIntOrNull()?.toString() ?: parts[2]
+    val month = parts[1].toIntOrNull()?.toString()?.padStart(2, '0') ?: parts[1]
+    val year = parts[0]
+    return if (time == null) {
+        "$day/$month/$year"
+    } else {
+        "$day/$month/$year às $time"
     }
 }
 

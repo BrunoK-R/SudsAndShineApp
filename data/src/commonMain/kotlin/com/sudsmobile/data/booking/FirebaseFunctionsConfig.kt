@@ -52,6 +52,18 @@ data class FirebaseFunctionsConfig(
     val redeemMyLoyaltyRewardUrl: String
         get() = functionUrl("redeemMyLoyaltyReward")
 
+    val syncMyRoleUrl: String
+        get() = functionUrl("syncMyRole")
+
+    val getAdminPendingReservationsUrl: String
+        get() = functionUrl("getAdminPendingReservations")
+
+    val acceptReservationUrl: String
+        get() = functionUrl("acceptReservation")
+
+    val rejectReservationUrl: String
+        get() = functionUrl("rejectReservation")
+
     val getMyVehiclesUrl: String
         get() = functionUrl("getMyVehicles")
 

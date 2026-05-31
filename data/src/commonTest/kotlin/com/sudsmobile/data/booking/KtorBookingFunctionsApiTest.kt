@@ -91,6 +91,8 @@ class KtorBookingFunctionsApiTest {
                     "ok": true,
                     "reservationId": "reservation-1",
                     "reservationCode": "SS-ABCDEFGH",
+                    "status": "pending",
+                    "pendingExpiresAt": "2026-05-30T10:00:00.000Z",
                     "loyaltyRewardApplied": true,
                     "loyaltyRewardCode": "SS-FREE-UID1-0001",
                     "priceCents": 0,
@@ -115,6 +117,8 @@ class KtorBookingFunctionsApiTest {
         val success = assertIs<BookingCreateResult.Success>(result)
         assertEquals("reservation-1", success.receipt.reservationId)
         assertEquals("SS-ABCDEFGH", success.receipt.reservationCode)
+        assertEquals("pending", success.receipt.status)
+        assertEquals("2026-05-30T10:00:00.000Z", success.receipt.pendingExpiresAtIso)
         assertEquals(true, success.receipt.loyaltyRewardApplied)
         assertEquals("SS-FREE-UID1-0001", success.receipt.loyaltyRewardCode)
         assertEquals(0, success.receipt.priceCents)
@@ -246,6 +250,10 @@ class KtorBookingFunctionsApiTest {
                         "reviewComment": "Ficou impecável.",
                         "createdAt": "2026-05-18T08:00:00.000Z",
                         "updatedAt": "2026-05-19T12:15:00.000Z",
+                        "acceptedAt": "2026-05-19T13:00:00.000Z",
+                        "pendingExpiresAt": "2026-05-19T08:00:00.000Z",
+                        "rejectedAt": "2026-05-19T13:30:00.000Z",
+                        "rejectionReason": "Agenda cheia.",
                         "rescheduledAt": "2026-05-19T12:15:00.000Z",
                         "previousSlotStart": "2026-05-20T08:30:00.000Z",
                         "previousSlotEnd": "2026-05-20T09:15:00.000Z",
@@ -278,6 +286,10 @@ class KtorBookingFunctionsApiTest {
         assertEquals("Ficou impecável.", success.history.reservations.first().reviewComment)
         assertEquals("2026-05-18T08:00:00.000Z", success.history.reservations.first().createdAtIso)
         assertEquals("2026-05-19T12:15:00.000Z", success.history.reservations.first().updatedAtIso)
+        assertEquals("2026-05-19T13:00:00.000Z", success.history.reservations.first().acceptedAtIso)
+        assertEquals("2026-05-19T08:00:00.000Z", success.history.reservations.first().pendingExpiresAtIso)
+        assertEquals("2026-05-19T13:30:00.000Z", success.history.reservations.first().rejectedAtIso)
+        assertEquals("Agenda cheia.", success.history.reservations.first().rejectionReason)
         assertEquals("2026-05-19T12:15:00.000Z", success.history.reservations.first().rescheduledAtIso)
         assertEquals("2026-05-20T08:30:00.000Z", success.history.reservations.first().previousSlotStartIso)
         assertEquals("2026-05-20T09:15:00.000Z", success.history.reservations.first().previousSlotEndIso)

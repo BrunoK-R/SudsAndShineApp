@@ -45,11 +45,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 internal enum class BookingStatusUi(val label: String) {
-    Pending("Novo"),
+    Pending("A aguardar validação"),
     Confirmed("Confirmado"),
     InProgress("Em execução"),
     Completed("Concluído"),
     Cancelled("Cancelado"),
+    Rejected("Rejeitado"),
+    Expired("Expirado"),
     Unknown("A atualizar"),
 }
 
@@ -667,6 +669,33 @@ private fun BookingHistoryReservation.auditNotes(): List<BookingAuditNoteUi> {
         )
     }
 
+    when (status.toBookingReservationStatus()) {
+        BookingReservationStatus.Rejected -> {
+            notes += BookingAuditNoteUi(
+                title = "Pedido rejeitado",
+                body = rejectionReason
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+                    ?.let { "Motivo: $it" }
+                    ?: "Este pedido de marcação foi rejeitado.",
+                tone = BookingAuditToneUi.Warning,
+            )
+        }
+        BookingReservationStatus.Expired -> {
+            notes += BookingAuditNoteUi(
+                title = "Pedido expirado",
+                body = "O prazo de validação deste pedido terminou.",
+                tone = BookingAuditToneUi.Warning,
+            )
+        }
+        BookingReservationStatus.Pending,
+        BookingReservationStatus.Confirmed,
+        BookingReservationStatus.InProgress,
+        BookingReservationStatus.Completed,
+        BookingReservationStatus.Cancelled,
+        BookingReservationStatus.Unknown -> Unit
+    }
+
     return notes
 }
 
@@ -703,6 +732,8 @@ private fun String.toStatusUi(): BookingStatusUi {
         BookingReservationStatus.InProgress -> BookingStatusUi.InProgress
         BookingReservationStatus.Completed -> BookingStatusUi.Completed
         BookingReservationStatus.Cancelled -> BookingStatusUi.Cancelled
+        BookingReservationStatus.Rejected -> BookingStatusUi.Rejected
+        BookingReservationStatus.Expired -> BookingStatusUi.Expired
         BookingReservationStatus.Unknown -> BookingStatusUi.Unknown
     }
 }

@@ -33,6 +33,8 @@ internal data class ProfileHistorySummaryUi(
 internal enum class ProfileHistoryStatusUi(val label: String) {
     Completed("Concluído"),
     Cancelled("Cancelado"),
+    Rejected("Rejeitado"),
+    Expired("Expirado"),
     Past("Concluído"),
 }
 
@@ -187,7 +189,7 @@ internal class ProfileHistoryViewModel(
 
         if (items.isEmpty()) return ProfileHistoryUiState.Empty
 
-        val completedItems = items.filterNot { it.status == ProfileHistoryStatusUi.Cancelled }
+        val completedItems = items.filter { it.status == ProfileHistoryStatusUi.Completed || it.status == ProfileHistoryStatusUi.Past }
         val totalCents = completedItems.sumOf { it.priceCents ?: 0 }
         return ProfileHistoryUiState.Loaded(
             summary = ProfileHistorySummaryUi(
@@ -242,7 +244,10 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
 }
 
 private fun BookingHistoryReservation.isProfileHistoryReservation(): Boolean {
-    return isCompletedReservation() || isCancelledReservation()
+    return isCompletedReservation() ||
+        isCancelledReservation() ||
+        status.toBookingReservationStatus() == BookingReservationStatus.Rejected ||
+        status.toBookingReservationStatus() == BookingReservationStatus.Expired
 }
 
 private fun String.normalizedRebookServiceId(): String? = trim().takeIf { it.isNotBlank() }
@@ -308,6 +313,35 @@ private fun BookingHistoryReservation.auditNotes(): List<ProfileHistoryAuditNote
         )
     }
 
+    when (status.toBookingReservationStatus()) {
+        BookingReservationStatus.Rejected -> {
+            notes += ProfileHistoryAuditNoteUi(
+                title = "Rejeitada",
+                body = rejectionReason
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+                    ?.let { "Motivo: $it" }
+                    ?: "Este pedido de marcação foi rejeitado.",
+                tone = ProfileHistoryAuditToneUi.Warning,
+            )
+        }
+        BookingReservationStatus.Expired -> {
+            val expiresAt = pendingExpiresAtIso?.toDateTimeLabel()
+            notes += ProfileHistoryAuditNoteUi(
+                title = "Expirada",
+                body = expiresAt?.let { "Expirou em $it." }
+                    ?: "O prazo de validação deste pedido terminou.",
+                tone = ProfileHistoryAuditToneUi.Warning,
+            )
+        }
+        BookingReservationStatus.Pending,
+        BookingReservationStatus.Confirmed,
+        BookingReservationStatus.InProgress,
+        BookingReservationStatus.Completed,
+        BookingReservationStatus.Cancelled,
+        BookingReservationStatus.Unknown -> Unit
+    }
+
     return notes
 }
 
@@ -324,6 +358,8 @@ private fun String.toHistoryStatusUi(): ProfileHistoryStatusUi {
     return when (toBookingReservationStatus()) {
         BookingReservationStatus.Completed -> ProfileHistoryStatusUi.Completed
         BookingReservationStatus.Cancelled -> ProfileHistoryStatusUi.Cancelled
+        BookingReservationStatus.Rejected -> ProfileHistoryStatusUi.Rejected
+        BookingReservationStatus.Expired -> ProfileHistoryStatusUi.Expired
         BookingReservationStatus.Pending,
         BookingReservationStatus.Confirmed,
         BookingReservationStatus.InProgress,

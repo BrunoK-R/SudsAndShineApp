@@ -6,6 +6,8 @@ import org.koin.dsl.module
 val profileModule = module {
     viewModelOf(::ProfileViewModel)
     viewModelOf(::ProfileHistoryViewModel)
+    viewModelOf(::AdminAccessViewModel)
+    viewModelOf(::AdminBookingsViewModel)
     viewModelOf(::PersonalDataViewModel)
     viewModelOf(::VehiclesViewModel)
     viewModelOf(::ContactViewModel)

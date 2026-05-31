@@ -13,6 +13,8 @@ class BookingReservationStatusTest {
         assertEquals(BookingReservationStatus.InProgress, "em_execucao".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Completed, "concluido".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Cancelled, "cancelado".toBookingReservationStatus())
+        assertEquals(BookingReservationStatus.Rejected, "rejeitado".toBookingReservationStatus())
+        assertEquals(BookingReservationStatus.Expired, "expirado".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Unknown, "waiting_for_payment".toBookingReservationStatus())
     }
 
@@ -41,21 +43,25 @@ class BookingReservationStatusTest {
     }
 
     @Test
-    fun exposesPendingPaymentPredicateForUpcomingPayableReservations() {
+    fun exposesPaymentPredicateOnlyForConfirmedUpcomingPayableReservations() {
         assertTrue(
-            reservation(status = "pending", upcoming = true, paymentStatus = "pending", priceCents = 3200)
+            reservation(status = "confirmed", upcoming = true, paymentStatus = "pending", priceCents = 3200)
                 .requiresPayment(),
         )
         assertTrue(
-            reservation(status = "pending", upcoming = true, paymentStatus = "failed", priceCents = 3200)
+            reservation(status = "confirmed", upcoming = true, paymentStatus = "failed", priceCents = 3200)
                 .requiresPayment(),
         )
         assertFalse(
-            reservation(status = "pending", upcoming = true, paymentStatus = "paid", priceCents = 3200)
+            reservation(status = "confirmed", upcoming = true, paymentStatus = "paid", priceCents = 3200)
                 .requiresPayment(),
         )
         assertFalse(
             reservation(status = "pending", upcoming = true, paymentStatus = "covered_by_loyalty", priceCents = 0)
+                .requiresPayment(),
+        )
+        assertFalse(
+            reservation(status = "pending", upcoming = true, paymentStatus = "pending", priceCents = 3200)
                 .requiresPayment(),
         )
         assertFalse(

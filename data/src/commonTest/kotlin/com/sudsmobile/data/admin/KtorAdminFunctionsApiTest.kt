@@ -1,0 +1,207 @@
+package com.sudsmobile.data.admin
+
+import com.sudsmobile.data.booking.FirebaseFunctionsConfig
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestData
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.fullPath
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+
+class KtorAdminFunctionsApiTest {
+    @Test
+    fun mapsSyncRoleResponse() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "uid": "uid-1",
+                    "email": "admin@example.com",
+                    "role": "admin"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.syncMyRole("id-token-1")
+
+        val success = assertIs<AdminRoleResult.Success>(result)
+        assertEquals("/test-project/europe-west1/syncMyRole", requestedPath)
+        assertEquals("uid-1", success.role.uid)
+        assertTrue(success.role.isAdmin)
+    }
+
+    @Test
+    fun mapsPendingReservationRequests() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "requests": [
+                      {
+                        "id": "reservation-1",
+                        "reservationCode": "SS-ABCDEFGH",
+                        "customerName": "Bruno Ribeiro",
+                        "customerEmail": "bruno@example.com",
+                        "customerPhone": "913005855",
+                        "serviceId": "premium",
+                        "serviceName": "Lavagem Premium",
+                        "slotStart": "2026-05-30T09:30:00.000Z",
+                        "slotEnd": "2026-05-30T10:15:00.000Z",
+                        "status": "pending",
+                        "paymentStatus": "pending",
+                        "vehicleType": "suv",
+                        "vehicleLabel": "BMW 320d",
+                        "priceCents": 4900,
+                        "extras": [
+                          {
+                            "id": "wax",
+                            "name": "Enceramento",
+                            "priceCents": 1500
+                          }
+                        ],
+                        "notes": "Portão lateral",
+                        "createdAt": "2026-05-29T09:00:00.000Z",
+                        "pendingExpiresAt": "2026-05-30T09:00:00.000Z",
+                        "loyaltyRewardApplied": true
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getPendingBookingRequests("id-token-1")
+
+        val success = assertIs<AdminBookingRequestsResult.Success>(result)
+        val request = success.requests.single()
+        assertEquals("/test-project/europe-west1/getAdminPendingReservations", requestedPath)
+        assertEquals("reservation-1", request.id)
+        assertEquals("Bruno Ribeiro", request.customerName)
+        assertEquals("BMW 320d", request.vehicleLabel)
+        assertEquals(4900, request.priceCents)
+        assertEquals("wax", request.extras.single().id)
+        assertEquals("2026-05-30T09:00:00.000Z", request.pendingExpiresAtIso)
+        assertEquals(true, request.loyaltyRewardApplied)
+    }
+
+    @Test
+    fun postsRejectDecisionWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "reservationId": "reservation-1",
+                    "reservationCode": "SS-ABCDEFGH",
+                    "status": "rejected"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.rejectBookingRequest(
+            AdminBookingDecisionRequest(
+                reservationId = "reservation-1",
+                rejectionReason = "Agenda cheia.",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminBookingDecisionResult.Success>(result)
+        assertEquals("/test-project/europe-west1/rejectReservation", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("reservation-1", success.receipt.reservationId)
+        assertEquals("rejected", success.receipt.status)
+    }
+
+    @Test
+    fun mapsPreconditionErrorToConflict() = runTest {
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "FAILED_PRECONDITION",
+                    "message": "Reservation request has expired"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.acceptBookingRequest(
+            AdminBookingDecisionRequest(reservationId = "reservation-1"),
+            idToken = "id-token-1",
+        )
+
+        val failure = assertIs<AdminBookingDecisionResult.Failure>(result)
+        assertIs<AdminError.Conflict>(failure.error)
+        assertEquals("Reservation request has expired", failure.error.message)
+    }
+}
+
+private fun mockClient(
+    responseJson: String,
+    onRequest: (HttpRequestData) -> Unit = {},
+): HttpClient {
+    val engine = MockEngine {
+        onRequest(it)
+        respond(
+            content = responseJson,
+            status = HttpStatusCode.OK,
+            headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+        )
+    }
+    return HttpClient(engine) {
+        expectSuccess = false
+        install(ContentNegotiation) {
+            json(
+                Json {
+                    ignoreUnknownKeys = true
+                    explicitNulls = false
+                },
+            )
+        }
+    }
+}
+
+private fun testConfig(): FirebaseFunctionsConfig = FirebaseFunctionsConfig(
+    projectId = "test-project",
+    region = "europe-west1",
+    useEmulator = true,
+    emulatorHost = "127.0.0.1",
+)

@@ -251,7 +251,7 @@ class CartBookingsViewModelTest {
         val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
         assertEquals(BookingStatusUi.Pending, loaded.upcoming[0].status)
         assertEquals(true, loaded.upcoming[0].cancelable)
-        assertEquals(true, loaded.upcoming[0].requiresPayment)
+        assertEquals(false, loaded.upcoming[0].requiresPayment)
         assertEquals("Pagamento pendente", loaded.upcoming[0].paymentLabel)
         assertEquals(BookingStatusUi.InProgress, loaded.upcoming[1].status)
         assertEquals(false, loaded.upcoming[1].cancelable)

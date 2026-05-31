@@ -2397,7 +2397,9 @@ private fun BookingStatusBadge(status: BookingStatusUi) {
         BookingStatusUi.Confirmed -> MaterialTheme.colorScheme.tertiaryContainer
         BookingStatusUi.InProgress -> MaterialTheme.colorScheme.primaryContainer
         BookingStatusUi.Completed -> MaterialTheme.colorScheme.primaryContainer
-        BookingStatusUi.Cancelled -> MaterialTheme.colorScheme.errorContainer
+        BookingStatusUi.Cancelled,
+        BookingStatusUi.Rejected -> MaterialTheme.colorScheme.errorContainer
+        BookingStatusUi.Expired,
         BookingStatusUi.Unknown -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val contentColor = when (status) {
@@ -2405,7 +2407,9 @@ private fun BookingStatusBadge(status: BookingStatusUi) {
         BookingStatusUi.Confirmed -> MaterialTheme.colorScheme.onTertiaryContainer
         BookingStatusUi.InProgress -> MaterialTheme.colorScheme.onPrimaryContainer
         BookingStatusUi.Completed -> MaterialTheme.colorScheme.onPrimaryContainer
-        BookingStatusUi.Cancelled -> MaterialTheme.colorScheme.onErrorContainer
+        BookingStatusUi.Cancelled,
+        BookingStatusUi.Rejected -> MaterialTheme.colorScheme.onErrorContainer
+        BookingStatusUi.Expired,
         BookingStatusUi.Unknown -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val icon = when (status) {
@@ -2414,6 +2418,8 @@ private fun BookingStatusBadge(status: BookingStatusUi) {
         BookingStatusUi.InProgress,
         BookingStatusUi.Completed -> Icons.Filled.CheckCircle
         BookingStatusUi.Cancelled,
+        BookingStatusUi.Rejected,
+        BookingStatusUi.Expired,
         BookingStatusUi.Unknown -> Icons.Filled.RadioButtonUnchecked
     }
 

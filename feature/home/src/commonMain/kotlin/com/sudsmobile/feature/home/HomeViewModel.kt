@@ -660,11 +660,13 @@ private fun String.toStatIcon(index: Int): ImageVector {
 
 private fun String.toStatusLabel(): String {
     return when (toBookingReservationStatus()) {
-        BookingReservationStatus.Pending -> "Novo"
+        BookingReservationStatus.Pending -> "A aguardar validação"
         BookingReservationStatus.Confirmed -> "Confirmado"
         BookingReservationStatus.InProgress -> "Em execução"
         BookingReservationStatus.Completed -> "Concluído"
         BookingReservationStatus.Cancelled -> "Cancelado"
+        BookingReservationStatus.Rejected -> "Rejeitado"
+        BookingReservationStatus.Expired -> "Expirado"
         BookingReservationStatus.Unknown -> "A atualizar"
     }
 }
