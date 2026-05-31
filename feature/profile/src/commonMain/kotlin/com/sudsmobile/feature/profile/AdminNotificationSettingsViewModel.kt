@@ -375,6 +375,20 @@ private fun defaultNotificationTemplates(): List<AdminNotificationTemplateConfig
             body = "O pedido expirou antes da confirmação. Pode escolher outro horário na app.",
         ),
         AdminNotificationTemplateConfig(
+            key = "booking_cancelled",
+            label = "Marcação cancelada",
+            enabled = true,
+            title = "Marcação cancelada",
+            body = "A sua marcação foi cancelada. Pode escolher outro horário na app.",
+        ),
+        AdminNotificationTemplateConfig(
+            key = "booking_rescheduled",
+            label = "Marcação remarcada",
+            enabled = true,
+            title = "Marcação remarcada",
+            body = "A sua marcação foi remarcada para {{slotStart}}. Consulte os detalhes na app.",
+        ),
+        AdminNotificationTemplateConfig(
             key = "booking_reminder",
             label = "Lembrete de marcação",
             enabled = true,
@@ -396,6 +410,8 @@ private val NotificationTemplateKeys = setOf(
     "booking_accepted",
     "booking_rejected",
     "booking_expired",
+    "booking_cancelled",
+    "booking_rescheduled",
     "booking_reminder",
     "review_prompt",
 )

@@ -585,6 +585,8 @@ private val NotificationTemplateKeys = setOf(
     "booking_accepted",
     "booking_rejected",
     "booking_expired",
+    "booking_cancelled",
+    "booking_rescheduled",
     "booking_reminder",
     "review_prompt",
 )

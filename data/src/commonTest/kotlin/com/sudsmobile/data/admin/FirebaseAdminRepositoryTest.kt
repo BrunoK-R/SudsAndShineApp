@@ -950,6 +950,20 @@ private fun adminNotificationTemplates(): List<AdminNotificationTemplateConfig> 
         body = "O pedido expirou antes da confirmação.",
     ),
     AdminNotificationTemplateConfig(
+        key = "booking_cancelled",
+        label = "Marcação cancelada",
+        enabled = true,
+        title = "Marcação cancelada",
+        body = "A marcação foi cancelada.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_rescheduled",
+        label = "Marcação remarcada",
+        enabled = true,
+        title = "Marcação remarcada",
+        body = "A marcação foi remarcada.",
+    ),
+    AdminNotificationTemplateConfig(
         key = "booking_reminder",
         label = "Lembrete de marcação",
         enabled = true,
