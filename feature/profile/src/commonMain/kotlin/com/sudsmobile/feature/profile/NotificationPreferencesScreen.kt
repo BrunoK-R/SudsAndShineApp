@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,6 +65,10 @@ fun NotificationPreferencesScreen(
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
+    val deviceState by viewModel.deviceState.collectAsStateWithLifecycle()
+    val permissionRequestController = rememberNotificationPermissionRequestController(
+        onPermissionResult = viewModel::handlePermissionResult,
+    )
 
     LaunchedEffect(sessionState) {
         viewModel.refreshForSession()
@@ -72,11 +78,20 @@ fun NotificationPreferencesScreen(
         contentPadding = contentPadding,
         uiState = uiState,
         saveState = saveState,
+        deviceState = deviceState,
         onBack = onBack,
         onRequestSignIn = onRequestSignIn,
         onRetry = viewModel::loadPreferences,
         onFormChange = viewModel::updateForm,
         onSave = viewModel::save,
+        onEnableDevice = {
+            if (permissionRequestController.shouldRequestPostNotifications) {
+                permissionRequestController.requestPostNotifications()
+            } else {
+                viewModel.registerCurrentDevice()
+            }
+        },
+        onRemoveDevice = viewModel::removeCurrentDevice,
         onDismissSaveState = viewModel::clearSaveState,
     )
 }
@@ -86,11 +101,14 @@ private fun NotificationPreferencesScreenContent(
     contentPadding: PaddingValues,
     uiState: NotificationPreferencesUiState,
     saveState: NotificationPreferencesSaveState,
+    deviceState: NotificationDeviceUiState,
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
     onFormChange: (NotificationPreferencesForm) -> Unit,
     onSave: () -> Unit,
+    onEnableDevice: () -> Unit,
+    onRemoveDevice: () -> Unit,
     onDismissSaveState: () -> Unit,
 ) {
     Column(
@@ -142,9 +160,12 @@ private fun NotificationPreferencesScreenContent(
 
                 is NotificationPreferencesUiState.Loaded -> NotificationPreferencesFormCard(
                     form = uiState.form,
+                    deviceState = deviceState,
                     saving = saveState == NotificationPreferencesSaveState.Saving,
                     onFormChange = onFormChange,
                     onSave = onSave,
+                    onEnableDevice = onEnableDevice,
+                    onRemoveDevice = onRemoveDevice,
                 )
             }
         }
@@ -294,9 +315,12 @@ private fun NotificationPreferencesStatusCard(
 @Composable
 private fun NotificationPreferencesFormCard(
     form: NotificationPreferencesForm,
+    deviceState: NotificationDeviceUiState,
     saving: Boolean,
     onFormChange: (NotificationPreferencesForm) -> Unit,
     onSave: () -> Unit,
+    onEnableDevice: () -> Unit,
+    onRemoveDevice: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -308,6 +332,13 @@ private fun NotificationPreferencesFormCard(
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            NotificationDeviceEnrollmentCard(
+                deviceState = deviceState,
+                actionsEnabled = !saving,
+                onEnableDevice = onEnableDevice,
+                onRemoveDevice = onRemoveDevice,
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             NotificationPreferenceSwitchRow(
                 title = "Atualizações de marcação",
                 description = "Pedidos, confirmações, rejeições e expirações",
@@ -372,6 +403,139 @@ private fun NotificationPreferencesFormCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NotificationDeviceEnrollmentCard(
+    deviceState: NotificationDeviceUiState,
+    actionsEnabled: Boolean,
+    onEnableDevice: () -> Unit,
+    onRemoveDevice: () -> Unit,
+) {
+    val isBusy = deviceState == NotificationDeviceUiState.Checking ||
+        deviceState == NotificationDeviceUiState.Registering ||
+        deviceState is NotificationDeviceUiState.Removing
+    val registeredTokenId = when (deviceState) {
+        is NotificationDeviceUiState.Ready -> deviceState.registeredTokenId
+        is NotificationDeviceUiState.Success -> deviceState.registeredTokenId
+        else -> null
+    }
+    val title = when {
+        registeredTokenId != null -> "Este dispositivo está ativo"
+        deviceState is NotificationDeviceUiState.PermissionRequired -> "Permissão necessária"
+        deviceState is NotificationDeviceUiState.Unsupported -> "Indisponível neste dispositivo"
+        deviceState is NotificationDeviceUiState.Error -> "Não foi possível ativar"
+        else -> "Este dispositivo"
+    }
+    val body = when (deviceState) {
+        NotificationDeviceUiState.Checking -> "A verificar o estado das notificações."
+        NotificationDeviceUiState.Unauthenticated -> "Entre na sua conta para ativar este dispositivo."
+        NotificationDeviceUiState.Registering -> "A registar este dispositivo para notificações."
+        is NotificationDeviceUiState.Removing -> "A remover este dispositivo das notificações."
+        is NotificationDeviceUiState.PermissionRequired -> deviceState.message
+        is NotificationDeviceUiState.Unsupported -> deviceState.message
+        is NotificationDeviceUiState.Error -> deviceState.message
+        is NotificationDeviceUiState.Success -> deviceState.message
+        is NotificationDeviceUiState.Ready -> {
+            if (deviceState.registeredTokenId != null) {
+                "Vai receber notificações permitidas pelas preferências abaixo."
+            } else {
+                "Ative para receber atualizações neste dispositivo."
+            }
+        }
+    }
+    val icon = when {
+        registeredTokenId != null -> Icons.Filled.NotificationsActive
+        deviceState is NotificationDeviceUiState.Unsupported -> Icons.Filled.NotificationsOff
+        deviceState is NotificationDeviceUiState.Error -> Icons.Filled.ErrorOutline
+        else -> Icons.Filled.Notifications
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            NotificationPreferencesIconContainer(icon = icon, loading = isBusy)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                NotificationDeviceActionRow(
+                    deviceState = deviceState,
+                    registeredTokenId = registeredTokenId,
+                    actionsEnabled = actionsEnabled && !isBusy,
+                    onEnableDevice = onEnableDevice,
+                    onRemoveDevice = onRemoveDevice,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationDeviceActionRow(
+    deviceState: NotificationDeviceUiState,
+    registeredTokenId: String?,
+    actionsEnabled: Boolean,
+    onEnableDevice: () -> Unit,
+    onRemoveDevice: () -> Unit,
+) {
+    when {
+        registeredTokenId != null -> OutlinedButton(
+            onClick = onRemoveDevice,
+            enabled = actionsEnabled,
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Text(
+                text = "Remover deste dispositivo",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        deviceState is NotificationDeviceUiState.Ready ||
+            deviceState is NotificationDeviceUiState.PermissionRequired ||
+            deviceState is NotificationDeviceUiState.Error -> Button(
+                onClick = onEnableDevice,
+                enabled = actionsEnabled,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+            ) {
+                Text(
+                    text = if (deviceState is NotificationDeviceUiState.Error && deviceState.retryable) {
+                        "Tentar novamente"
+                    } else {
+                        "Ativar neste dispositivo"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        else -> Unit
     }
 }
 

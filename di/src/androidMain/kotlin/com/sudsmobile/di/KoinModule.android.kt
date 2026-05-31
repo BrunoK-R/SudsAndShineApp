@@ -3,6 +3,8 @@ package com.sudsmobile.di
 import android.content.Context
 import com.sudsmobile.data.auth.AuthSessionStore
 import com.sudsmobile.data.auth.SharedPreferencesAuthSessionStore
+import com.sudsmobile.data.notification.AndroidNotificationDeviceRegistrar
+import com.sudsmobile.data.notification.NotificationDeviceRegistrar
 import com.sudsmobile.data.preferences.OnboardingPreferenceStore
 import com.sudsmobile.data.preferences.SharedPreferencesOnboardingPreferenceStore
 import org.koin.dsl.module
@@ -24,6 +26,13 @@ actual val platformModule = module {
     }
     single<OnboardingPreferenceStore> {
         SharedPreferencesOnboardingPreferenceStore(
+            requireNotNull(applicationContext) {
+                "Call configureAndroidPlatform(context) before initializeKoin()."
+            },
+        )
+    }
+    single<NotificationDeviceRegistrar> {
+        AndroidNotificationDeviceRegistrar(
             requireNotNull(applicationContext) {
                 "Call configureAndroidPlatform(context) before initializeKoin()."
             },

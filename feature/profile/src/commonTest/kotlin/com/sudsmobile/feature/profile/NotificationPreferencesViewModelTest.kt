@@ -7,6 +7,10 @@ import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
 import com.sudsmobile.data.notification.NotificationError
+import com.sudsmobile.data.notification.NotificationDevicePermissionStatus
+import com.sudsmobile.data.notification.NotificationDeviceRegistrar
+import com.sudsmobile.data.notification.NotificationDeviceRegistrationRequestResult
+import com.sudsmobile.data.notification.NotificationDeviceRegistrationState
 import com.sudsmobile.data.notification.NotificationPreferences
 import com.sudsmobile.data.notification.NotificationPreferencesMutationResult
 import com.sudsmobile.data.notification.NotificationPreferencesResult
@@ -14,6 +18,7 @@ import com.sudsmobile.data.notification.NotificationPreferencesUpdateRequest
 import com.sudsmobile.data.notification.NotificationRepository
 import com.sudsmobile.data.notification.NotificationTokenDeleteRequest
 import com.sudsmobile.data.notification.NotificationTokenDeleteResult
+import com.sudsmobile.data.notification.NotificationTokenPlatform
 import com.sudsmobile.data.notification.NotificationTokenRegistrationResult
 import com.sudsmobile.data.notification.NotificationTokenRegistrationRequest
 import kotlin.test.AfterTest
@@ -52,6 +57,7 @@ class NotificationPreferencesViewModelTest {
         val viewModel = NotificationPreferencesViewModel(
             authRepository = FakeNotificationPreferencesAuthRepository(authenticated = false),
             notificationRepository = repository,
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(),
         )
 
         viewModel.loadPreferences()
@@ -68,6 +74,7 @@ class NotificationPreferencesViewModelTest {
             notificationRepository = FakeNotificationPreferencesRepository(
                 loadResult = NotificationPreferencesResult.Failure(NotificationError.Backend("failed")),
             ),
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(),
         )
 
         viewModel.loadPreferences()
@@ -85,6 +92,7 @@ class NotificationPreferencesViewModelTest {
         val viewModel = NotificationPreferencesViewModel(
             authRepository = authRepository,
             notificationRepository = FakeNotificationPreferencesRepository(loadDeferred = deferred),
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(),
         )
 
         viewModel.loadPreferences()
@@ -102,6 +110,7 @@ class NotificationPreferencesViewModelTest {
         val viewModel = NotificationPreferencesViewModel(
             authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true),
             notificationRepository = repository,
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(),
         )
 
         viewModel.loadPreferences()
@@ -136,6 +145,7 @@ class NotificationPreferencesViewModelTest {
         val viewModel = NotificationPreferencesViewModel(
             authRepository = authRepository,
             notificationRepository = repository,
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(),
         )
 
         viewModel.loadPreferences()
@@ -147,6 +157,92 @@ class NotificationPreferencesViewModelTest {
         assertEquals(0, repository.updateRequests.size)
         assertIs<NotificationPreferencesUiState.Unauthenticated>(viewModel.uiState.value)
     }
+
+    @Test
+    fun registerCurrentDeviceRequiresPermissionBeforeRepositoryCall() = runTest {
+        val repository = FakeNotificationPreferencesRepository()
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true),
+            notificationRepository = repository,
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(
+                requestResult = NotificationDeviceRegistrationRequestResult.PermissionRequired("permission needed"),
+            ),
+        )
+
+        viewModel.registerCurrentDevice()
+        runCurrent()
+
+        val state = assertIs<NotificationDeviceUiState.PermissionRequired>(viewModel.deviceState.value)
+        assertEquals("permission needed", state.message)
+        assertEquals(0, repository.registerRequests.size)
+    }
+
+    @Test
+    fun registerCurrentDeviceStoresBackendTokenId() = runTest {
+        val repository = FakeNotificationPreferencesRepository()
+        val registrar = FakeNotificationDeviceRegistrar()
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true),
+            notificationRepository = repository,
+            notificationDeviceRegistrar = registrar,
+        )
+
+        viewModel.registerCurrentDevice()
+        runCurrent()
+
+        val state = assertIs<NotificationDeviceUiState.Success>(viewModel.deviceState.value)
+        assertEquals("token-id-1", state.registeredTokenId)
+        assertEquals(notificationTokenRequest(), repository.registerRequests.single())
+        assertEquals(listOf("token-id-1"), registrar.markedRegisteredTokenIds)
+    }
+
+    @Test
+    fun registerCurrentDeviceStopsWhenSessionChangesBeforeRepositoryCall() = runTest {
+        val requestDeferred = CompletableDeferred<NotificationDeviceRegistrationRequestResult>()
+        val authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true)
+        val repository = FakeNotificationPreferencesRepository()
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = authRepository,
+            notificationRepository = repository,
+            notificationDeviceRegistrar = FakeNotificationDeviceRegistrar(requestDeferred = requestDeferred),
+        )
+
+        viewModel.registerCurrentDevice()
+        runCurrent()
+        authRepository.signOut()
+        requestDeferred.complete(NotificationDeviceRegistrationRequestResult.Success(notificationTokenRequest()))
+        runCurrent()
+
+        assertIs<NotificationDeviceUiState.Unauthenticated>(viewModel.deviceState.value)
+        assertEquals(0, repository.registerRequests.size)
+    }
+
+    @Test
+    fun removeCurrentDeviceDeletesRegisteredToken() = runTest {
+        val repository = FakeNotificationPreferencesRepository()
+        val registrar = FakeNotificationDeviceRegistrar(
+            currentState = NotificationDeviceRegistrationState(
+                permissionStatus = NotificationDevicePermissionStatus.Granted,
+                registeredTokenId = "token-id-1",
+                platform = NotificationTokenPlatform.Android,
+            ),
+        )
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true),
+            notificationRepository = repository,
+            notificationDeviceRegistrar = registrar,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+        viewModel.removeCurrentDevice()
+        runCurrent()
+
+        val state = assertIs<NotificationDeviceUiState.Success>(viewModel.deviceState.value)
+        assertEquals(null, state.registeredTokenId)
+        assertEquals(NotificationTokenDeleteRequest("token-id-1"), repository.deleteRequests.single())
+        assertEquals(listOf("token-id-1"), registrar.markedDeletedTokenIds)
+    }
 }
 
 private class FakeNotificationPreferencesRepository(
@@ -157,6 +253,8 @@ private class FakeNotificationPreferencesRepository(
     var loadCalls = 0
         private set
     val updateRequests = mutableListOf<NotificationPreferencesUpdateRequest>()
+    val registerRequests = mutableListOf<NotificationTokenRegistrationRequest>()
+    val deleteRequests = mutableListOf<NotificationTokenDeleteRequest>()
 
     override suspend fun getMyNotificationPreferences(): NotificationPreferencesResult {
         loadCalls += 1
@@ -180,13 +278,45 @@ private class FakeNotificationPreferencesRepository(
     override suspend fun registerNotificationToken(
         request: NotificationTokenRegistrationRequest,
     ): NotificationTokenRegistrationResult {
-        error("Not used")
+        registerRequests += request
+        return NotificationTokenRegistrationResult.Success("token-id-1", request.platform, enabled = true)
     }
 
     override suspend fun deleteNotificationToken(
         request: NotificationTokenDeleteRequest,
     ): NotificationTokenDeleteResult {
-        error("Not used")
+        deleteRequests += request
+        return NotificationTokenDeleteResult.Success(request.tokenId, "revoked")
+    }
+}
+
+private class FakeNotificationDeviceRegistrar(
+    private val currentState: NotificationDeviceRegistrationState = NotificationDeviceRegistrationState(
+        permissionStatus = NotificationDevicePermissionStatus.Granted,
+        registeredTokenId = null,
+        platform = NotificationTokenPlatform.Android,
+    ),
+    private val requestResult: NotificationDeviceRegistrationRequestResult =
+        NotificationDeviceRegistrationRequestResult.Success(notificationTokenRequest()),
+    private val requestDeferred: CompletableDeferred<NotificationDeviceRegistrationRequestResult>? = null,
+) : NotificationDeviceRegistrar {
+    val markedRegisteredTokenIds = mutableListOf<String>()
+    val markedDeletedTokenIds = mutableListOf<String>()
+
+    override suspend fun currentState(): NotificationDeviceRegistrationState {
+        return currentState
+    }
+
+    override suspend fun buildRegistrationRequest(): NotificationDeviceRegistrationRequestResult {
+        return requestDeferred?.await() ?: requestResult
+    }
+
+    override suspend fun markRegistered(tokenId: String) {
+        markedRegisteredTokenIds += tokenId
+    }
+
+    override suspend fun markDeleted(tokenId: String) {
+        markedDeletedTokenIds += tokenId
     }
 }
 
@@ -249,3 +379,13 @@ private fun notificationPreferences(): NotificationPreferences = NotificationPre
     loyaltyEnabled = true,
     marketingEnabled = false,
 )
+
+private fun notificationTokenRequest(): NotificationTokenRegistrationRequest {
+    return NotificationTokenRegistrationRequest(
+        token = "test-token-for-current-device-1234567890",
+        platform = NotificationTokenPlatform.Android,
+        tokenId = "current-test-device",
+        deviceLabel = "Pixel Test",
+        appVersion = "debug-1",
+    )
+}
