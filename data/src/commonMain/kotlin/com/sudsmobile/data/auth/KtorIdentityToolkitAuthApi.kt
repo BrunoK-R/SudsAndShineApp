@@ -30,6 +30,22 @@ class KtorIdentityToolkitAuthApi(
         }
     }
 
+    override suspend fun signInWithGoogleIdToken(idToken: String): AuthResult {
+        return authRequest("accounts:signInWithIdp") {
+            setBody(
+                IdpAuthPayload(
+                    postBody = listOf(
+                        "id_token" to idToken,
+                        "providerId" to GoogleProviderId,
+                    ).formUrlEncode(),
+                    requestUri = IdentityProviderRequestUri,
+                    returnIdpCredential = true,
+                    returnSecureToken = true,
+                ),
+            )
+        }
+    }
+
     override suspend fun signUp(email: String, password: String): AuthResult {
         return authRequest("accounts:signUp") {
             setBody(
@@ -156,6 +172,14 @@ private data class PasswordAuthPayload(
 )
 
 @Serializable
+private data class IdpAuthPayload(
+    val postBody: String,
+    val requestUri: String,
+    val returnIdpCredential: Boolean,
+    val returnSecureToken: Boolean,
+)
+
+@Serializable
 private data class UpdateProfilePayload(
     val idToken: String,
     val displayName: String,
@@ -247,3 +271,6 @@ private data class IdentityToolkitError(
         }
     }
 }
+
+private const val GoogleProviderId = "google.com"
+private const val IdentityProviderRequestUri = "http://localhost"

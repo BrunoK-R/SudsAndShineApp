@@ -199,6 +199,19 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun googleSignInPublishesAuthenticatedState() = runTest {
+        val authRepository = FakeRegistrationAuthRepository()
+        val viewModel = authViewModel(authRepository = authRepository)
+
+        viewModel.signInWithGoogleIdToken("google-id-token")
+        runCurrent()
+
+        val authenticated = assertIs<AuthUiState.Authenticated>(viewModel.uiState.value)
+        assertEquals("google-id-token", authRepository.lastGoogleIdToken)
+        assertEquals("bruno@gmail.com", authenticated.user.email)
+    }
+
+    @Test
     fun registerProfileSaveSkipsRepositoryWhenSessionChangesBeforeSync() = runTest {
         val authRepository = FakeRegistrationAuthRepository(
             sessionStateAfterRegister = AuthSessionState.Unauthenticated,
@@ -317,6 +330,8 @@ private class FakeRegistrationAuthRepository(
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
     var registerCalls: Int = 0
         private set
+    var lastGoogleIdToken: String? = null
+        private set
 
     override suspend fun currentSession(): AuthSession? {
         return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
@@ -327,6 +342,17 @@ private class FakeRegistrationAuthRepository(
             email = email.trim().lowercase(),
             displayName = "Bruno Ribeiro",
             phoneNumber = "913005855",
+        )
+        mutableSessionState.value = AuthSessionState.Authenticated(session)
+        return AuthResult.Success(session)
+    }
+
+    override suspend fun signInWithGoogleIdToken(idToken: String): AuthResult {
+        lastGoogleIdToken = idToken
+        val session = registrationSession(
+            email = "bruno@gmail.com",
+            displayName = "Bruno Ribeiro",
+            phoneNumber = "",
         )
         mutableSessionState.value = AuthSessionState.Authenticated(session)
         return AuthResult.Success(session)

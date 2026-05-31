@@ -1,4 +1,20 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.isFile) {
+        localPropertiesFile.inputStream().use(::load)
+    }
+}
+
+val googleWebClientId = providers
+    .gradleProperty("GOOGLE_WEB_CLIENT_ID")
+    .orElse(providers.provider { localProperties.getProperty("GOOGLE_WEB_CLIENT_ID").orEmpty() })
+
+fun String.asBuildConfigString(): String {
+    return "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+}
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -50,6 +66,7 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.play.services.auth)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -64,6 +81,11 @@ android {
 
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", googleWebClientId.get().asBuildConfigString())
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {

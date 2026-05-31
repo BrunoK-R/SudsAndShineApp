@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "991110746767",
+    "project_id": "sudsandshine-bd3e2",
+    "storage_bucket": "sudsandshine-bd3e2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:991110746767:android:aad65092f75a4bec97d6fa",
+        "android_client_info": {
+          "package_name": "org.sudsmobile.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "991110746767-h6p90791742kftkuc4t5rgo97d57gupv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "org.sudsmobile.app",
+            "certificate_hash": "3240ade0de307d119125514d508ff83af5d4aa05"
+          }
+        },
+        {
+          "client_id": "991110746767-udbahto3vgq0g16tovhbqft9pduafmce.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCw-5vHibPJ_RHeywuSb1Hk3laz2KxYxkY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "991110746767-udbahto3vgq0g16tovhbqft9pduafmce.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

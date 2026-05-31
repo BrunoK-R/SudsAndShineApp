@@ -100,6 +100,25 @@ class FirebaseAuthRepositoryTest {
     }
 
     @Test
+    fun googleSignInPersistsIssuedSession() = runTest {
+        val store = RecordingAuthSessionStore()
+        val api = RecordingAuthApi()
+        val repository = FirebaseAuthRepository(
+            api = api,
+            sessionStore = store,
+            nowEpochSeconds = { 1_000L },
+            restoreOnStart = false,
+        )
+
+        val result = repository.signInWithGoogleIdToken(" google-id-token ")
+
+        val success = assertIs<AuthResult.Success>(result)
+        assertEquals("google-id-token", api.lastGoogleIdToken)
+        assertEquals(1_000L, success.session.issuedAtEpochSeconds)
+        assertEquals("id-token", store.savedSession?.idToken)
+    }
+
+    @Test
     fun restoresPersistedSessionWithRefreshedToken() = runTest {
         val store = RecordingAuthSessionStore(savedSession = testSession(
             email = "bruno@example.com",
@@ -246,6 +265,8 @@ private class RecordingAuthApi(
         private set
     var lastDisplayName: String? = null
         private set
+    var lastGoogleIdToken: String? = null
+        private set
     var lastRefreshToken: String? = null
         private set
     val refreshStarted = CompletableDeferred<String>()
@@ -253,6 +274,11 @@ private class RecordingAuthApi(
     override suspend fun signIn(email: String, password: String): AuthResult {
         signInCalls += 1
         return AuthResult.Success(signInSession(email))
+    }
+
+    override suspend fun signInWithGoogleIdToken(idToken: String): AuthResult {
+        lastGoogleIdToken = idToken
+        return AuthResult.Success(signInSession("bruno@gmail.com"))
     }
 
     override suspend fun signUp(email: String, password: String): AuthResult {

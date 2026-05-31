@@ -98,6 +98,25 @@ class AuthViewModel(
         }
     }
 
+    fun signInWithGoogleIdToken(idToken: String) {
+        if (_uiState.value is AuthUiState.Loading) return
+
+        clearRegistrationProfileSync()
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Loading
+            _uiState.value = when (val result = authRepository.signInWithGoogleIdToken(idToken)) {
+                is AuthResult.Success -> AuthUiState.Authenticated(result.session.user)
+                is AuthResult.Failure -> result.error.toUiState()
+            }
+        }
+    }
+
+    fun showGoogleSignInError(message: String) {
+        if (_uiState.value !is AuthUiState.Loading) {
+            _uiState.value = AuthUiState.Error(message = message, retryable = true)
+        }
+    }
+
     fun register(
         displayName: String,
         email: String,

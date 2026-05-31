@@ -46,6 +46,40 @@ class KtorIdentityToolkitAuthApiTest {
     }
 
     @Test
+    fun mapsGoogleSignInResponseToAuthSession() = runTest {
+        var requestUrl = ""
+        val api = KtorIdentityToolkitAuthApi(
+            httpClient = mockClient(
+                """
+                {
+                  "localId": "google-user-1",
+                  "email": "bruno@gmail.com",
+                  "displayName": "Bruno Ribeiro",
+                  "idToken": "firebase-id-token",
+                  "refreshToken": "firebase-refresh-token",
+                  "expiresIn": "3600"
+                }
+                """.trimIndent(),
+                onRequest = { requestUrl = it.url.toString() },
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.signInWithGoogleIdToken("google-id-token")
+
+        val success = assertIs<AuthResult.Success>(result)
+        assertEquals(
+            "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=test-api-key",
+            requestUrl,
+        )
+        assertEquals("google-user-1", success.session.user.uid)
+        assertEquals("bruno@gmail.com", success.session.user.email)
+        assertEquals("Bruno Ribeiro", success.session.user.displayName)
+        assertEquals("firebase-id-token", success.session.idToken)
+        assertEquals("firebase-refresh-token", success.session.refreshToken)
+    }
+
+    @Test
     fun mapsInvalidCredentialsError() = runTest {
         val api = KtorIdentityToolkitAuthApi(
             httpClient = mockClient(

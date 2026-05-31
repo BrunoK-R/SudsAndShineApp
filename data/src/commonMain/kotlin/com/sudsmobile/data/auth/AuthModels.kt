@@ -53,6 +53,9 @@ interface AuthRepository {
 
     suspend fun currentSession(): AuthSession?
     suspend fun signIn(email: String, password: String): AuthResult
+    suspend fun signInWithGoogleIdToken(idToken: String): AuthResult = AuthResult.Failure(
+        AuthError.Permission("Este método de autenticação não está ativo neste dispositivo."),
+    )
     suspend fun register(
         displayName: String,
         email: String,

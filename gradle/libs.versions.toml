@@ -13,6 +13,7 @@ serialization = "1.9.0"
 ktor = "3.2.3"
 coroutines = "1.10.2"
 google = "4.4.3"
+play-services-auth = "21.6.0"
 crashlytics-plugin = "3.0.2"
 desugarJdkLibs = "2.1.5"
 mokoResources = "0.25.1"
@@ -43,6 +44,7 @@ ktor-android-client = { module = "io.ktor:ktor-client-android", version.ref = "k
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 moko-resources = { module = "dev.icerock.moko:resources", version.ref = "mokoResources" }
 moko-resources-compose = { module = "dev.icerock.moko:resources-compose", version.ref = "mokoResources" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

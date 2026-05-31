@@ -116,6 +116,8 @@ fun AuthScreen(
                 onEmailChange = { email = it },
                 onPasswordChange = { password = it },
                 onTogglePassword = { showPassword = !showPassword },
+                onGoogleIdToken = viewModel::signInWithGoogleIdToken,
+                onGoogleError = viewModel::showGoogleSignInError,
                 onForgotPassword = {
                     viewModel.clearTransientState()
                     mode = AuthMode.ForgotPassword.name
@@ -217,6 +219,8 @@ private fun ColumnScope.LoginContent(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onTogglePassword: () -> Unit,
+    onGoogleIdToken: (String) -> Unit,
+    onGoogleError: (String) -> Unit,
     onForgotPassword: () -> Unit,
     onLogin: () -> Unit,
     onGuest: () -> Unit,
@@ -230,6 +234,12 @@ private fun ColumnScope.LoginContent(
     )
     Spacer(Modifier.height(28.dp))
     AuthErrorMessage(errorMessage)
+    PlatformGoogleSignInButton(
+        enabled = !isLoading,
+        onIdToken = onGoogleIdToken,
+        onError = onGoogleError,
+    )
+    AuthDivider()
 
     AuthTextField(
         label = "Email",
@@ -292,7 +302,7 @@ private fun ColumnScope.LoginContent(
         enabled = !isLoading,
         loading = isLoading,
     )
-    AuthDivider()
+    Spacer(Modifier.height(14.dp))
     GuestButton(onClick = onGuest, enabled = !isLoading)
     Spacer(Modifier.height(22.dp))
     InlineAuthAction(

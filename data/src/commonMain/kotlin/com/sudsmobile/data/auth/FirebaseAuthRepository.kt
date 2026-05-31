@@ -48,6 +48,18 @@ class FirebaseAuthRepository(
         return result.applyAuthenticatedSession()
     }
 
+    override suspend fun signInWithGoogleIdToken(idToken: String): AuthResult {
+        val trimmedToken = idToken.trim()
+        if (trimmedToken.isBlank()) {
+            return AuthResult.Failure(
+                AuthError.Validation("Não foi possível obter a sessão Google. Tente novamente."),
+            )
+        }
+
+        val result = api.signInWithGoogleIdToken(trimmedToken)
+        return result.applyAuthenticatedSession()
+    }
+
     override suspend fun register(
         displayName: String,
         email: String,
