@@ -150,6 +150,18 @@ private val adminServiceExtrasMenuItem = ProfileMenuItem(
     action = ProfileMenuAction.AdminServiceExtras,
 )
 
+private val adminMenuItems = listOf(
+    adminMenuItem,
+    adminAvailabilityMenuItem,
+    adminBookingPolicyMenuItem,
+    adminLoyaltySettingsMenuItem,
+    adminNotificationSettingsMenuItem,
+    adminNotificationCampaignDraftsMenuItem,
+    adminBusinessInfoMenuItem,
+    adminServiceCatalogMenuItem,
+    adminServiceExtrasMenuItem,
+)
+
 private val menuItems = listOf(
     ProfileMenuItem(
         icon = Icons.Filled.Person,
@@ -240,6 +252,7 @@ fun ProfileScreen(
         onRetryStats = viewModel::loadStats,
         onRetryPreferences = viewModel::loadPreferences,
         onRetryPreferenceSave = viewModel::retryPreferenceSave,
+        onRetryAdminAccess = adminAccessViewModel::refreshForSession,
         onRetryBusinessInfo = { contactViewModel.loadBusinessInfo(force = true) },
         onMarketingOptInChange = viewModel::updateMarketingOptIn,
         onAppointmentReminderOptInChange = viewModel::updateAppointmentReminderOptIn,
@@ -274,6 +287,7 @@ private fun ProfileScreenContent(
     onRetryStats: () -> Unit,
     onRetryPreferences: () -> Unit,
     onRetryPreferenceSave: () -> Unit,
+    onRetryAdminAccess: () -> Unit,
     onRetryBusinessInfo: () -> Unit,
     onMarketingOptInChange: (Boolean) -> Unit,
     onAppointmentReminderOptInChange: (Boolean) -> Unit,
@@ -331,13 +345,16 @@ private fun ProfileScreenContent(
             )
             if (authenticatedUser != null) {
                 ProfileMenuCard(
-                    showAdminBookings = adminAccessState is AdminAccessUiState.Admin,
                     onOpenPersonalData = onOpenPersonalData,
                     onOpenNotificationPreferences = onOpenNotificationPreferences,
                     onManageVehicles = onManageVehicles,
                     onOpenHistory = onOpenHistory,
                     onOpenContact = onOpenContact,
                     onOpenRewards = onOpenRewards,
+                )
+                AdminOperationsCard(
+                    adminAccessState = adminAccessState,
+                    onRetryAdminAccess = onRetryAdminAccess,
                     onOpenAdminBookings = onOpenAdminBookings,
                     onOpenAdminAvailability = onOpenAdminAvailability,
                     onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
@@ -1053,13 +1070,59 @@ private fun ContactBusinessInfoUi.mapPreviewLabel(): String {
 
 @Composable
 private fun ProfileMenuCard(
-    showAdminBookings: Boolean,
     onOpenPersonalData: () -> Unit,
     onOpenNotificationPreferences: () -> Unit,
     onManageVehicles: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenContact: () -> Unit,
     onOpenRewards: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Column {
+            menuItems.forEachIndexed { index, item ->
+                ProfileMenuRow(
+                    item = item,
+                    onClick = {
+                        when (item.action) {
+                            ProfileMenuAction.None -> Unit
+                            ProfileMenuAction.AdminBookings,
+                            ProfileMenuAction.AdminAvailability,
+                            ProfileMenuAction.AdminBookingPolicy,
+                            ProfileMenuAction.AdminLoyaltySettings,
+                            ProfileMenuAction.AdminNotificationSettings,
+                            ProfileMenuAction.AdminNotificationCampaignDrafts,
+                            ProfileMenuAction.AdminBusinessInfo,
+                            ProfileMenuAction.AdminServiceCatalog,
+                            ProfileMenuAction.AdminServiceExtras -> Unit
+                            ProfileMenuAction.PersonalData -> onOpenPersonalData()
+                            ProfileMenuAction.NotificationPreferences -> onOpenNotificationPreferences()
+                            ProfileMenuAction.Vehicles -> onManageVehicles()
+                            ProfileMenuAction.Loyalty -> onOpenRewards()
+                            ProfileMenuAction.History -> onOpenHistory()
+                            ProfileMenuAction.Contact -> onOpenContact()
+                        }
+                    },
+                )
+                if (index != menuItems.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 68.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminOperationsCard(
+    adminAccessState: AdminAccessUiState,
+    onRetryAdminAccess: () -> Unit,
     onOpenAdminBookings: () -> Unit,
     onOpenAdminAvailability: () -> Unit,
     onOpenAdminBookingPolicy: () -> Unit,
@@ -1070,58 +1133,127 @@ private fun ProfileMenuCard(
     onOpenAdminServiceCatalog: () -> Unit,
     onOpenAdminServiceExtras: () -> Unit,
 ) {
-    val visibleItems = if (showAdminBookings) {
-        listOf(
-            adminMenuItem,
-            adminAvailabilityMenuItem,
-            adminBookingPolicyMenuItem,
-            adminLoyaltySettingsMenuItem,
-            adminNotificationSettingsMenuItem,
-            adminNotificationCampaignDraftsMenuItem,
-            adminBusinessInfoMenuItem,
-            adminServiceCatalogMenuItem,
-            adminServiceExtrasMenuItem,
-        ) + menuItems
-    } else {
-        menuItems
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-    ) {
-        Column {
-            visibleItems.forEachIndexed { index, item ->
-                ProfileMenuRow(
-                    item = item,
-                    onClick = {
-                        when (item.action) {
-                            ProfileMenuAction.None -> Unit
-                            ProfileMenuAction.AdminBookings -> onOpenAdminBookings()
-                            ProfileMenuAction.AdminAvailability -> onOpenAdminAvailability()
-                            ProfileMenuAction.AdminBookingPolicy -> onOpenAdminBookingPolicy()
-                            ProfileMenuAction.AdminLoyaltySettings -> onOpenAdminLoyaltySettings()
-                            ProfileMenuAction.AdminNotificationSettings -> onOpenAdminNotificationSettings()
-                            ProfileMenuAction.AdminNotificationCampaignDrafts ->
-                                onOpenAdminNotificationCampaignDrafts()
-                            ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
-                            ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
-                            ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()
-                            ProfileMenuAction.PersonalData -> onOpenPersonalData()
-                            ProfileMenuAction.NotificationPreferences -> onOpenNotificationPreferences()
-                            ProfileMenuAction.Vehicles -> onManageVehicles()
-                            ProfileMenuAction.Loyalty -> onOpenRewards()
-                            ProfileMenuAction.History -> onOpenHistory()
-                            ProfileMenuAction.Contact -> onOpenContact()
-                        }
-                    },
-                )
-                if (index != visibleItems.lastIndex) {
+    when (adminAccessState) {
+        AdminAccessUiState.Admin -> Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        ) {
+            Column {
+                AdminOperationsHeader()
+                adminMenuItems.forEachIndexed { index, item ->
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 68.dp),
                         color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    ProfileMenuRow(
+                        item = item,
+                        onClick = {
+                            when (item.action) {
+                                ProfileMenuAction.AdminBookings -> onOpenAdminBookings()
+                                ProfileMenuAction.AdminAvailability -> onOpenAdminAvailability()
+                                ProfileMenuAction.AdminBookingPolicy -> onOpenAdminBookingPolicy()
+                                ProfileMenuAction.AdminLoyaltySettings -> onOpenAdminLoyaltySettings()
+                                ProfileMenuAction.AdminNotificationSettings -> onOpenAdminNotificationSettings()
+                                ProfileMenuAction.AdminNotificationCampaignDrafts ->
+                                    onOpenAdminNotificationCampaignDrafts()
+                                ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
+                                ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
+                                ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()
+                                ProfileMenuAction.None,
+                                ProfileMenuAction.PersonalData,
+                                ProfileMenuAction.NotificationPreferences,
+                                ProfileMenuAction.Vehicles,
+                                ProfileMenuAction.Loyalty,
+                                ProfileMenuAction.History,
+                                ProfileMenuAction.Contact -> Unit
+                            }
+                        },
+                    )
+                    if (index == adminMenuItems.lastIndex) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                }
+            }
+        }
+
+        is AdminAccessUiState.Error -> AdminAccessErrorCard(
+            state = adminAccessState,
+            onRetryAdminAccess = onRetryAdminAccess,
+        )
+
+        AdminAccessUiState.Idle,
+        AdminAccessUiState.Loading,
+        AdminAccessUiState.NotAdmin -> Unit
+    }
+}
+
+@Composable
+private fun AdminOperationsHeader() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ProfileIconContainer(icon = Icons.Filled.Security)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "Administração",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "Acesso confirmado para operações protegidas.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminAccessErrorCard(
+    state: AdminAccessUiState.Error,
+    onRetryAdminAccess: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Permissões da conta indisponíveis",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = state.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            if (state.retryable) {
+                TextButton(
+                    onClick = onRetryAdminAccess,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                ) {
+                    Text(
+                        text = "Verificar novamente",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }

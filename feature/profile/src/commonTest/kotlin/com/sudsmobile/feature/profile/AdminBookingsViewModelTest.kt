@@ -96,6 +96,31 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
+    fun adminAccessRetryResyncsAfterBackendError() = runTest {
+        val repository = FakeAdminRepository(
+            roleResult = AdminRoleResult.Failure(AdminError.Unavailable("Rede indisponível.")),
+        )
+        val viewModel = AdminAccessViewModel(
+            authRepository = FakeAdminAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val error = assertIs<AdminAccessUiState.Error>(viewModel.uiState.value)
+        assertEquals("Rede indisponível.", error.message)
+        assertEquals(true, error.retryable)
+
+        repository.roleResult = AdminRoleResult.Success(adminRole(role = "admin"))
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<AdminAccessUiState.Admin>(viewModel.uiState.value)
+        assertEquals(2, repository.syncRoleCalls)
+    }
+
+    @Test
     fun adminAccessLoadsAfterRestoreCompletes() = runTest {
         val authRepository = FakeAdminAuthRepository(
             authenticated = false,
