@@ -64,6 +64,32 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getCompletableBookingRequests(idToken: String): AdminBookingRequestsResult {
+        return try {
+            val response = httpClient.post(config.getAdminCompletableReservationsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallablePendingReservationsResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminBookingRequestsResult.Failure(error.toAdminError())
+                body.result != null -> AdminBookingRequestsResult.Success(
+                    body.result.requests.map { it.toAdminBookingRequest() },
+                )
+                else -> AdminBookingRequestsResult.Failure(
+                    AdminError.Backend("A resposta das marcações concluíveis veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminBookingRequestsResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar marcações prontas a concluir. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun acceptBookingRequest(
         request: AdminBookingDecisionRequest,
         idToken: String,
@@ -82,6 +108,16 @@ class KtorAdminFunctionsApi(
         payload = DecisionPayload.from(request),
         idToken = idToken,
         unavailableMessage = "Não foi possível rejeitar a marcação. Tente novamente.",
+    )
+
+    override suspend fun completeBookingRequest(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult = postDecision(
+        url = config.completeReservationUrl,
+        payload = DecisionPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível concluir a marcação. Tente novamente.",
     )
 
     override suspend fun getBusinessInfoConfiguration(idToken: String): AdminBusinessInfoResult {

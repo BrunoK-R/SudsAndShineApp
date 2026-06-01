@@ -716,6 +716,56 @@ class FirebaseAdminRepositoryTest {
         assertIs<AdminError.Unauthenticated>(failure.error)
         assertEquals(0, api.clearBlockedSlotRequests.size)
     }
+
+    @Test
+    fun getCompletableBookingRequestsUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getCompletableBookingRequests()
+
+        val success = assertIs<AdminBookingRequestsResult.Success>(result)
+        assertEquals("reservation-2", success.requests.single().id)
+        assertEquals("id-token-1", api.completableBookingsIdTokens.single())
+    }
+
+    @Test
+    fun completeBookingRequestNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.completeBookingRequest(
+            AdminBookingDecisionRequest(reservationId = " reservation-2 "),
+        )
+
+        val success = assertIs<AdminBookingDecisionResult.Success>(result)
+        assertEquals("completed", success.receipt.status)
+        assertEquals("id-token-1", api.completeBookingIdTokens.single())
+        assertEquals("reservation-2", api.completeBookingRequests.single().reservationId)
+    }
+
+    @Test
+    fun completeBookingRequestReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.completeBookingRequest(
+            AdminBookingDecisionRequest(reservationId = "reservations/reservation-2"),
+        )
+
+        val failure = assertIs<AdminBookingDecisionResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.completeBookingRequests.size)
+    }
 }
 
 private class FakeAdminFunctionsApi : AdminFunctionsApi {
@@ -756,6 +806,9 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val upsertBlockedSlotIdTokens = mutableListOf<String>()
     val clearBlockedSlotRequests = mutableListOf<AdminBlockedSlotClearRequest>()
     val clearBlockedSlotIdTokens = mutableListOf<String>()
+    val completableBookingsIdTokens = mutableListOf<String>()
+    val completeBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
+    val completeBookingIdTokens = mutableListOf<String>()
 
     override suspend fun syncMyRole(idToken: String): AdminRoleResult {
         return AdminRoleResult.Failure(AdminError.Backend("unused"))
@@ -763,6 +816,35 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
 
     override suspend fun getPendingBookingRequests(idToken: String): AdminBookingRequestsResult {
         return AdminBookingRequestsResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun getCompletableBookingRequests(idToken: String): AdminBookingRequestsResult {
+        completableBookingsIdTokens += idToken
+        return AdminBookingRequestsResult.Success(
+            listOf(
+                AdminBookingRequest(
+                    id = "reservation-2",
+                    reservationCode = "SS-DONE",
+                    customerName = "Ana",
+                    customerEmail = "ana@example.com",
+                    customerPhone = "",
+                    serviceId = "premium",
+                    serviceName = "Lavagem Premium",
+                    slotStartIso = "2026-05-30T09:00:00.000Z",
+                    slotEndIso = "2026-05-30T10:00:00.000Z",
+                    status = "confirmed",
+                    paymentStatus = "paid",
+                    vehicleType = "passageiros",
+                    vehicleLabel = "",
+                    priceCents = 3200,
+                    extras = emptyList(),
+                    notes = "",
+                    createdAtIso = "2026-05-29T09:00:00.000Z",
+                    pendingExpiresAtIso = null,
+                    loyaltyRewardApplied = false,
+                ),
+            ),
+        )
     }
 
     override suspend fun acceptBookingRequest(
@@ -777,6 +859,21 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         idToken: String,
     ): AdminBookingDecisionResult {
         return AdminBookingDecisionResult.Failure(AdminError.Backend("unused"))
+    }
+
+    override suspend fun completeBookingRequest(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult {
+        completeBookingRequests += request
+        completeBookingIdTokens += idToken
+        return AdminBookingDecisionResult.Success(
+            AdminBookingDecisionReceipt(
+                reservationId = request.reservationId,
+                reservationCode = "SS-DONE",
+                status = "completed",
+            ),
+        )
     }
 
     override suspend fun getBusinessInfoConfiguration(idToken: String): AdminBusinessInfoResult {

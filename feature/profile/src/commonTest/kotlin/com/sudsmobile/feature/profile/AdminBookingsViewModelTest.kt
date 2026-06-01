@@ -37,6 +37,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -160,10 +161,39 @@ class AdminBookingsViewModelTest {
         runCurrent()
 
         val loaded = assertIs<AdminBookingsUiState.Loaded>(viewModel.uiState.value)
-        assertEquals("reservation-1", loaded.requests.single().id)
-        assertEquals("Ana Silva", loaded.requests.single().customerName)
-        assertEquals("Cera", loaded.requests.single().extras.single().name)
-        assertEquals("7,00 €", loaded.requests.single().extras.single().price)
+        assertEquals("reservation-1", loaded.pendingRequests.single().id)
+        assertEquals("Ana Silva", loaded.pendingRequests.single().customerName)
+        assertEquals("Pendente", loaded.pendingRequests.single().statusLabel)
+        assertEquals("Cera", loaded.pendingRequests.single().extras.single().name)
+        assertEquals("7,00 €", loaded.pendingRequests.single().extras.single().price)
+    }
+
+    @Test
+    fun loadRequestsBuildsCompletableRequestCards() = runTest {
+        val repository = FakeAdminRepository(
+            requestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            completableRequestsResult = AdminBookingRequestsResult.Success(
+                listOf(
+                    adminBookingRequest(
+                        id = "reservation-2",
+                        status = "confirmed",
+                    ),
+                ),
+            ),
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = FakeAdminAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadRequests()
+        runCurrent()
+
+        val loaded = assertIs<AdminBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(emptyList(), loaded.pendingRequests)
+        assertEquals("reservation-2", loaded.completableRequests.single().id)
+        assertEquals("Confirmada", loaded.completableRequests.single().statusLabel)
+        assertEquals("Pronta a concluir", loaded.completableRequests.single().statusDetail)
     }
 
     @Test
@@ -204,6 +234,52 @@ class AdminBookingsViewModelTest {
         assertEquals("reservation-1", repository.rejectRequests.single().reservationId)
         assertEquals("Sem vaga operacional", repository.rejectRequests.single().rejectionReason)
         assertIs<AdminBookingDecisionUiState.Success>(viewModel.decisionState.value)
+    }
+
+    @Test
+    fun completeRequestSendsDecisionAndReloadsRequests() = runTest {
+        val repository = FakeAdminRepository(
+            requestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            completableRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            completeResult = AdminBookingDecisionResult.Success(decisionReceipt(status = "completed")),
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = FakeAdminAuthRepository(authenticated = true),
+            adminRepository = repository,
+            bookingChangeNotifier = MutableBookingChangeNotifier(),
+        )
+
+        viewModel.completeRequest(" reservation-1 ")
+        runCurrent()
+
+        assertEquals("reservation-1", repository.completeRequests.single().reservationId)
+        val success = assertIs<AdminBookingDecisionUiState.Success>(viewModel.decisionState.value)
+        assertEquals("Marcação concluída.", success.message)
+        assertIs<AdminBookingsUiState.Empty>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun completeRequestIgnoresResultAfterSignOut() = runTest {
+        val completionResult = CompletableDeferred<AdminBookingDecisionResult>()
+        val authRepository = FakeAdminAuthRepository(authenticated = true)
+        val repository = FakeAdminRepository(
+            completeResultDeferred = completionResult,
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.completeRequest("reservation-1")
+        runCurrent()
+
+        authRepository.signOut()
+        completionResult.complete(AdminBookingDecisionResult.Success(decisionReceipt(status = "completed")))
+        runCurrent()
+
+        assertEquals(1, repository.completeRequests.size)
+        assertIs<AdminBookingDecisionUiState.Idle>(viewModel.decisionState.value)
+        assertIs<AdminBookingsUiState.Unauthenticated>(viewModel.uiState.value)
     }
 
     @Test
@@ -252,12 +328,17 @@ class AdminBookingsViewModelTest {
 private class FakeAdminRepository(
     var roleResult: AdminRoleResult = AdminRoleResult.Success(adminRole(role = "admin")),
     var requestsResult: AdminBookingRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+    var completableRequestsResult: AdminBookingRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
     var acceptResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
         decisionReceipt(status = "confirmed"),
     ),
     var rejectResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
         decisionReceipt(status = "rejected"),
     ),
+    var completeResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
+        decisionReceipt(status = "completed"),
+    ),
+    private val completeResultDeferred: CompletableDeferred<AdminBookingDecisionResult>? = null,
 ) : AdminRepository {
     var syncRoleCalls = 0
         private set
@@ -265,6 +346,7 @@ private class FakeAdminRepository(
         private set
     val acceptRequests = mutableListOf<AdminBookingDecisionRequest>()
     val rejectRequests = mutableListOf<AdminBookingDecisionRequest>()
+    val completeRequests = mutableListOf<AdminBookingDecisionRequest>()
 
     override suspend fun syncMyRole(): AdminRoleResult {
         syncRoleCalls += 1
@@ -274,6 +356,10 @@ private class FakeAdminRepository(
     override suspend fun getPendingBookingRequests(): AdminBookingRequestsResult {
         pendingRequestCalls += 1
         return requestsResult
+    }
+
+    override suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult {
+        return completableRequestsResult
     }
 
     override suspend fun acceptBookingRequest(
@@ -288,6 +374,13 @@ private class FakeAdminRepository(
     ): AdminBookingDecisionResult {
         rejectRequests += request
         return rejectResult
+    }
+
+    override suspend fun completeBookingRequest(
+        request: AdminBookingDecisionRequest,
+    ): AdminBookingDecisionResult {
+        completeRequests += request
+        return completeResultDeferred?.await() ?: completeResult
     }
 
     override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {
@@ -427,6 +520,7 @@ private fun decisionReceipt(status: String): AdminBookingDecisionReceipt = Admin
 private fun adminBookingRequest(
     id: String = "reservation-1",
     customerName: String = "Bruno Ribeiro",
+    status: String = "pending",
     extras: List<BookingReservationExtra> = emptyList(),
 ): AdminBookingRequest = AdminBookingRequest(
     id = id,
@@ -438,7 +532,7 @@ private fun adminBookingRequest(
     serviceName = "Lavagem Premium",
     slotStartIso = "2026-05-30T10:00:00.000Z",
     slotEndIso = "2026-05-30T11:00:00.000Z",
-    status = "pending",
+    status = status,
     paymentStatus = "pending",
     vehicleType = "passageiros",
     vehicleLabel = "BMW 320d",

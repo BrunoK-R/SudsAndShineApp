@@ -40,6 +40,8 @@ internal data class AdminBookingRequestUi(
     val vehicle: String,
     val price: String,
     val paymentStatus: String,
+    val statusLabel: String,
+    val statusDetail: String,
     val extras: List<AdminBookingExtraUi>,
     val notes: String,
     val createdAt: String,
@@ -58,7 +60,10 @@ internal sealed interface AdminBookingsUiState {
     data object Unauthenticated : AdminBookingsUiState
     data object NotAdmin : AdminBookingsUiState
     data object Empty : AdminBookingsUiState
-    data class Loaded(val requests: List<AdminBookingRequestUi>) : AdminBookingsUiState
+    data class Loaded(
+        val pendingRequests: List<AdminBookingRequestUi>,
+        val completableRequests: List<AdminBookingRequestUi>,
+    ) : AdminBookingsUiState
     data class Error(val message: String, val retryable: Boolean) : AdminBookingsUiState
 }
 
@@ -76,6 +81,7 @@ internal sealed interface AdminBookingDecisionUiState {
 internal enum class AdminBookingDecisionAction {
     Accept,
     Reject,
+    Complete,
 }
 
 internal class AdminAccessViewModel(
@@ -219,9 +225,18 @@ internal class AdminBookingsViewModel(
         viewModelScope.launch {
             try {
                 _uiState.value = AdminBookingsUiState.Loading
-                val nextState = when (val result = adminRepository.getPendingBookingRequests()) {
-                    is AdminBookingRequestsResult.Success -> result.requests.toAdminBookingsState()
-                    is AdminBookingRequestsResult.Failure -> result.error.toAdminBookingsState()
+                val pendingResult = adminRepository.getPendingBookingRequests()
+                val nextState = when (pendingResult) {
+                    is AdminBookingRequestsResult.Failure -> pendingResult.error.toAdminBookingsState()
+                    is AdminBookingRequestsResult.Success -> {
+                        when (val completableResult = adminRepository.getCompletableBookingRequests()) {
+                            is AdminBookingRequestsResult.Success -> toAdminBookingsState(
+                                pendingRequests = pendingResult.requests,
+                                completableRequests = completableResult.requests,
+                            )
+                            is AdminBookingRequestsResult.Failure -> completableResult.error.toAdminBookingsState()
+                        }
+                    }
                 }
                 if (requestSequence != requestsSequence) return@launch
 
@@ -259,6 +274,14 @@ internal class AdminBookingsViewModel(
         )
     }
 
+    fun completeRequest(reservationId: String) {
+        decideRequest(
+            reservationId = reservationId,
+            action = AdminBookingDecisionAction.Complete,
+            rejectionReason = "",
+        )
+    }
+
     fun clearDecisionState() {
         _decisionState.value = AdminBookingDecisionUiState.Idle
     }
@@ -279,9 +302,26 @@ internal class AdminBookingsViewModel(
             )
             return
         }
+        val requestedUid = currentAuthenticatedUid()
+        if (requestedUid == null) {
+            clearLoadedRequests()
+            _uiState.value = AdminBookingsUiState.Unauthenticated
+            _decisionState.value = AdminBookingDecisionUiState.Error(
+                reservationId = cleanReservationId,
+                message = "Inicie sessão para gerir marcações.",
+                retryable = false,
+            )
+            return
+        }
 
         viewModelScope.launch {
             _decisionState.value = AdminBookingDecisionUiState.Loading(cleanReservationId, action)
+            if (currentAuthenticatedUid() != requestedUid) {
+                clearLoadedRequests()
+                _uiState.value = AdminBookingsUiState.Unauthenticated
+                _decisionState.value = AdminBookingDecisionUiState.Idle
+                return@launch
+            }
             val request = AdminBookingDecisionRequest(
                 reservationId = cleanReservationId,
                 rejectionReason = rejectionReason,
@@ -289,6 +329,13 @@ internal class AdminBookingsViewModel(
             val result = when (action) {
                 AdminBookingDecisionAction.Accept -> adminRepository.acceptBookingRequest(request)
                 AdminBookingDecisionAction.Reject -> adminRepository.rejectBookingRequest(request)
+                AdminBookingDecisionAction.Complete -> adminRepository.completeBookingRequest(request)
+            }
+            if (currentAuthenticatedUid() != requestedUid) {
+                clearLoadedRequests()
+                refreshForSession(force = true)
+                _decisionState.value = AdminBookingDecisionUiState.Idle
+                return@launch
             }
             _decisionState.value = when (result) {
                 is AdminBookingDecisionResult.Success -> {
@@ -298,6 +345,7 @@ internal class AdminBookingsViewModel(
                     val message = when (action) {
                         AdminBookingDecisionAction.Accept -> "Marcação aceite."
                         AdminBookingDecisionAction.Reject -> "Marcação rejeitada."
+                        AdminBookingDecisionAction.Complete -> "Marcação concluída."
                     }
                     AdminBookingDecisionUiState.Success(message)
                 }
@@ -313,14 +361,25 @@ internal class AdminBookingsViewModel(
         loadingRevision = null
         requestsSequence += 1
     }
+
+    private fun currentAuthenticatedUid(): String? {
+        return (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+    }
 }
 
-private fun List<AdminBookingRequest>.toAdminBookingsState(): AdminBookingsUiState {
-    val requests = map { it.toUi() }
-    return if (requests.isEmpty()) {
+private fun toAdminBookingsState(
+    pendingRequests: List<AdminBookingRequest>,
+    completableRequests: List<AdminBookingRequest>,
+): AdminBookingsUiState {
+    val pending = pendingRequests.map { it.toUi() }
+    val completable = completableRequests.map { it.toUi() }
+    return if (pending.isEmpty() && completable.isEmpty()) {
         AdminBookingsUiState.Empty
     } else {
-        AdminBookingsUiState.Loaded(requests)
+        AdminBookingsUiState.Loaded(
+            pendingRequests = pending,
+            completableRequests = completable,
+        )
     }
 }
 
@@ -336,6 +395,8 @@ private fun AdminBookingRequest.toUi(): AdminBookingRequestUi = AdminBookingRequ
     vehicle = vehicleLabel.ifBlank { vehicleType.toVehicleLabel() },
     price = priceCents?.toEuroLabel() ?: "A confirmar",
     paymentStatus = paymentStatus.toPaymentLabel(),
+    statusLabel = status.toReservationStatusLabel(),
+    statusDetail = status.toReservationStatusDetail(pendingExpiresAtIso),
     extras = extras.toAdminExtraUi(),
     notes = notes,
     createdAt = createdAtIso.toDateTimeLabel() ?: "Data a confirmar",
@@ -412,6 +473,33 @@ private fun String.toPaymentLabel(): String {
         "failed", "declined", "falhou" -> "Falhou"
         "refunded", "refund", "reembolsado" -> "Reembolsado"
         else -> "Pendente"
+    }
+}
+
+private fun String.toReservationStatusLabel(): String {
+    return when (
+        trim()
+            .lowercase()
+            .replace("-", "_")
+            .replace(" ", "_")
+    ) {
+        "pending", "novo" -> "Pendente"
+        "confirmed", "confirmado" -> "Confirmada"
+        "in_progress", "em_execucao", "em_execução" -> "Em execução"
+        else -> "Estado a confirmar"
+    }
+}
+
+private fun String.toReservationStatusDetail(pendingExpiresAtIso: String?): String {
+    val normalized = trim()
+        .lowercase()
+        .replace("-", "_")
+        .replace(" ", "_")
+    return when (normalized) {
+        "pending", "novo" -> pendingExpiresAtIso?.toDateTimeLabel()?.let { "Expira $it" }
+            ?: "Sem expiração automática"
+        "confirmed", "confirmado", "in_progress", "em_execucao", "em_execução" -> "Pronta a concluir"
+        else -> ""
     }
 }
 

@@ -428,6 +428,8 @@ sealed interface AdminError {
 interface AdminRepository {
     suspend fun syncMyRole(): AdminRoleResult
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
+    suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult =
+        AdminBookingRequestsResult.Failure(AdminError.Backend("Completable reservations are not implemented."))
     suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
     suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult
     suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult =
@@ -505,6 +507,8 @@ interface AdminRepository {
 
     suspend fun acceptBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult
     suspend fun rejectBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult
+    suspend fun completeBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult =
+        AdminBookingDecisionResult.Failure(AdminError.Backend("Reservation completion is not implemented."))
     suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
     ): AdminServiceCatalogMutationResult

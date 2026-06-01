@@ -96,6 +96,7 @@ fun AdminBookingsScreen(
         onRequestSignIn = onRequestSignIn,
         onDismissDecision = viewModel::clearDecisionState,
         onAccept = viewModel::acceptRequest,
+        onComplete = viewModel::completeRequest,
         onStartReject = { reservationId ->
             viewModel.clearDecisionState()
             rejectingReservationId = reservationId
@@ -124,6 +125,7 @@ private fun AdminBookingsScreenContent(
     onRequestSignIn: () -> Unit,
     onDismissDecision: () -> Unit,
     onAccept: (String) -> Unit,
+    onComplete: (String) -> Unit,
     onStartReject: (String) -> Unit,
     onCancelReject: () -> Unit,
     onRejectionReasonChange: (String) -> Unit,
@@ -174,8 +176,8 @@ private fun AdminBookingsScreenContent(
                 )
 
                 AdminBookingsUiState.Empty -> AdminBookingsStatusCard(
-                    title = "Sem pedidos pendentes",
-                    body = "Não existem marcações a aguardar validação neste momento.",
+                    title = "Sem marcações para ação",
+                    body = "Não existem pedidos pendentes nem serviços prontos a concluir neste momento.",
                     icon = Icons.Filled.CheckCircle,
                     actionLabel = "Atualizar",
                     onAction = onRetry,
@@ -191,21 +193,44 @@ private fun AdminBookingsScreenContent(
 
                 is AdminBookingsUiState.Loaded -> {
                     AdminBookingsCountCard(
-                        count = uiState.requests.size,
+                        pendingCount = uiState.pendingRequests.size,
+                        completableCount = uiState.completableRequests.size,
                         onRetry = onRetry,
                     )
-                    uiState.requests.forEach { request ->
-                        AdminBookingRequestCard(
-                            request = request,
-                            decisionState = decisionState,
-                            rejecting = rejectingReservationId == request.id,
-                            rejectionReason = rejectionReason,
-                            onAccept = { onAccept(request.id) },
-                            onStartReject = { onStartReject(request.id) },
-                            onCancelReject = onCancelReject,
-                            onRejectionReasonChange = onRejectionReasonChange,
-                            onConfirmReject = { onConfirmReject(request.id) },
-                        )
+                    if (uiState.pendingRequests.isNotEmpty()) {
+                        AdminBookingsSectionTitle("Pedidos pendentes")
+                        uiState.pendingRequests.forEach { request ->
+                            AdminBookingRequestCard(
+                                request = request,
+                                decisionState = decisionState,
+                                rejecting = rejectingReservationId == request.id,
+                                rejectionReason = rejectionReason,
+                                onAccept = { onAccept(request.id) },
+                                onComplete = { onComplete(request.id) },
+                                onStartReject = { onStartReject(request.id) },
+                                onCancelReject = onCancelReject,
+                                onRejectionReasonChange = onRejectionReasonChange,
+                                onConfirmReject = { onConfirmReject(request.id) },
+                            )
+                        }
+                    }
+                    if (uiState.completableRequests.isNotEmpty()) {
+                        AdminBookingsSectionTitle("Prontas a concluir")
+                        uiState.completableRequests.forEach { request ->
+                            AdminBookingRequestCard(
+                                request = request,
+                                decisionState = decisionState,
+                                rejecting = false,
+                                rejectionReason = "",
+                                completeOnly = true,
+                                onAccept = { onAccept(request.id) },
+                                onComplete = { onComplete(request.id) },
+                                onStartReject = { onStartReject(request.id) },
+                                onCancelReject = onCancelReject,
+                                onRejectionReasonChange = onRejectionReasonChange,
+                                onConfirmReject = { onConfirmReject(request.id) },
+                            )
+                        }
                     }
                 }
             }
@@ -260,7 +285,7 @@ private fun AdminBookingsHeader(onBack: () -> Unit) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Pedidos pendentes de validação",
+            text = "Validação e conclusão operacional",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
@@ -278,6 +303,7 @@ private fun AdminDecisionBanner(
             message = when (decisionState.action) {
                 AdminBookingDecisionAction.Accept -> "A aceitar marcação."
                 AdminBookingDecisionAction.Reject -> "A rejeitar marcação."
+                AdminBookingDecisionAction.Complete -> "A concluir marcação."
             },
             loading = true,
         )
@@ -297,9 +323,11 @@ private fun AdminDecisionBanner(
 
 @Composable
 private fun AdminBookingsCountCard(
-    count: Int,
+    pendingCount: Int,
+    completableCount: Int,
     onRetry: () -> Unit,
 ) {
+    val totalCount = pendingCount + completableCount
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary),
@@ -321,7 +349,7 @@ private fun AdminBookingsCountCard(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = count.toString(),
+                        text = totalCount.toString(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -332,13 +360,13 @@ private fun AdminBookingsCountCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = if (count == 1) "Pedido pendente" else "Pedidos pendentes",
+                    text = "Marcações administrativas",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onTertiary,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Ordenados pela data e hora da marcação.",
+                    text = "$pendingCount pendentes · $completableCount prontas a concluir",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.76f),
                 )
@@ -360,12 +388,24 @@ private fun AdminBookingsCountCard(
 }
 
 @Composable
+private fun AdminBookingsSectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontWeight = FontWeight.Bold,
+    )
+}
+
+@Composable
 private fun AdminBookingRequestCard(
     request: AdminBookingRequestUi,
     decisionState: AdminBookingDecisionUiState,
     rejecting: Boolean,
     rejectionReason: String,
+    completeOnly: Boolean = false,
     onAccept: () -> Unit,
+    onComplete: () -> Unit,
     onStartReject: () -> Unit,
     onCancelReject: () -> Unit,
     onRejectionReasonChange: (String) -> Unit,
@@ -402,7 +442,12 @@ private fun AdminBookingRequestCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                AdminPill(text = request.expiresAt)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AdminPill(text = request.statusLabel)
+                    if (request.statusDetail.isNotBlank()) {
+                        AdminPill(text = request.statusDetail)
+                    }
+                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -429,7 +474,40 @@ private fun AdminBookingRequestCard(
                 )
             }
 
-            if (rejecting) {
+            if (completeOnly) {
+                Button(
+                    onClick = onComplete,
+                    enabled = !decisionInProgress,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
+                    ),
+                ) {
+                    if (cardBusy && activeDecision?.action == AdminBookingDecisionAction.Complete) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onTertiary,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Concluir",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            } else if (rejecting) {
                 AdminRejectEditor(
                     rejectionReason = rejectionReason,
                     enabled = !decisionInProgress,

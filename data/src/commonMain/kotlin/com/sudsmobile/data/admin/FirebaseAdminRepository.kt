@@ -22,6 +22,13 @@ class FirebaseAdminRepository(
         return api.getPendingBookingRequests(idToken)
     }
 
+    override suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBookingRequestsResult.Failure(unauthenticatedError())
+
+        return api.getCompletableBookingRequests(idToken)
+    }
+
     override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminBusinessInfoResult.Failure(unauthenticatedError())
@@ -263,6 +270,24 @@ class FirebaseAdminRepository(
             ?: return AdminBookingDecisionResult.Failure(unauthenticatedError())
 
         return api.rejectBookingRequest(normalizedRequest, idToken)
+            .also { result ->
+                if (result is AdminBookingDecisionResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
+    }
+
+    override suspend fun completeBookingRequest(
+        request: AdminBookingDecisionRequest,
+    ): AdminBookingDecisionResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminBookingDecisionResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBookingDecisionResult.Failure(unauthenticatedError())
+
+        return api.completeBookingRequest(normalizedRequest, idToken)
             .also { result ->
                 if (result is AdminBookingDecisionResult.Success) {
                     bookingChangeNotifier.notifyBookingsChanged()
