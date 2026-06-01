@@ -15,6 +15,46 @@ import kotlinx.coroutines.test.runTest
 
 class FirebaseAdminRepositoryTest {
     @Test
+    fun syncMyRoleRefreshesCurrentSessionAfterBackendClaimUpdate() = runTest {
+        val api = FakeAdminFunctionsApi(
+            roleResult = AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin")),
+        )
+        val authRepository = FakeAuthRepository(authenticated = true)
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = authRepository,
+        )
+
+        val result = repository.syncMyRole()
+
+        val success = assertIs<AdminRoleResult.Success>(result)
+        assertEquals(true, success.role.isAdmin)
+        assertEquals("id-token-1", api.syncRoleIdTokens.single())
+        assertEquals(1, authRepository.refreshCurrentSessionCalls)
+    }
+
+    @Test
+    fun syncMyRoleReturnsRefreshFailureWhenClaimRefreshFails() = runTest {
+        val api = FakeAdminFunctionsApi(
+            roleResult = AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin")),
+        )
+        val authRepository = FakeAuthRepository(
+            authenticated = true,
+            refreshResult = AuthResult.Failure(com.sudsmobile.data.auth.AuthError.Unavailable("Sem rede.")),
+        )
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = authRepository,
+        )
+
+        val result = repository.syncMyRole()
+
+        val failure = assertIs<AdminRoleResult.Failure>(result)
+        assertIs<AdminError.Unavailable>(failure.error)
+        assertEquals(1, authRepository.refreshCurrentSessionCalls)
+    }
+
+    @Test
     fun upsertServiceCatalogItemNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -768,7 +808,10 @@ class FirebaseAdminRepositoryTest {
     }
 }
 
-private class FakeAdminFunctionsApi : AdminFunctionsApi {
+private class FakeAdminFunctionsApi(
+    private val roleResult: AdminRoleResult = AdminRoleResult.Failure(AdminError.Backend("unused")),
+) : AdminFunctionsApi {
+    val syncRoleIdTokens = mutableListOf<String>()
     val upsertRequests = mutableListOf<AdminServiceCatalogMutationRequest>()
     val upsertIdTokens = mutableListOf<String>()
     val archiveRequests = mutableListOf<AdminServiceCatalogArchiveRequest>()
@@ -811,7 +854,8 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val completeBookingIdTokens = mutableListOf<String>()
 
     override suspend fun syncMyRole(idToken: String): AdminRoleResult {
-        return AdminRoleResult.Failure(AdminError.Backend("unused"))
+        syncRoleIdTokens += idToken
+        return roleResult
     }
 
     override suspend fun getPendingBookingRequests(idToken: String): AdminBookingRequestsResult {
@@ -1244,7 +1288,10 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     }
 }
 
-private class FakeAuthRepository(authenticated: Boolean) : AuthRepository {
+private class FakeAuthRepository(
+    authenticated: Boolean,
+    private val refreshResult: AuthResult? = null,
+) : AuthRepository {
     private val authSession = AuthSession(
         user = AuthUser(
             uid = "uid-1",
@@ -1261,9 +1308,17 @@ private class FakeAuthRepository(authenticated: Boolean) : AuthRepository {
     )
 
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
+    var refreshCurrentSessionCalls = 0
+        private set
 
     override suspend fun currentSession(): AuthSession? {
         return (sessionState.value as? AuthSessionState.Authenticated)?.session
+    }
+
+    override suspend fun refreshCurrentSession(): AuthResult {
+        refreshCurrentSessionCalls += 1
+        return refreshResult ?: currentSession()?.let { AuthResult.Success(it) }
+            ?: AuthResult.Failure(com.sudsmobile.data.auth.AuthError.InvalidCredentials("Sem sessão."))
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {

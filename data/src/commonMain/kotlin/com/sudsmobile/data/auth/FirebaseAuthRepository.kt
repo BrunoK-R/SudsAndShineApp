@@ -40,6 +40,17 @@ class FirebaseAuthRepository(
         }
     }
 
+    override suspend fun refreshCurrentSession(): AuthResult {
+        return refreshMutex.withLock {
+            val session = currentAuthenticatedSession()
+                ?: return@withLock AuthResult.Failure(
+                    AuthError.InvalidCredentials("A sessão expirou. Inicie sessão novamente."),
+                )
+
+            refreshSessionForResult(session)
+        }
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
         val validationError = validateCredentials(email, password)
         if (validationError != null) return AuthResult.Failure(validationError)
@@ -165,6 +176,40 @@ class FirebaseAuthRepository(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private suspend fun refreshSessionForResult(session: AuthSession): AuthResult {
+        if (session.refreshToken.isBlank()) {
+            if (clearSessionState(session, onlyIfRestoring = false)) {
+                clearStoredSession()
+            }
+            return AuthResult.Failure(AuthError.InvalidCredentials("A sessão expirou. Inicie sessão novamente."))
+        }
+
+        return when (val result = api.refreshSession(session.refreshToken)) {
+            is AuthResult.Success -> {
+                val refreshedSession = session.mergeRefresh(result.session, nowEpochSeconds())
+                if (authenticateRefreshedSession(session, refreshedSession, onlyIfRestoring = false)) {
+                    writeStoredSession(refreshedSession)
+                    AuthResult.Success(refreshedSession)
+                } else {
+                    AuthResult.Failure(AuthError.InvalidCredentials("A sessão mudou. Inicie sessão novamente."))
+                }
+            }
+            is AuthResult.Failure -> {
+                when (result.error) {
+                    is AuthError.InvalidCredentials,
+                    is AuthError.Permission,
+                    is AuthError.Validation -> {
+                        if (clearSessionState(session, onlyIfRestoring = false)) {
+                            clearStoredSession()
+                        }
+                    }
+                    else -> Unit
+                }
+                result
             }
         }
     }

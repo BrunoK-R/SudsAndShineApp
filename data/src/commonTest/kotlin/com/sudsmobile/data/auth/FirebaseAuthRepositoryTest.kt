@@ -164,6 +164,28 @@ class FirebaseAuthRepositoryTest {
     }
 
     @Test
+    fun refreshCurrentSessionRefreshesFreshTokenForClaimChanges() = runTest {
+        val store = RecordingAuthSessionStore()
+        val api = RecordingAuthApi()
+        val repository = FirebaseAuthRepository(
+            api = api,
+            sessionStore = store,
+            nowEpochSeconds = { 1_000L },
+            restoreOnStart = false,
+        )
+        repository.signIn(email = "bruno@example.com", password = "secret123")
+
+        val result = repository.refreshCurrentSession()
+
+        val success = assertIs<AuthResult.Success>(result)
+        assertEquals("refresh-token", api.lastRefreshToken)
+        assertEquals("refreshed-id-token", success.session.idToken)
+        assertEquals("refreshed-id-token", store.savedSession?.idToken)
+        val sessionState = assertIs<AuthSessionState.Authenticated>(repository.sessionState.value)
+        assertEquals("refreshed-id-token", sessionState.session.idToken)
+    }
+
+    @Test
     fun inFlightCurrentSessionRefreshDoesNotReauthenticateAfterSignOut() = runTest {
         var now = 1_000L
         val store = RecordingAuthSessionStore()
@@ -194,6 +216,40 @@ class FirebaseAuthRepositoryTest {
         )
 
         assertNull(session.await())
+        assertEquals(AuthSessionState.Unauthenticated, repository.sessionState.value)
+        assertNull(store.savedSession)
+    }
+
+    @Test
+    fun inFlightForcedRefreshDoesNotReauthenticateAfterSignOut() = runTest {
+        val store = RecordingAuthSessionStore()
+        val refreshResult = CompletableDeferred<AuthResult>()
+        val api = RecordingAuthApi(refreshResult = refreshResult)
+        val repository = FirebaseAuthRepository(
+            api = api,
+            sessionStore = store,
+            nowEpochSeconds = { 1_000L },
+            restoreOnStart = false,
+        )
+        repository.signIn(email = "bruno@example.com", password = "secret123")
+
+        val refresh = async { repository.refreshCurrentSession() }
+        assertEquals("refresh-token", api.refreshStarted.await())
+
+        repository.signOut()
+        refreshResult.complete(
+            AuthResult.Success(
+                testSession(
+                    email = "bruno@example.com",
+                    displayName = "Bruno Ribeiro",
+                    idToken = "late-id-token",
+                    refreshToken = "late-refresh-token",
+                ),
+            ),
+        )
+
+        val failure = assertIs<AuthResult.Failure>(refresh.await())
+        assertIs<AuthError.InvalidCredentials>(failure.error)
         assertEquals(AuthSessionState.Unauthenticated, repository.sessionState.value)
         assertNull(store.savedSession)
     }

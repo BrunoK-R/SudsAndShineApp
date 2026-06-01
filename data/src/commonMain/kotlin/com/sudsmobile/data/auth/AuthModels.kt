@@ -52,6 +52,12 @@ interface AuthRepository {
     val sessionState: StateFlow<AuthSessionState>
 
     suspend fun currentSession(): AuthSession?
+    suspend fun refreshCurrentSession(): AuthResult {
+        val session = currentSession()
+            ?: return AuthResult.Failure(AuthError.InvalidCredentials("A sessão expirou. Inicie sessão novamente."))
+        return AuthResult.Success(session)
+    }
+
     suspend fun signIn(email: String, password: String): AuthResult
     suspend fun signInWithGoogleIdToken(idToken: String): AuthResult = AuthResult.Failure(
         AuthError.Permission("Este método de autenticação não está ativo neste dispositivo."),

@@ -1,6 +1,7 @@
 package com.sudsmobile.data.admin
 
 import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 
 class FirebaseAdminRepository(
@@ -12,7 +13,15 @@ class FirebaseAdminRepository(
         val idToken = currentIdTokenOrNull()
             ?: return AdminRoleResult.Failure(unauthenticatedError())
 
-        return api.syncMyRole(idToken)
+        return when (val result = api.syncMyRole(idToken)) {
+            is AdminRoleResult.Failure -> result
+            is AdminRoleResult.Success -> {
+                when (val refreshResult = authRepository.refreshCurrentSession()) {
+                    is AuthResult.Success -> result
+                    is AuthResult.Failure -> AdminRoleResult.Failure(refreshResult.error.toAdminError())
+                }
+            }
+        }
     }
 
     override suspend fun getPendingBookingRequests(): AdminBookingRequestsResult {
@@ -348,6 +357,15 @@ class FirebaseAdminRepository(
     }
 
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken
+
+    private fun com.sudsmobile.data.auth.AuthError.toAdminError(): AdminError = when (this) {
+        is com.sudsmobile.data.auth.AuthError.Validation -> AdminError.Validation(message)
+        is com.sudsmobile.data.auth.AuthError.InvalidCredentials -> AdminError.Unauthenticated(message)
+        is com.sudsmobile.data.auth.AuthError.EmailInUse -> AdminError.Backend(message)
+        is com.sudsmobile.data.auth.AuthError.Permission -> AdminError.Permission(message)
+        is com.sudsmobile.data.auth.AuthError.Unavailable -> AdminError.Unavailable(message)
+        is com.sudsmobile.data.auth.AuthError.Backend -> AdminError.Backend(message)
+    }
 
     private fun validate(request: AdminBookingDecisionRequest): AdminError.Validation? {
         return when {
