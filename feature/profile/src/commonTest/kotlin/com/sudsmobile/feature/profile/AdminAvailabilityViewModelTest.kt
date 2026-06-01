@@ -117,6 +117,27 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun loadConfigurationMapsAuditLabelsForAvailabilityExceptions() = runTest {
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = FakeAvailabilityAdminRepository(),
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(
+            "Atualizado 2026-06-01 10:15 UTC por admin-ca...",
+            loaded.form.capacityOverrides.single().updatedAuditLabel,
+        )
+        assertEquals(
+            "Atualizado 2026-06-01 11:45 UTC por admin-bl...",
+            loaded.form.blockedSlots.single().updatedAuditLabel,
+        )
+    }
+
+    @Test
     fun saveValidatesBeforeRepositoryCall() = runTest {
         val repository = FakeAvailabilityAdminRepository()
         val viewModel = AdminAvailabilityViewModel(
@@ -500,6 +521,8 @@ private fun adminAvailabilityConfig(
         AdminCapacityOverrideItem(
             date = "2026-06-10",
             maxBookingsPerSlot = 0,
+            updatedAtIso = "2026-06-01T10:15:00.000Z",
+            updatedByUid = "admin-capacity",
         ),
     ),
     blockedSlots = listOf(
@@ -509,6 +532,8 @@ private fun adminAvailabilityConfig(
             slotStartIso = "2026-06-10T14:00:00.000Z",
             slotEndIso = "2026-06-10T15:00:00.000Z",
             reason = "Manutenção",
+            updatedAtIso = "2026-06-01T11:45:00.000Z",
+            updatedByUid = "admin-blocked",
         ),
     ),
 )

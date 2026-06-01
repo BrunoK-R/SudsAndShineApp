@@ -1720,10 +1720,14 @@ private data class NotificationCampaignDraftMutationResultPayload(
 private data class CapacityOverrideItemPayload(
     val date: String,
     val maxBookingsPerSlot: Int = 0,
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 ) {
     fun toAdminCapacityOverrideItem(): AdminCapacityOverrideItem = AdminCapacityOverrideItem(
         date = date.trim(),
         maxBookingsPerSlot = maxBookingsPerSlot.coerceIn(0, 20),
+        updatedAtIso = updatedAtIso.trim(),
+        updatedByUid = updatedByUid.trim(),
     )
 }
 
@@ -1735,6 +1739,8 @@ private data class BlockedSlotItemPayload(
     val slotStart: String = "",
     val slotEnd: String = "",
     val reason: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 ) {
     fun toAdminBlockedSlotItemOrNull(): AdminBlockedSlotItem? {
         val normalizedId = blockedSlotId.trim().ifBlank { id.trim() }
@@ -1748,6 +1754,8 @@ private data class BlockedSlotItemPayload(
             slotStartIso = start,
             slotEndIso = end,
             reason = reason.trim().ifBlank { "Bloqueio administrativo" },
+            updatedAtIso = updatedAtIso.trim(),
+            updatedByUid = updatedByUid.trim(),
         )
     }
 }

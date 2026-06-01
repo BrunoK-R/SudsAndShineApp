@@ -40,6 +40,7 @@ internal data class AdminAvailabilityForm(
 internal data class AdminCapacityOverrideUi(
     val date: String,
     val maxBookingsPerSlot: Int,
+    val updatedAuditLabel: String,
 ) {
     val capacityLabel: String
         get() = if (maxBookingsPerSlot == 0) {
@@ -55,6 +56,7 @@ internal data class AdminBlockedSlotUi(
     val startTime: String,
     val endTime: String,
     val reason: String,
+    val updatedAuditLabel: String,
 ) {
     val timeLabel: String
         get() = "$startTime - $endTime"
@@ -467,6 +469,7 @@ private fun AdminAvailabilityConfig.toForm(): AdminAvailabilityForm = AdminAvail
 private fun AdminCapacityOverrideItem.toUi(): AdminCapacityOverrideUi = AdminCapacityOverrideUi(
     date = date,
     maxBookingsPerSlot = maxBookingsPerSlot,
+    updatedAuditLabel = availabilityAuditLabel(updatedAtIso, updatedByUid),
 )
 
 private fun AdminBlockedSlotItem.toUi(): AdminBlockedSlotUi = AdminBlockedSlotUi(
@@ -475,6 +478,7 @@ private fun AdminBlockedSlotItem.toUi(): AdminBlockedSlotUi = AdminBlockedSlotUi
     startTime = slotStartIso.isoTimeLabel(),
     endTime = slotEndIso.isoTimeLabel(),
     reason = reason,
+    updatedAuditLabel = availabilityAuditLabel(updatedAtIso, updatedByUid),
 )
 
 private fun AdminAvailabilityForm.toUpdateRequest(): ParsedAvailabilityRequest {
@@ -587,6 +591,28 @@ private fun String.isoTimeLabel(): String {
     } else {
         ""
     }
+}
+
+private fun availabilityAuditLabel(timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toAvailabilityAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortAvailabilityAuditUid()
+        ?.let { " por $it" }
+        .orEmpty()
+    return "Atualizado $timestampLabel$actorLabel"
+}
+
+private fun String.toAvailabilityAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortAvailabilityAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
 }
 
 private fun Int.isLeapYear(): Boolean {

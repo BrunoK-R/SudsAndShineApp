@@ -284,6 +284,8 @@ data class AdminNotificationCampaignDraftMutationReceipt(
 data class AdminCapacityOverrideItem(
     val date: String,
     val maxBookingsPerSlot: Int,
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 )
 
 data class AdminBlockedSlotItem(
@@ -292,6 +294,8 @@ data class AdminBlockedSlotItem(
     val slotStartIso: String,
     val slotEndIso: String,
     val reason: String,
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 )
 
 data class AdminCapacityOverrideUpsertRequest(

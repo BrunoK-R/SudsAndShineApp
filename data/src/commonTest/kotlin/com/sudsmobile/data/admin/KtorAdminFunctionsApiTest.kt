@@ -307,7 +307,9 @@ class KtorAdminFunctionsApiTest {
                     "capacityOverrides": [
                       {
                         "date": "2026-06-10",
-                        "maxBookingsPerSlot": 0
+                        "maxBookingsPerSlot": 0,
+                        "updatedAtIso": "2026-06-01T10:15:00.000Z",
+                        "updatedByUid": "admin-capacity"
                       }
                     ],
                     "blockedSlots": [
@@ -316,7 +318,9 @@ class KtorAdminFunctionsApiTest {
                         "date": "2026-06-10",
                         "slotStart": "2026-06-10T09:00:00.000Z",
                         "slotEnd": "2026-06-10T10:00:00.000Z",
-                        "reason": "Manutenção"
+                        "reason": "Manutenção",
+                        "updatedAtIso": "2026-06-01T11:45:00.000Z",
+                        "updatedByUid": "admin-blocked"
                       }
                     ]
                   }
@@ -336,8 +340,12 @@ class KtorAdminFunctionsApiTest {
         assertEquals("Segunda a Sexta", success.config.openingHours.single().dayLabel)
         assertEquals("2026-06-10", success.config.capacityOverrides.single().date)
         assertEquals(0, success.config.capacityOverrides.single().maxBookingsPerSlot)
+        assertEquals("2026-06-01T10:15:00.000Z", success.config.capacityOverrides.single().updatedAtIso)
+        assertEquals("admin-capacity", success.config.capacityOverrides.single().updatedByUid)
         assertEquals("block-1", success.config.blockedSlots.single().blockedSlotId)
         assertEquals("2026-06-10T09:00:00.000Z", success.config.blockedSlots.single().slotStartIso)
+        assertEquals("2026-06-01T11:45:00.000Z", success.config.blockedSlots.single().updatedAtIso)
+        assertEquals("admin-blocked", success.config.blockedSlots.single().updatedByUid)
     }
 
     @Test

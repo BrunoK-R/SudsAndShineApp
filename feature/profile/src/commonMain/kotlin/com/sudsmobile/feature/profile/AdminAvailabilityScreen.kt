@@ -582,6 +582,13 @@ private fun AdminCapacityOverrideRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (override.updatedAuditLabel.isNotBlank()) {
+                    Text(
+                        text = override.updatedAuditLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             OutlinedButton(
                 onClick = { onClear(override.date) },
@@ -644,6 +651,13 @@ private fun AdminBlockedSlotRow(
                     Text(
                         text = blockedSlot.reason,
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (blockedSlot.updatedAuditLabel.isNotBlank()) {
+                    Text(
+                        text = blockedSlot.updatedAuditLabel,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
