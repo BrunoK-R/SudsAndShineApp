@@ -538,6 +538,13 @@ private fun adminNotificationTemplates(): List<AdminNotificationTemplateConfig> 
         body = "Diga-nos como correu o serviço.",
     ),
     AdminNotificationTemplateConfig(
+        key = "loyalty_reward",
+        label = "Recompensa de fidelização",
+        enabled = true,
+        title = "Recompensa disponível",
+        body = "A sua recompensa está pronta.",
+    ),
+    AdminNotificationTemplateConfig(
         key = "admin_pending_booking",
         label = "Alerta admin de pedido",
         enabled = true,

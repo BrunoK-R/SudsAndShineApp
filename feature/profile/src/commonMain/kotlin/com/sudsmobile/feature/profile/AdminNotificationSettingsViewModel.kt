@@ -534,6 +534,13 @@ private fun defaultNotificationTemplates(): List<AdminNotificationTemplateConfig
             body = "Avalie o serviço para nos ajudar a melhorar.",
         ),
         AdminNotificationTemplateConfig(
+            key = "loyalty_reward",
+            label = "Recompensa de fidelização",
+            enabled = true,
+            title = "Recompensa disponível",
+            body = "A sua recompensa {{rewardDescription}} está pronta. Use o código {{rewardCode}} na próxima marcação.",
+        ),
+        AdminNotificationTemplateConfig(
             key = "admin_pending_booking",
             label = "Alerta admin de pedido",
             enabled = true,
@@ -552,5 +559,6 @@ private val NotificationTemplateKeys = setOf(
     "booking_rescheduled",
     "booking_reminder",
     "review_prompt",
+    "loyalty_reward",
     "admin_pending_booking",
 )
