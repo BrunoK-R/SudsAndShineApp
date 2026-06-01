@@ -510,6 +510,90 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun getNotificationCampaignDraftsUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getNotificationCampaignDrafts()
+
+        val success = assertIs<AdminNotificationCampaignDraftsResult.Success>(result)
+        assertEquals("summer-test", success.config.campaigns.single().campaignId)
+        assertEquals("id-token-1", api.notificationCampaignDraftsIdTokens.single())
+    }
+
+    @Test
+    fun upsertNotificationCampaignDraftNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertNotificationCampaignDraft(
+            AdminNotificationCampaignDraftMutationRequest(
+                campaignId = " summer-test ",
+                title = "  Oferta   verão ",
+                body = "  Campanha   apenas   em rascunho ",
+                targetAudience = "test_users",
+                scheduledAtIso = " 2026-06-10T10:00:00.000Z ",
+                notes = "  QA   interno ",
+            ),
+        )
+
+        val success = assertIs<AdminNotificationCampaignDraftMutationResult.Success>(result)
+        val request = api.upsertNotificationCampaignDraftRequests.single()
+        assertEquals("summer-test", success.receipt.campaignId)
+        assertEquals("id-token-1", api.upsertNotificationCampaignDraftIdTokens.single())
+        assertEquals("summer-test", request.campaignId)
+        assertEquals("Oferta verão", request.title)
+        assertEquals("Campanha apenas em rascunho", request.body)
+        assertEquals("QA interno", request.notes)
+    }
+
+    @Test
+    fun upsertNotificationCampaignDraftReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertNotificationCampaignDraft(
+            AdminNotificationCampaignDraftMutationRequest(
+                campaignId = "../summer-test",
+                title = "Oferta verão",
+                body = "Campanha apenas em rascunho",
+                targetAudience = "all_users",
+            ),
+        )
+
+        val failure = assertIs<AdminNotificationCampaignDraftMutationResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.upsertNotificationCampaignDraftRequests.size)
+    }
+
+    @Test
+    fun archiveNotificationCampaignDraftNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.archiveNotificationCampaignDraft(
+            AdminNotificationCampaignDraftArchiveRequest(campaignId = " summer-test "),
+        )
+
+        val success = assertIs<AdminNotificationCampaignDraftMutationResult.Success>(result)
+        assertEquals("summer-test", success.receipt.campaignId)
+        assertEquals("id-token-1", api.archiveNotificationCampaignDraftIdTokens.single())
+        assertEquals("summer-test", api.archiveNotificationCampaignDraftRequests.single().campaignId)
+    }
+
+    @Test
     fun upsertCapacityOverrideNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -593,6 +677,11 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val updateNotificationSettingsIdTokens = mutableListOf<String>()
     val notificationTestRequests = mutableListOf<AdminNotificationTestRequest>()
     val notificationTestIdTokens = mutableListOf<String>()
+    val notificationCampaignDraftsIdTokens = mutableListOf<String>()
+    val upsertNotificationCampaignDraftRequests = mutableListOf<AdminNotificationCampaignDraftMutationRequest>()
+    val upsertNotificationCampaignDraftIdTokens = mutableListOf<String>()
+    val archiveNotificationCampaignDraftRequests = mutableListOf<AdminNotificationCampaignDraftArchiveRequest>()
+    val archiveNotificationCampaignDraftIdTokens = mutableListOf<String>()
     val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
     val upsertCapacityOverrideIdTokens = mutableListOf<String>()
     val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
@@ -748,6 +837,62 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
                 deliveryState = "queued",
                 recipientUid = "admin-1",
                 message = "queued",
+            ),
+        )
+    }
+
+    override suspend fun getNotificationCampaignDrafts(idToken: String): AdminNotificationCampaignDraftsResult {
+        notificationCampaignDraftsIdTokens += idToken
+        return AdminNotificationCampaignDraftsResult.Success(
+            AdminNotificationCampaignDraftsConfig(
+                source = "firestore",
+                campaigns = listOf(
+                    AdminNotificationCampaignDraft(
+                        campaignId = "summer-test",
+                        title = "Oferta verão",
+                        body = "Campanha apenas em rascunho",
+                        targetAudience = "test_users",
+                        channels = listOf("push"),
+                        marketingConsentRequired = false,
+                        status = "draft",
+                        scheduledAtIso = "2026-06-10T10:00:00.000Z",
+                        notes = "QA",
+                        sendBlocked = true,
+                        sendBlockedReason = "campaign-send-not-implemented",
+                    ),
+                ),
+            ),
+        )
+    }
+
+    override suspend fun upsertNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftMutationRequest,
+        idToken: String,
+    ): AdminNotificationCampaignDraftMutationResult {
+        upsertNotificationCampaignDraftRequests += request
+        upsertNotificationCampaignDraftIdTokens += idToken
+        return AdminNotificationCampaignDraftMutationResult.Success(
+            AdminNotificationCampaignDraftMutationReceipt(
+                campaignId = request.campaignId.ifBlank { "generated-campaign" },
+                status = "draft",
+                created = request.campaignId.isBlank(),
+                targetAudience = request.targetAudience,
+                sendBlocked = true,
+                sendBlockedReason = "campaign-send-not-implemented",
+            ),
+        )
+    }
+
+    override suspend fun archiveNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftArchiveRequest,
+        idToken: String,
+    ): AdminNotificationCampaignDraftMutationResult {
+        archiveNotificationCampaignDraftRequests += request
+        archiveNotificationCampaignDraftIdTokens += idToken
+        return AdminNotificationCampaignDraftMutationResult.Success(
+            AdminNotificationCampaignDraftMutationReceipt(
+                campaignId = request.campaignId,
+                status = "archived",
             ),
         )
     }

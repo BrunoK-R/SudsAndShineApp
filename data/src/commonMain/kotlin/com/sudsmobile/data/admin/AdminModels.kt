@@ -225,6 +225,48 @@ data class AdminNotificationTestReceipt(
     val message: String,
 )
 
+data class AdminNotificationCampaignDraft(
+    val campaignId: String,
+    val title: String,
+    val body: String,
+    val targetAudience: String,
+    val channels: List<String>,
+    val marketingConsentRequired: Boolean,
+    val status: String,
+    val scheduledAtIso: String,
+    val notes: String,
+    val sendBlocked: Boolean,
+    val sendBlockedReason: String,
+)
+
+data class AdminNotificationCampaignDraftsConfig(
+    val source: String,
+    val campaigns: List<AdminNotificationCampaignDraft>,
+)
+
+data class AdminNotificationCampaignDraftMutationRequest(
+    val campaignId: String = "",
+    val title: String,
+    val body: String,
+    val targetAudience: String,
+    val scheduledAtIso: String = "",
+    val notes: String = "",
+    val pushEnabled: Boolean = true,
+)
+
+data class AdminNotificationCampaignDraftArchiveRequest(
+    val campaignId: String,
+)
+
+data class AdminNotificationCampaignDraftMutationReceipt(
+    val campaignId: String,
+    val status: String,
+    val created: Boolean = false,
+    val targetAudience: String = "",
+    val sendBlocked: Boolean = true,
+    val sendBlockedReason: String = "",
+)
+
 data class AdminCapacityOverrideItem(
     val date: String,
     val maxBookingsPerSlot: Int,
@@ -321,6 +363,19 @@ sealed interface AdminNotificationTestResult {
     data class Failure(val error: AdminError) : AdminNotificationTestResult
 }
 
+sealed interface AdminNotificationCampaignDraftsResult {
+    data class Success(val config: AdminNotificationCampaignDraftsConfig) : AdminNotificationCampaignDraftsResult
+    data class Failure(val error: AdminError) : AdminNotificationCampaignDraftsResult
+}
+
+sealed interface AdminNotificationCampaignDraftMutationResult {
+    data class Success(
+        val receipt: AdminNotificationCampaignDraftMutationReceipt,
+    ) : AdminNotificationCampaignDraftMutationResult
+
+    data class Failure(val error: AdminError) : AdminNotificationCampaignDraftMutationResult
+}
+
 sealed interface AdminCapacityOverrideMutationResult {
     data class Success(val receipt: AdminCapacityOverrideMutationReceipt) : AdminCapacityOverrideMutationResult
     data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
@@ -374,6 +429,25 @@ interface AdminRepository {
         request: AdminNotificationTestRequest,
     ): AdminNotificationTestResult =
         AdminNotificationTestResult.Failure(AdminError.Backend("Notification test send is not implemented."))
+
+    suspend fun getNotificationCampaignDrafts(): AdminNotificationCampaignDraftsResult =
+        AdminNotificationCampaignDraftsResult.Failure(
+            AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
+
+    suspend fun upsertNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftMutationRequest,
+    ): AdminNotificationCampaignDraftMutationResult =
+        AdminNotificationCampaignDraftMutationResult.Failure(
+            AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
+
+    suspend fun archiveNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftArchiveRequest,
+    ): AdminNotificationCampaignDraftMutationResult =
+        AdminNotificationCampaignDraftMutationResult.Failure(
+            AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
 
     suspend fun updateAvailabilityConfiguration(
         request: AdminAvailabilityUpdateRequest,

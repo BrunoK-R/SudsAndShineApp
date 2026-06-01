@@ -536,6 +536,125 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminNotificationCampaignDrafts() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "source": "firestore",
+                    "campaigns": [
+                      {
+                        "campaignId": "summer-test",
+                        "title": "Oferta verão",
+                        "body": "Campanha apenas em rascunho",
+                        "targetAudience": "test_users",
+                        "channels": ["push"],
+                        "marketingConsentRequired": false,
+                        "status": "draft",
+                        "scheduledAtIso": "2026-06-10T10:00:00.000Z",
+                        "notes": "QA",
+                        "sendBlocked": true,
+                        "sendBlockedReason": "campaign-send-not-implemented"
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getNotificationCampaignDrafts("id-token-1")
+
+        val success = assertIs<AdminNotificationCampaignDraftsResult.Success>(result)
+        val draft = success.config.campaigns.single()
+        assertEquals("/test-project/europe-west1/getAdminNotificationCampaignDrafts", requestedPath)
+        assertEquals("firestore", success.config.source)
+        assertEquals("summer-test", draft.campaignId)
+        assertEquals("push", draft.channels.single())
+        assertEquals(true, draft.sendBlocked)
+    }
+
+    @Test
+    fun postsNotificationCampaignDraftUpsertWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "created": true,
+                    "campaignId": "summer-test",
+                    "status": "draft",
+                    "targetAudience": "test_users",
+                    "sendBlocked": true,
+                    "sendBlockedReason": "campaign-send-not-implemented"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.upsertNotificationCampaignDraft(
+            AdminNotificationCampaignDraftMutationRequest(
+                campaignId = "summer-test",
+                title = "Oferta verão",
+                body = "Campanha apenas em rascunho",
+                targetAudience = "test_users",
+                scheduledAtIso = "2026-06-10T10:00:00.000Z",
+                notes = "QA",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminNotificationCampaignDraftMutationResult.Success>(result)
+        assertEquals("/test-project/europe-west1/upsertAdminNotificationCampaignDraft", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("summer-test", success.receipt.campaignId)
+        assertEquals(true, success.receipt.created)
+        assertEquals(true, success.receipt.sendBlocked)
+    }
+
+    @Test
+    fun mapsNotificationCampaignArchiveNotFound() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "NOT_FOUND",
+                    "message": "Notification campaign draft not found"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.archiveNotificationCampaignDraft(
+            AdminNotificationCampaignDraftArchiveRequest(campaignId = "summer-test"),
+            idToken = "id-token-1",
+        )
+
+        val failure = assertIs<AdminNotificationCampaignDraftMutationResult.Failure>(result)
+        assertEquals("/test-project/europe-west1/archiveAdminNotificationCampaignDraft", requestedPath)
+        assertIs<AdminError.NotFound>(failure.error)
+    }
+
+    @Test
     fun postsAvailabilityUpdateWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null

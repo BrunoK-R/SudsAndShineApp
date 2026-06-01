@@ -103,6 +103,15 @@ data class FirebaseFunctionsConfig(
     val sendAdminNotificationTestUrl: String
         get() = functionUrl("sendAdminNotificationTest")
 
+    val getAdminNotificationCampaignDraftsUrl: String
+        get() = functionUrl("getAdminNotificationCampaignDrafts")
+
+    val upsertAdminNotificationCampaignDraftUrl: String
+        get() = functionUrl("upsertAdminNotificationCampaignDraft")
+
+    val archiveAdminNotificationCampaignDraftUrl: String
+        get() = functionUrl("archiveAdminNotificationCampaignDraft")
+
     val upsertCapacityOverrideUrl: String
         get() = functionUrl("upsertCapacityOverride")
 

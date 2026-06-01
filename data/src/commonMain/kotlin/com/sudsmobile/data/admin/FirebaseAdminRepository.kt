@@ -149,6 +149,39 @@ class FirebaseAdminRepository(
         return api.sendNotificationTestToSelf(normalizedRequest, idToken)
     }
 
+    override suspend fun getNotificationCampaignDrafts(): AdminNotificationCampaignDraftsResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminNotificationCampaignDraftsResult.Failure(unauthenticatedError())
+
+        return api.getNotificationCampaignDrafts(idToken)
+    }
+
+    override suspend fun upsertNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftMutationRequest,
+    ): AdminNotificationCampaignDraftMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminNotificationCampaignDraftMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminNotificationCampaignDraftMutationResult.Failure(unauthenticatedError())
+
+        return api.upsertNotificationCampaignDraft(normalizedRequest, idToken)
+    }
+
+    override suspend fun archiveNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftArchiveRequest,
+    ): AdminNotificationCampaignDraftMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminNotificationCampaignDraftMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminNotificationCampaignDraftMutationResult.Failure(unauthenticatedError())
+
+        return api.archiveNotificationCampaignDraft(normalizedRequest, idToken)
+    }
+
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
     ): AdminCapacityOverrideMutationResult {
@@ -474,6 +507,38 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminNotificationCampaignDraftMutationRequest): AdminError.Validation? {
+        return when {
+            request.campaignId.isNotBlank() && !request.campaignId.isValidCampaignId() ->
+                AdminError.Validation("O identificador da campanha é inválido.")
+            request.title.isBlank() ->
+                AdminError.Validation("Indique o título da campanha.")
+            request.title.length > MaxNotificationCampaignTitleLength ->
+                AdminError.Validation("O título da campanha deve ter no máximo 120 caracteres.")
+            request.body.isBlank() ->
+                AdminError.Validation("Indique a mensagem da campanha.")
+            request.body.length > MaxNotificationCampaignBodyLength ->
+                AdminError.Validation("A mensagem da campanha deve ter no máximo 1000 caracteres.")
+            request.targetAudience !in NotificationCampaignTargetAudiences ->
+                AdminError.Validation("Escolha um público de teste ou marketing opt-in.")
+            request.scheduledAtIso.isNotBlank() && !request.scheduledAtIso.isValidUtcInstantIso() ->
+                AdminError.Validation("Indique a data agendada em ISO UTC.")
+            request.notes.length > MaxNotificationCampaignNotesLength ->
+                AdminError.Validation("As notas devem ter no máximo 500 caracteres.")
+            !request.pushEnabled ->
+                AdminError.Validation("Apenas rascunhos push são suportados.")
+            else -> null
+        }
+    }
+
+    private fun validate(request: AdminNotificationCampaignDraftArchiveRequest): AdminError.Validation? {
+        return when {
+            request.campaignId.isBlank() || !request.campaignId.isValidCampaignId() ->
+                AdminError.Validation("O identificador da campanha é inválido.")
+            else -> null
+        }
+    }
+
     private fun AdminBookingDecisionRequest.normalized(): AdminBookingDecisionRequest = copy(
         reservationId = reservationId.trim(),
         rejectionReason = rejectionReason.trim().replace(Regex("\\s+"), " "),
@@ -574,6 +639,22 @@ class FirebaseAdminRepository(
     private fun AdminNotificationTestRequest.normalized(): AdminNotificationTestRequest = copy(
         templateKey = templateKey.trim(),
     )
+
+    private fun AdminNotificationCampaignDraftMutationRequest.normalized():
+        AdminNotificationCampaignDraftMutationRequest = copy(
+        campaignId = campaignId.trim(),
+        title = title.normalizeAdminText(),
+        body = body.normalizeAdminText(),
+        targetAudience = targetAudience.trim(),
+        scheduledAtIso = scheduledAtIso.trim(),
+        notes = notes.normalizeAdminText(),
+        pushEnabled = pushEnabled,
+    )
+
+    private fun AdminNotificationCampaignDraftArchiveRequest.normalized():
+        AdminNotificationCampaignDraftArchiveRequest = copy(
+        campaignId = campaignId.trim(),
+    )
 }
 
 private const val MaxRejectionReasonLength = 500
@@ -605,6 +686,9 @@ private const val MinNotificationReminderLeadMinutes = 15
 private const val MaxNotificationReminderLeadMinutes = 7 * 24 * 60
 private const val MaxNotificationTemplateTitleLength = 120
 private const val MaxNotificationTemplateBodyLength = 500
+private const val MaxNotificationCampaignTitleLength = 120
+private const val MaxNotificationCampaignBodyLength = 1000
+private const val MaxNotificationCampaignNotesLength = 500
 private val NotificationTemplateKeys = setOf(
     "booking_request",
     "booking_accepted",
@@ -617,8 +701,11 @@ private val NotificationTemplateKeys = setOf(
     "admin_pending_booking",
 )
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
+private val CampaignIdRegex = Regex("^[A-Za-z0-9_-]{3,80}$")
+private val UtcInstantIsoRegex = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$")
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
 private val AdminTimeRegex = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
+private val NotificationCampaignTargetAudiences = setOf("test_users", "marketing_opt_in_users")
 
 private fun unauthenticatedError(): AdminError.Unauthenticated {
     return AdminError.Unauthenticated("Inicie sessão para gerir a área administrativa.")
@@ -626,6 +713,14 @@ private fun unauthenticatedError(): AdminError.Unauthenticated {
 
 private fun String.isValidCatalogId(): Boolean {
     return CatalogIdRegex.matches(this)
+}
+
+private fun String.isValidCampaignId(): Boolean {
+    return CampaignIdRegex.matches(this) && !contains("/")
+}
+
+private fun String.isValidUtcInstantIso(): Boolean {
+    return UtcInstantIsoRegex.matches(trim())
 }
 
 private fun String.normalizeAdminText(): String {

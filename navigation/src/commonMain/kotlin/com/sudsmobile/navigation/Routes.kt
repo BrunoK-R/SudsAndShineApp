@@ -18,6 +18,7 @@ object Routes {
     const val AdminBookingPolicy = "admin_booking_policy"
     const val AdminLoyaltySettings = "admin_loyalty_settings"
     const val AdminNotificationSettings = "admin_notification_settings"
+    const val AdminNotificationCampaignDrafts = "admin_notification_campaign_drafts"
     const val AdminBusinessInfo = "admin_business_info"
     const val AdminServiceCatalog = "admin_service_catalog"
     const val AdminServiceExtras = "admin_service_extras"

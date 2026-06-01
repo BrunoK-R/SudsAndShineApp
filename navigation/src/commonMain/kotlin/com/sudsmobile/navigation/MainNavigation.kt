@@ -42,6 +42,7 @@ import com.sudsmobile.feature.profile.AdminBookingPolicyScreen
 import com.sudsmobile.feature.profile.AdminBusinessInfoScreen
 import com.sudsmobile.feature.profile.AdminBookingsScreen
 import com.sudsmobile.feature.profile.AdminLoyaltySettingsScreen
+import com.sudsmobile.feature.profile.AdminNotificationCampaignDraftsScreen
 import com.sudsmobile.feature.profile.AdminNotificationSettingsScreen
 import com.sudsmobile.feature.profile.AdminServiceCatalogScreen
 import com.sudsmobile.feature.profile.AdminServiceExtrasScreen
@@ -206,6 +207,9 @@ fun MainNavigation(
                     onOpenAdminBusinessInfo = { navController.navigate(Routes.AdminBusinessInfo) },
                     onOpenAdminLoyaltySettings = { navController.navigate(Routes.AdminLoyaltySettings) },
                     onOpenAdminNotificationSettings = { navController.navigate(Routes.AdminNotificationSettings) },
+                    onOpenAdminNotificationCampaignDrafts = {
+                        navController.navigate(Routes.AdminNotificationCampaignDrafts)
+                    },
                     onOpenAdminServiceCatalog = { navController.navigate(Routes.AdminServiceCatalog) },
                     onOpenAdminServiceExtras = { navController.navigate(Routes.AdminServiceExtras) },
                 )
@@ -240,6 +244,13 @@ fun MainNavigation(
             }
             composable(Routes.AdminNotificationSettings) {
                 AdminNotificationSettingsScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
+                )
+            }
+            composable(Routes.AdminNotificationCampaignDrafts) {
+                AdminNotificationCampaignDraftsScreen(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,

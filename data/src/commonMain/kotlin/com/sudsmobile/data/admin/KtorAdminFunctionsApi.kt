@@ -418,6 +418,52 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getNotificationCampaignDrafts(idToken: String): AdminNotificationCampaignDraftsResult {
+        return try {
+            val response = httpClient.post(config.getAdminNotificationCampaignDraftsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableNotificationCampaignDraftsResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminNotificationCampaignDraftsResult.Failure(error.toAdminError())
+                body.result != null -> AdminNotificationCampaignDraftsResult.Success(
+                    body.result.toAdminNotificationCampaignDraftsConfig(),
+                )
+                else -> AdminNotificationCampaignDraftsResult.Failure(
+                    AdminError.Backend("A resposta dos rascunhos veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminNotificationCampaignDraftsResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar rascunhos de campanha. Tente novamente."),
+            )
+        }
+    }
+
+    override suspend fun upsertNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftMutationRequest,
+        idToken: String,
+    ): AdminNotificationCampaignDraftMutationResult = postNotificationCampaignDraftMutation(
+        url = config.upsertAdminNotificationCampaignDraftUrl,
+        payload = NotificationCampaignDraftUpsertPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível guardar o rascunho da campanha. Tente novamente.",
+    )
+
+    override suspend fun archiveNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftArchiveRequest,
+        idToken: String,
+    ): AdminNotificationCampaignDraftMutationResult = postNotificationCampaignDraftMutation(
+        url = config.archiveAdminNotificationCampaignDraftUrl,
+        payload = NotificationCampaignDraftArchivePayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível arquivar o rascunho da campanha. Tente novamente.",
+    )
+
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
         idToken: String,
@@ -559,6 +605,33 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    private suspend fun postNotificationCampaignDraftMutation(
+        url: String,
+        payload: NotificationCampaignDraftMutationPayload,
+        idToken: String,
+        unavailableMessage: String,
+    ): AdminNotificationCampaignDraftMutationResult {
+        return try {
+            val response = httpClient.post(url) {
+                callableHeaders(idToken)
+                setBody(CallableNotificationCampaignDraftMutationRequest(payload))
+            }
+            val body = response.body<CallableNotificationCampaignDraftMutationResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminNotificationCampaignDraftMutationResult.Failure(error.toAdminError())
+                body.result != null -> AdminNotificationCampaignDraftMutationResult.Success(body.result.toReceipt())
+                else -> AdminNotificationCampaignDraftMutationResult.Failure(
+                    AdminError.Backend("A resposta da campanha veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminNotificationCampaignDraftMutationResult.Failure(AdminError.Unavailable(unavailableMessage))
+        }
+    }
+
     private suspend fun postServiceExtraMutation(
         url: String,
         payload: ServiceExtraMutationPayload,
@@ -630,6 +703,11 @@ private data class CallableNotificationSettingsUpdateRequest(
 @Serializable
 private data class CallableNotificationTestRequest(
     val data: NotificationTestPayload,
+)
+
+@Serializable
+private data class CallableNotificationCampaignDraftMutationRequest(
+    val data: NotificationCampaignDraftMutationPayload,
 )
 
 @Serializable
@@ -797,6 +875,45 @@ private data class NotificationTestPayload(
         fun from(request: AdminNotificationTestRequest): NotificationTestPayload = NotificationTestPayload(
             templateKey = request.templateKey,
         )
+    }
+}
+
+@Serializable
+private sealed interface NotificationCampaignDraftMutationPayload
+
+@Serializable
+private data class NotificationCampaignDraftUpsertPayload(
+    val campaignId: String = "",
+    val title: String,
+    val body: String,
+    val targetAudience: String,
+    val scheduledAtIso: String = "",
+    val notes: String = "",
+    val pushEnabled: Boolean = true,
+) : NotificationCampaignDraftMutationPayload {
+    companion object {
+        fun from(request: AdminNotificationCampaignDraftMutationRequest): NotificationCampaignDraftUpsertPayload {
+            return NotificationCampaignDraftUpsertPayload(
+                campaignId = request.campaignId,
+                title = request.title,
+                body = request.body,
+                targetAudience = request.targetAudience,
+                scheduledAtIso = request.scheduledAtIso,
+                notes = request.notes,
+                pushEnabled = request.pushEnabled,
+            )
+        }
+    }
+}
+
+@Serializable
+private data class NotificationCampaignDraftArchivePayload(
+    val campaignId: String,
+) : NotificationCampaignDraftMutationPayload {
+    companion object {
+        fun from(request: AdminNotificationCampaignDraftArchiveRequest): NotificationCampaignDraftArchivePayload {
+            return NotificationCampaignDraftArchivePayload(campaignId = request.campaignId)
+        }
     }
 }
 
@@ -1005,6 +1122,18 @@ private data class CallableNotificationSettingsResponse(
 @Serializable
 private data class CallableNotificationTestResponse(
     val result: NotificationTestResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableNotificationCampaignDraftsResponse(
+    val result: NotificationCampaignDraftsPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableNotificationCampaignDraftMutationResponse(
+    val result: NotificationCampaignDraftMutationResultPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -1345,6 +1474,76 @@ private data class NotificationTestResultPayload(
         recipientUid = recipientUid.trim(),
         message = message.trim(),
     )
+}
+
+@Serializable
+private data class NotificationCampaignDraftsPayload(
+    val source: String = "",
+    val campaigns: List<NotificationCampaignDraftPayload> = emptyList(),
+) {
+    fun toAdminNotificationCampaignDraftsConfig(): AdminNotificationCampaignDraftsConfig {
+        return AdminNotificationCampaignDraftsConfig(
+            source = source.trim().ifBlank { "empty" },
+            campaigns = campaigns.mapNotNull { it.toAdminNotificationCampaignDraftOrNull() },
+        )
+    }
+}
+
+@Serializable
+private data class NotificationCampaignDraftPayload(
+    val campaignId: String = "",
+    val title: String = "",
+    val body: String = "",
+    val targetAudience: String = "test_users",
+    val channels: List<String> = emptyList(),
+    val marketingConsentRequired: Boolean = false,
+    val status: String = "draft",
+    val scheduledAtIso: String = "",
+    val notes: String = "",
+    val sendBlocked: Boolean = true,
+    val sendBlockedReason: String = "",
+) {
+    fun toAdminNotificationCampaignDraftOrNull(): AdminNotificationCampaignDraft? {
+        val id = campaignId.trim()
+        val cleanTitle = title.trim()
+        val cleanBody = body.trim()
+        if (id.isBlank() || cleanTitle.isBlank() || cleanBody.isBlank()) return null
+        val normalizedAudience = targetAudience.trim().ifBlank { "test_users" }
+        return AdminNotificationCampaignDraft(
+            campaignId = id,
+            title = cleanTitle,
+            body = cleanBody,
+            targetAudience = normalizedAudience,
+            channels = channels.map { it.trim() }.filter { it.isNotBlank() }.ifEmpty { listOf("push") },
+            marketingConsentRequired = marketingConsentRequired || normalizedAudience == "marketing_opt_in_users",
+            status = status.trim().ifBlank { "draft" },
+            scheduledAtIso = scheduledAtIso.trim(),
+            notes = notes.trim(),
+            sendBlocked = sendBlocked,
+            sendBlockedReason = sendBlockedReason.trim(),
+        )
+    }
+}
+
+@Serializable
+private data class NotificationCampaignDraftMutationResultPayload(
+    val campaignId: String = "",
+    val status: String = "",
+    val created: Boolean = false,
+    val targetAudience: String = "",
+    val sendBlocked: Boolean = true,
+    val sendBlockedReason: String = "",
+) {
+    fun toReceipt(): AdminNotificationCampaignDraftMutationReceipt {
+        return AdminNotificationCampaignDraftMutationReceipt(
+            campaignId = campaignId.trim(),
+            status = status.trim(),
+            created = created,
+            targetAudience = targetAudience.trim(),
+            sendBlocked = sendBlocked,
+            sendBlockedReason = sendBlockedReason.trim(),
+        )
+    }
 }
 
 @Serializable

@@ -84,6 +84,7 @@ private enum class ProfileMenuAction {
     AdminBookingPolicy,
     AdminLoyaltySettings,
     AdminNotificationSettings,
+    AdminNotificationCampaignDrafts,
     AdminBusinessInfo,
     AdminServiceCatalog,
     AdminServiceExtras,
@@ -123,6 +124,12 @@ private val adminNotificationSettingsMenuItem = ProfileMenuItem(
     icon = Icons.Filled.Notifications,
     label = "Notificações",
     action = ProfileMenuAction.AdminNotificationSettings,
+)
+
+private val adminNotificationCampaignDraftsMenuItem = ProfileMenuItem(
+    icon = Icons.Filled.Notifications,
+    label = "Campanhas push",
+    action = ProfileMenuAction.AdminNotificationCampaignDrafts,
 )
 
 private val adminBusinessInfoMenuItem = ProfileMenuItem(
@@ -192,6 +199,7 @@ fun ProfileScreen(
     onOpenAdminBookingPolicy: () -> Unit = {},
     onOpenAdminLoyaltySettings: () -> Unit = {},
     onOpenAdminNotificationSettings: () -> Unit = {},
+    onOpenAdminNotificationCampaignDrafts: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
@@ -246,6 +254,7 @@ fun ProfileScreen(
         onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
         onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
         onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
+        onOpenAdminNotificationCampaignDrafts = onOpenAdminNotificationCampaignDrafts,
         onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
         onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
         onOpenAdminServiceExtras = onOpenAdminServiceExtras,
@@ -279,6 +288,7 @@ private fun ProfileScreenContent(
     onOpenAdminBookingPolicy: () -> Unit = {},
     onOpenAdminLoyaltySettings: () -> Unit = {},
     onOpenAdminNotificationSettings: () -> Unit = {},
+    onOpenAdminNotificationCampaignDrafts: () -> Unit = {},
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
@@ -333,6 +343,7 @@ private fun ProfileScreenContent(
                     onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
                     onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
                     onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
+                    onOpenAdminNotificationCampaignDrafts = onOpenAdminNotificationCampaignDrafts,
                     onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
                     onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
                     onOpenAdminServiceExtras = onOpenAdminServiceExtras,
@@ -1054,6 +1065,7 @@ private fun ProfileMenuCard(
     onOpenAdminBookingPolicy: () -> Unit,
     onOpenAdminLoyaltySettings: () -> Unit,
     onOpenAdminNotificationSettings: () -> Unit,
+    onOpenAdminNotificationCampaignDrafts: () -> Unit,
     onOpenAdminBusinessInfo: () -> Unit,
     onOpenAdminServiceCatalog: () -> Unit,
     onOpenAdminServiceExtras: () -> Unit,
@@ -1065,6 +1077,7 @@ private fun ProfileMenuCard(
             adminBookingPolicyMenuItem,
             adminLoyaltySettingsMenuItem,
             adminNotificationSettingsMenuItem,
+            adminNotificationCampaignDraftsMenuItem,
             adminBusinessInfoMenuItem,
             adminServiceCatalogMenuItem,
             adminServiceExtrasMenuItem,
@@ -1091,6 +1104,8 @@ private fun ProfileMenuCard(
                             ProfileMenuAction.AdminBookingPolicy -> onOpenAdminBookingPolicy()
                             ProfileMenuAction.AdminLoyaltySettings -> onOpenAdminLoyaltySettings()
                             ProfileMenuAction.AdminNotificationSettings -> onOpenAdminNotificationSettings()
+                            ProfileMenuAction.AdminNotificationCampaignDrafts ->
+                                onOpenAdminNotificationCampaignDrafts()
                             ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
                             ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
                             ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()

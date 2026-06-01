@@ -64,6 +64,27 @@ interface AdminFunctionsApi {
     ): AdminNotificationTestResult =
         AdminNotificationTestResult.Failure(AdminError.Backend("Notification test send is not implemented."))
 
+    suspend fun getNotificationCampaignDrafts(idToken: String): AdminNotificationCampaignDraftsResult =
+        AdminNotificationCampaignDraftsResult.Failure(
+            AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
+
+    suspend fun upsertNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftMutationRequest,
+        idToken: String,
+    ): AdminNotificationCampaignDraftMutationResult =
+        AdminNotificationCampaignDraftMutationResult.Failure(
+            AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
+
+    suspend fun archiveNotificationCampaignDraft(
+        request: AdminNotificationCampaignDraftArchiveRequest,
+        idToken: String,
+    ): AdminNotificationCampaignDraftMutationResult =
+        AdminNotificationCampaignDraftMutationResult.Failure(
+            AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
+
     suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
         idToken: String,
