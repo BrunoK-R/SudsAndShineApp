@@ -120,6 +120,7 @@ private class RecordingNotificationFunctionsApi : NotificationFunctionsApi {
                 bookingStatusEnabled = request.bookingStatusEnabled,
                 appointmentReminderEnabled = request.appointmentReminderEnabled,
                 loyaltyEnabled = request.loyaltyEnabled,
+                adminPendingAlertEnabled = request.adminPendingAlertEnabled,
                 marketingEnabled = request.marketingEnabled,
             ),
         )
@@ -196,6 +197,7 @@ private fun notificationPreferences(): NotificationPreferences = NotificationPre
     bookingStatusEnabled = true,
     appointmentReminderEnabled = false,
     loyaltyEnabled = true,
+    adminPendingAlertEnabled = true,
     marketingEnabled = false,
 )
 
@@ -204,6 +206,7 @@ private fun notificationPreferencesRequest(): NotificationPreferencesUpdateReque
         bookingStatusEnabled = true,
         appointmentReminderEnabled = true,
         loyaltyEnabled = false,
+        adminPendingAlertEnabled = false,
         marketingEnabled = false,
     )
 }

@@ -62,7 +62,9 @@ fun NotificationPreferencesScreen(
     onRequestSignIn: () -> Unit,
 ) {
     val viewModel: NotificationPreferencesViewModel = koinViewModel()
+    val adminAccessViewModel: AdminAccessViewModel = koinViewModel()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val adminAccessState by adminAccessViewModel.uiState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val deviceState by viewModel.deviceState.collectAsStateWithLifecycle()
@@ -72,11 +74,13 @@ fun NotificationPreferencesScreen(
 
     LaunchedEffect(sessionState) {
         viewModel.refreshForSession()
+        adminAccessViewModel.refreshForSession()
     }
 
     NotificationPreferencesScreenContent(
         contentPadding = contentPadding,
         uiState = uiState,
+        showAdminAlertPreference = adminAccessState is AdminAccessUiState.Admin,
         saveState = saveState,
         deviceState = deviceState,
         onBack = onBack,
@@ -100,6 +104,7 @@ fun NotificationPreferencesScreen(
 private fun NotificationPreferencesScreenContent(
     contentPadding: PaddingValues,
     uiState: NotificationPreferencesUiState,
+    showAdminAlertPreference: Boolean,
     saveState: NotificationPreferencesSaveState,
     deviceState: NotificationDeviceUiState,
     onBack: () -> Unit,
@@ -160,6 +165,7 @@ private fun NotificationPreferencesScreenContent(
 
                 is NotificationPreferencesUiState.Loaded -> NotificationPreferencesFormCard(
                     form = uiState.form,
+                    showAdminAlertPreference = showAdminAlertPreference,
                     deviceState = deviceState,
                     saving = saveState == NotificationPreferencesSaveState.Saving,
                     onFormChange = onFormChange,
@@ -315,6 +321,7 @@ private fun NotificationPreferencesStatusCard(
 @Composable
 private fun NotificationPreferencesFormCard(
     form: NotificationPreferencesForm,
+    showAdminAlertPreference: Boolean,
     deviceState: NotificationDeviceUiState,
     saving: Boolean,
     onFormChange: (NotificationPreferencesForm) -> Unit,
@@ -363,6 +370,16 @@ private fun NotificationPreferencesFormCard(
                 onCheckedChange = { onFormChange(form.copy(loyaltyEnabled = it)) },
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (showAdminAlertPreference) {
+                NotificationPreferenceSwitchRow(
+                    title = "Alertas operacionais",
+                    description = "Pedidos pendentes para administradores",
+                    checked = form.adminPendingAlertEnabled,
+                    enabled = !saving,
+                    onCheckedChange = { onFormChange(form.copy(adminPendingAlertEnabled = it)) },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
             NotificationPreferenceSwitchRow(
                 title = "Marketing",
                 description = "Ofertas e campanhas ocasionais",

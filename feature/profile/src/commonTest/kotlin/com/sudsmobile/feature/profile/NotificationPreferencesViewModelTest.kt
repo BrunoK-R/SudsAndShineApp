@@ -120,6 +120,7 @@ class NotificationPreferencesViewModelTest {
                 bookingStatusEnabled = false,
                 appointmentReminderEnabled = true,
                 loyaltyEnabled = false,
+                adminPendingAlertEnabled = false,
                 marketingEnabled = true,
             ),
         )
@@ -132,6 +133,7 @@ class NotificationPreferencesViewModelTest {
                 bookingStatusEnabled = false,
                 appointmentReminderEnabled = true,
                 loyaltyEnabled = false,
+                adminPendingAlertEnabled = false,
                 marketingEnabled = true,
             ),
             repository.updateRequests.single(),
@@ -339,6 +341,7 @@ private class FakeNotificationPreferencesRepository(
                 bookingStatusEnabled = request.bookingStatusEnabled,
                 appointmentReminderEnabled = request.appointmentReminderEnabled,
                 loyaltyEnabled = request.loyaltyEnabled,
+                adminPendingAlertEnabled = request.adminPendingAlertEnabled,
                 marketingEnabled = request.marketingEnabled,
             ),
         )
@@ -446,6 +449,7 @@ private fun notificationPreferences(): NotificationPreferences = NotificationPre
     bookingStatusEnabled = true,
     appointmentReminderEnabled = true,
     loyaltyEnabled = true,
+    adminPendingAlertEnabled = true,
     marketingEnabled = false,
 )
 

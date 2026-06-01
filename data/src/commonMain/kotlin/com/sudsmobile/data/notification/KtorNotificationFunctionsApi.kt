@@ -155,6 +155,7 @@ private data class NotificationPreferencesPayload(
     val bookingStatusEnabled: Boolean,
     val appointmentReminderEnabled: Boolean,
     val loyaltyEnabled: Boolean,
+    val adminPendingAlertEnabled: Boolean,
     val marketingEnabled: Boolean,
 ) {
     companion object {
@@ -163,6 +164,7 @@ private data class NotificationPreferencesPayload(
                 bookingStatusEnabled = request.bookingStatusEnabled,
                 appointmentReminderEnabled = request.appointmentReminderEnabled,
                 loyaltyEnabled = request.loyaltyEnabled,
+                adminPendingAlertEnabled = request.adminPendingAlertEnabled,
                 marketingEnabled = request.marketingEnabled,
             )
         }
@@ -227,12 +229,14 @@ private data class NotificationPreferencesItem(
     val bookingStatusEnabled: Boolean = true,
     val appointmentReminderEnabled: Boolean = true,
     val loyaltyEnabled: Boolean = true,
+    val adminPendingAlertEnabled: Boolean = true,
     val marketingEnabled: Boolean = false,
 ) {
     fun toPreferences(): NotificationPreferences = NotificationPreferences(
         bookingStatusEnabled = bookingStatusEnabled,
         appointmentReminderEnabled = appointmentReminderEnabled,
         loyaltyEnabled = loyaltyEnabled,
+        adminPendingAlertEnabled = adminPendingAlertEnabled,
         marketingEnabled = marketingEnabled,
     )
 }

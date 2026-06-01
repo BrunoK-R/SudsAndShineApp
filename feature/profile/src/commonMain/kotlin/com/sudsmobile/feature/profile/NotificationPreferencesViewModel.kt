@@ -24,6 +24,7 @@ internal data class NotificationPreferencesForm(
     val bookingStatusEnabled: Boolean = true,
     val appointmentReminderEnabled: Boolean = true,
     val loyaltyEnabled: Boolean = true,
+    val adminPendingAlertEnabled: Boolean = true,
     val marketingEnabled: Boolean = false,
 )
 
@@ -386,6 +387,7 @@ private fun NotificationPreferences.toForm(): NotificationPreferencesForm = Noti
     bookingStatusEnabled = bookingStatusEnabled,
     appointmentReminderEnabled = appointmentReminderEnabled,
     loyaltyEnabled = loyaltyEnabled,
+    adminPendingAlertEnabled = adminPendingAlertEnabled,
     marketingEnabled = marketingEnabled,
 )
 
@@ -394,6 +396,7 @@ private fun NotificationPreferencesForm.toRequest(): NotificationPreferencesUpda
         bookingStatusEnabled = bookingStatusEnabled,
         appointmentReminderEnabled = appointmentReminderEnabled,
         loyaltyEnabled = loyaltyEnabled,
+        adminPendingAlertEnabled = adminPendingAlertEnabled,
         marketingEnabled = marketingEnabled,
     )
 }

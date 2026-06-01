@@ -4,6 +4,7 @@ data class NotificationPreferences(
     val bookingStatusEnabled: Boolean,
     val appointmentReminderEnabled: Boolean,
     val loyaltyEnabled: Boolean,
+    val adminPendingAlertEnabled: Boolean,
     val marketingEnabled: Boolean,
 )
 
@@ -11,6 +12,7 @@ data class NotificationPreferencesUpdateRequest(
     val bookingStatusEnabled: Boolean,
     val appointmentReminderEnabled: Boolean,
     val loyaltyEnabled: Boolean,
+    val adminPendingAlertEnabled: Boolean,
     val marketingEnabled: Boolean,
 )
 

@@ -31,6 +31,7 @@ class KtorNotificationFunctionsApiTest {
                       "bookingStatusEnabled": true,
                       "appointmentReminderEnabled": true,
                       "loyaltyEnabled": false,
+                      "adminPendingAlertEnabled": false,
                       "marketingEnabled": false
                     }
                   }
@@ -49,6 +50,7 @@ class KtorNotificationFunctionsApiTest {
         assertEquals(true, success.preferences.bookingStatusEnabled)
         assertEquals(true, success.preferences.appointmentReminderEnabled)
         assertEquals(false, success.preferences.loyaltyEnabled)
+        assertEquals(false, success.preferences.adminPendingAlertEnabled)
         assertEquals(false, success.preferences.marketingEnabled)
     }
 
@@ -64,6 +66,7 @@ class KtorNotificationFunctionsApiTest {
                       "bookingStatusEnabled": true,
                       "appointmentReminderEnabled": false,
                       "loyaltyEnabled": true,
+                      "adminPendingAlertEnabled": false,
                       "marketingEnabled": true
                     }
                   }
@@ -80,6 +83,7 @@ class KtorNotificationFunctionsApiTest {
                 bookingStatusEnabled = true,
                 appointmentReminderEnabled = false,
                 loyaltyEnabled = true,
+                adminPendingAlertEnabled = false,
                 marketingEnabled = true,
             ),
             idToken = "id-token-1",
