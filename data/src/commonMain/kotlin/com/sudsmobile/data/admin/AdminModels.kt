@@ -217,7 +217,8 @@ data class AdminNotificationSettingsUpdateRequest(
 )
 
 data class AdminNotificationTestRequest(
-    val templateKey: String,
+    val templateKey: String = "",
+    val campaignId: String = "",
 )
 
 data class AdminNotificationTestReceipt(
@@ -226,6 +227,7 @@ data class AdminNotificationTestReceipt(
     val deliveryState: String,
     val recipientUid: String,
     val message: String,
+    val campaignId: String = "",
 )
 
 data class AdminNotificationCampaignDraft(

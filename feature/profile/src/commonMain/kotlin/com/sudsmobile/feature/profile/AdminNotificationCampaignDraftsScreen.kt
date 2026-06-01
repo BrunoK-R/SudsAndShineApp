@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
@@ -81,6 +82,7 @@ fun AdminNotificationCampaignDraftsScreen(
         onStartCreate = viewModel::startCreate,
         onEdit = viewModel::editDraft,
         onArchive = viewModel::archive,
+        onSendTest = viewModel::sendTest,
         onFormChange = viewModel::updateForm,
         onCancelEdit = viewModel::cancelEdit,
         onSave = viewModel::save,
@@ -99,6 +101,7 @@ private fun AdminNotificationCampaignDraftsScreenContent(
     onStartCreate: () -> Unit,
     onEdit: (String) -> Unit,
     onArchive: (String) -> Unit,
+    onSendTest: (String) -> Unit,
     onFormChange: (AdminNotificationCampaignDraftForm) -> Unit,
     onCancelEdit: () -> Unit,
     onSave: () -> Unit,
@@ -170,6 +173,7 @@ private fun AdminNotificationCampaignDraftsScreenContent(
                     onStartCreate = onStartCreate,
                     onEdit = onEdit,
                     onArchive = onArchive,
+                    onSendTest = onSendTest,
                     onFormChange = onFormChange,
                     onCancelEdit = onCancelEdit,
                     onSave = onSave,
@@ -243,6 +247,7 @@ private fun AdminNotificationCampaignDraftsLoadedContent(
     onStartCreate: () -> Unit,
     onEdit: (String) -> Unit,
     onArchive: (String) -> Unit,
+    onSendTest: (String) -> Unit,
     onFormChange: (AdminNotificationCampaignDraftForm) -> Unit,
     onCancelEdit: () -> Unit,
     onSave: () -> Unit,
@@ -284,8 +289,10 @@ private fun AdminNotificationCampaignDraftsLoadedContent(
         AdminNotificationCampaignDraftCard(
             draft = draft,
             archiving = mutationState == AdminNotificationCampaignDraftMutationState.Archiving(draft.campaignId),
+            testing = mutationState == AdminNotificationCampaignDraftMutationState.Testing(draft.campaignId),
             onEdit = { onEdit(draft.campaignId) },
             onArchive = { onArchive(draft.campaignId) },
+            onSendTest = { onSendTest(draft.campaignId) },
         )
     }
 }
@@ -449,10 +456,13 @@ private fun CampaignAudienceSelector(
 private fun AdminNotificationCampaignDraftCard(
     draft: AdminNotificationCampaignDraftUi,
     archiving: Boolean,
+    testing: Boolean,
     onEdit: () -> Unit,
     onArchive: () -> Unit,
+    onSendTest: () -> Unit,
 ) {
     val archived = draft.status == "archived"
+    val busy = archiving || testing
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -510,10 +520,40 @@ private fun AdminNotificationCampaignDraftCard(
                 text = if (draft.sendBlocked) "Envio bloqueado" else "Envio indisponível",
                 emphasized = true,
             )
+            OutlinedButton(
+                onClick = onSendTest,
+                enabled = !busy && !archived,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary),
+            ) {
+                if (testing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.secondary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (testing) "A enviar teste" else "Enviar teste",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = onEdit,
-                    enabled = !archiving && !archived,
+                    enabled = !busy && !archived,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
@@ -529,7 +569,7 @@ private fun AdminNotificationCampaignDraftCard(
                 }
                 OutlinedButton(
                     onClick = onArchive,
-                    enabled = !archiving && !archived,
+                    enabled = !busy && !archived,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
@@ -627,7 +667,8 @@ private fun AdminNotificationCampaignDraftMutationBanner(
     when (mutationState) {
         AdminNotificationCampaignDraftMutationState.Idle,
         AdminNotificationCampaignDraftMutationState.Saving,
-        is AdminNotificationCampaignDraftMutationState.Archiving -> Unit
+        is AdminNotificationCampaignDraftMutationState.Archiving,
+        is AdminNotificationCampaignDraftMutationState.Testing -> Unit
         is AdminNotificationCampaignDraftMutationState.Success -> AdminNotificationCampaignDraftStatusCard(
             title = "Campanhas atualizadas",
             body = mutationState.message,
@@ -636,7 +677,7 @@ private fun AdminNotificationCampaignDraftMutationBanner(
             onAction = onDismiss,
         )
         is AdminNotificationCampaignDraftMutationState.Error -> AdminNotificationCampaignDraftStatusCard(
-            title = "Não foi possível guardar",
+            title = "Não foi possível concluir",
             body = mutationState.message,
             icon = Icons.Filled.ErrorOutline,
             actionLabel = "Fechar",

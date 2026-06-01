@@ -19,6 +19,9 @@ import com.sudsmobile.data.admin.AdminNotificationCampaignDraftMutationRequest
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftMutationResult
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftsConfig
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftsResult
+import com.sudsmobile.data.admin.AdminNotificationTestReceipt
+import com.sudsmobile.data.admin.AdminNotificationTestRequest
+import com.sudsmobile.data.admin.AdminNotificationTestResult
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.admin.AdminRole
 import com.sudsmobile.data.admin.AdminRoleResult
@@ -201,6 +204,63 @@ class AdminNotificationCampaignDraftsViewModelTest {
         assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
         assertIs<AdminNotificationCampaignDraftMutationState.Error>(viewModel.mutationState.value)
     }
+
+    @Test
+    fun sendTestSubmitsCampaignDraftToSelf() = runTest {
+        val repository = FakeCampaignDraftsAdminRepository()
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.sendTest("summer-test")
+        runCurrent()
+
+        val success = assertIs<AdminNotificationCampaignDraftMutationState.Success>(viewModel.mutationState.value)
+        assertEquals("Teste de campanha em fila para o seu dispositivo.", success.message)
+        assertEquals("summer-test", repository.testRequests.single().campaignId)
+    }
+
+    @Test
+    fun sendTestMapsPermissionFailureToNotAdmin() = runTest {
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = FakeCampaignDraftsAdminRepository(
+                testResult = AdminNotificationTestResult.Failure(AdminError.Permission("denied")),
+            ),
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.sendTest("summer-test")
+        runCurrent()
+
+        assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Error>(viewModel.mutationState.value)
+    }
+
+    @Test
+    fun sendTestIgnoresStaleResponseAfterSignOut() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationTestResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = FakeCampaignDraftsAdminRepository(testResultDeferred = deferred),
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.sendTest("summer-test")
+        runCurrent()
+        authRepository.signOut()
+        deferred.complete(notificationTestSuccess(campaignId = "summer-test"))
+        runCurrent()
+
+        assertIs<AdminNotificationCampaignDraftsUiState.Unauthenticated>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
+    }
 }
 
 private class FakeCampaignDraftsAdminRepository(
@@ -208,12 +268,15 @@ private class FakeCampaignDraftsAdminRepository(
         AdminNotificationCampaignDraftsResult.Success(campaignDraftsConfig()),
     var upsertResult: AdminNotificationCampaignDraftMutationResult? = null,
     var archiveResult: AdminNotificationCampaignDraftMutationResult? = null,
+    var testResult: AdminNotificationTestResult? = null,
     private val loadResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftsResult>? = null,
+    private val testResultDeferred: CompletableDeferred<AdminNotificationTestResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
     val upsertRequests = mutableListOf<AdminNotificationCampaignDraftMutationRequest>()
     val archiveRequests = mutableListOf<AdminNotificationCampaignDraftArchiveRequest>()
+    val testRequests = mutableListOf<AdminNotificationTestRequest>()
 
     override suspend fun syncMyRole(): AdminRoleResult {
         return AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin"))
@@ -247,6 +310,13 @@ private class FakeCampaignDraftsAdminRepository(
         return archiveResult ?: AdminNotificationCampaignDraftMutationResult.Success(
             AdminNotificationCampaignDraftMutationReceipt(campaignId = request.campaignId, status = "archived"),
         )
+    }
+
+    override suspend fun sendNotificationTestToSelf(
+        request: AdminNotificationTestRequest,
+    ): AdminNotificationTestResult {
+        testRequests += request
+        return testResultDeferred?.await() ?: testResult ?: notificationTestSuccess(campaignId = request.campaignId)
     }
 
     override suspend fun getPendingBookingRequests(): AdminBookingRequestsResult =
@@ -361,6 +431,18 @@ private fun campaignForm(
     targetAudience = targetAudience,
     scheduledAtIso = scheduledAtIso,
 )
+
+private fun notificationTestSuccess(campaignId: String): AdminNotificationTestResult.Success =
+    AdminNotificationTestResult.Success(
+        AdminNotificationTestReceipt(
+            notificationId = "test-notification-1",
+            templateKey = "campaign_draft",
+            campaignId = campaignId,
+            deliveryState = "queued",
+            recipientUid = "uid-1",
+            message = "queued",
+        ),
+    )
 
 private fun campaignDraftsConfig(): AdminNotificationCampaignDraftsConfig = AdminNotificationCampaignDraftsConfig(
     source = "firestore",

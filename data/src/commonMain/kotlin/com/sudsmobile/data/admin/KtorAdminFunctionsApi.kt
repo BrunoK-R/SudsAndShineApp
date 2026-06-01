@@ -960,10 +960,12 @@ private data class NotificationTemplatePayload(
 @Serializable
 private data class NotificationTestPayload(
     val templateKey: String,
+    val campaignId: String = "",
 ) {
     companion object {
         fun from(request: AdminNotificationTestRequest): NotificationTestPayload = NotificationTestPayload(
             templateKey = request.templateKey,
+            campaignId = request.campaignId,
         )
     }
 }
@@ -1611,6 +1613,7 @@ private data class NotificationSettingsResultPayload(
 private data class NotificationTestResultPayload(
     val notificationId: String = "",
     val templateKey: String = "",
+    val campaignId: String = "",
     val deliveryState: String = "",
     val recipientUid: String = "",
     val message: String = "",
@@ -1618,6 +1621,7 @@ private data class NotificationTestResultPayload(
     fun toAdminNotificationTestReceipt(): AdminNotificationTestReceipt = AdminNotificationTestReceipt(
         notificationId = notificationId.trim(),
         templateKey = templateKey.trim(),
+        campaignId = campaignId.trim(),
         deliveryState = deliveryState.trim(),
         recipientUid = recipientUid.trim(),
         message = message.trim(),

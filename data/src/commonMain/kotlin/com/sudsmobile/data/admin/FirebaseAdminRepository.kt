@@ -599,7 +599,11 @@ class FirebaseAdminRepository(
 
     private fun validate(request: AdminNotificationTestRequest): AdminError.Validation? {
         return when {
-            request.templateKey !in NotificationTemplateKeys ->
+            request.campaignId.isNotBlank() && request.templateKey.isNotBlank() ->
+                AdminError.Validation("Escolha um modelo ou um rascunho de campanha.")
+            request.campaignId.isNotBlank() && !request.campaignId.isValidCampaignId() ->
+                AdminError.Validation("O identificador da campanha é inválido.")
+            request.campaignId.isBlank() && request.templateKey !in NotificationTemplateKeys ->
                 AdminError.Validation("Escolha um modelo de notificação válido.")
             else -> null
         }
@@ -749,6 +753,7 @@ class FirebaseAdminRepository(
 
     private fun AdminNotificationTestRequest.normalized(): AdminNotificationTestRequest = copy(
         templateKey = templateKey.trim(),
+        campaignId = campaignId.trim(),
     )
 
     private fun AdminNotificationCampaignDraftMutationRequest.normalized():

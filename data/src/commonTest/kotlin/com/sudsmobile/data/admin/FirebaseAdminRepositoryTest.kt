@@ -552,6 +552,24 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun sendNotificationCampaignTestNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.sendNotificationTestToSelf(
+            AdminNotificationTestRequest(campaignId = " summer-test "),
+        )
+
+        val success = assertIs<AdminNotificationTestResult.Success>(result)
+        assertEquals("test-notification-1", success.receipt.notificationId)
+        assertEquals("id-token-1", api.notificationTestIdTokens.single())
+        assertEquals("summer-test", api.notificationTestRequests.single().campaignId)
+    }
+
+    @Test
     fun sendNotificationTestReturnsValidationBeforeApiCall() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -565,6 +583,14 @@ class FirebaseAdminRepositoryTest {
 
         val failure = assertIs<AdminNotificationTestResult.Failure>(result)
         assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.notificationTestRequests.size)
+
+        val mixedResult = repository.sendNotificationTestToSelf(
+            AdminNotificationTestRequest(templateKey = "booking_request", campaignId = "summer-test"),
+        )
+
+        val mixedFailure = assertIs<AdminNotificationTestResult.Failure>(mixedResult)
+        assertIs<AdminError.Validation>(mixedFailure.error)
         assertEquals(0, api.notificationTestRequests.size)
     }
 
