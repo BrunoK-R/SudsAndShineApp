@@ -497,6 +497,10 @@ class FirebaseAdminRepositoryTest {
             "Pedido recebido",
             api.updateNotificationSettingsRequests.single().templates.first { it.key == "booking_request" }.title,
         )
+        assertEquals(
+            "Recompensa disponível",
+            api.updateNotificationSettingsRequests.single().templates.first { it.key == "loyalty_reward" }.title,
+        )
     }
 
     @Test
@@ -542,13 +546,13 @@ class FirebaseAdminRepositoryTest {
         )
 
         val result = repository.sendNotificationTestToSelf(
-            AdminNotificationTestRequest(templateKey = " booking_request "),
+            AdminNotificationTestRequest(templateKey = " loyalty_reward "),
         )
 
         val success = assertIs<AdminNotificationTestResult.Success>(result)
         assertEquals("test-notification-1", success.receipt.notificationId)
         assertEquals("id-token-1", api.notificationTestIdTokens.single())
-        assertEquals("booking_request", api.notificationTestRequests.single().templateKey)
+        assertEquals("loyalty_reward", api.notificationTestRequests.single().templateKey)
     }
 
     @Test
@@ -1484,6 +1488,13 @@ private fun adminNotificationTemplates(): List<AdminNotificationTemplateConfig> 
         enabled = true,
         title = "Avalie a lavagem",
         body = "Diga-nos como correu o serviço.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "loyalty_reward",
+        label = "Recompensa de fidelização",
+        enabled = true,
+        title = "Recompensa disponível",
+        body = "A sua recompensa está pronta.",
     ),
     AdminNotificationTemplateConfig(
         key = "admin_pending_booking",

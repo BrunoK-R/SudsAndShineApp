@@ -817,6 +817,7 @@ private val NotificationTemplateKeys = setOf(
     "booking_rescheduled",
     "booking_reminder",
     "review_prompt",
+    "loyalty_reward",
     "admin_pending_booking",
 )
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
