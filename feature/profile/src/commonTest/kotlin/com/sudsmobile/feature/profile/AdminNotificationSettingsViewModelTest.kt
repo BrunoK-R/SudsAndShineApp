@@ -144,6 +144,7 @@ class AdminNotificationSettingsViewModelTest {
         viewModel.updateForm(
             adminNotificationSettingsConfig().toTestForm(
                 reminderLeadMinutes = "60",
+                quietHoursTimeZone = " Europe/Madrid ",
                 templates = adminNotificationTemplates().map {
                     if (it.key == "booking_request") {
                         it.copy(title = "  Pedido   recebido  ")
@@ -160,6 +161,7 @@ class AdminNotificationSettingsViewModelTest {
         assertIs<AdminNotificationSettingsSaveState.Success>(viewModel.saveState.value)
         val request = repository.updateRequests.single()
         assertEquals(60, request.reminderLeadMinutes)
+        assertEquals("Europe/Madrid", request.quietHoursTimeZone)
         assertEquals("Pedido recebido", request.templates.first { it.key == "booking_request" }.title)
         assertEquals(false, request.adminPendingAlertEnabled)
     }
@@ -293,6 +295,7 @@ private class FakeNotificationSettingsAdminRepository(
                 reminderLeadMinutes = request.reminderLeadMinutes,
                 quietHoursStart = request.quietHoursStart,
                 quietHoursEnd = request.quietHoursEnd,
+                quietHoursTimeZone = request.quietHoursTimeZone,
                 templates = request.templates,
             ),
         )
@@ -397,6 +400,7 @@ private fun adminNotificationSettingsConfig(): AdminNotificationSettingsConfig =
     reminderLeadMinutes = 120,
     quietHoursStart = "22:00",
     quietHoursEnd = "08:00",
+    quietHoursTimeZone = "Europe/Lisbon",
     templates = adminNotificationTemplates(),
 )
 
@@ -420,6 +424,7 @@ private fun AdminNotificationSettingsConfig.toTestForm(
     reminderLeadMinutes: String = this.reminderLeadMinutes.toString(),
     quietHoursStart: String = this.quietHoursStart,
     quietHoursEnd: String = this.quietHoursEnd,
+    quietHoursTimeZone: String = this.quietHoursTimeZone,
     templates: List<AdminNotificationTemplateConfig> = this.templates,
 ): AdminNotificationSettingsForm = AdminNotificationSettingsForm(
     bookingStatusEnabled = bookingStatusEnabled,
@@ -430,6 +435,7 @@ private fun AdminNotificationSettingsConfig.toTestForm(
     reminderLeadMinutes = reminderLeadMinutes,
     quietHoursStart = quietHoursStart,
     quietHoursEnd = quietHoursEnd,
+    quietHoursTimeZone = quietHoursTimeZone,
     templates = templates.map {
         AdminNotificationTemplateForm(
             key = it.key,

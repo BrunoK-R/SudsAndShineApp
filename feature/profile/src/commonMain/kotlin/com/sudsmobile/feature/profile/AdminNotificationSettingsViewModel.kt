@@ -27,6 +27,7 @@ internal data class AdminNotificationSettingsForm(
     val reminderLeadMinutes: String = "120",
     val quietHoursStart: String = "22:00",
     val quietHoursEnd: String = "08:00",
+    val quietHoursTimeZone: String = "Europe/Lisbon",
     val templates: List<AdminNotificationTemplateForm> = defaultNotificationTemplateForms(),
 )
 
@@ -326,6 +327,7 @@ private fun AdminNotificationSettingsConfig.toForm(): AdminNotificationSettingsF
     reminderLeadMinutes = reminderLeadMinutes.toString(),
     quietHoursStart = quietHoursStart,
     quietHoursEnd = quietHoursEnd,
+    quietHoursTimeZone = quietHoursTimeZone,
     templates = normalizedTemplates().map { it.toForm() },
 )
 
@@ -349,6 +351,7 @@ private fun AdminNotificationSettingsForm.toUpdateRequest(): ParsedNotificationS
         ?: return ParsedNotificationSettingsRequest.Invalid("Indique a antecedência do lembrete.")
     val quietStart = quietHoursStart.trim()
     val quietEnd = quietHoursEnd.trim()
+    val quietTimeZone = quietHoursTimeZone.trim().ifBlank { "Europe/Lisbon" }
     val templates = templates.map {
         it.copy(
             key = it.key.trim(),
@@ -363,6 +366,8 @@ private fun AdminNotificationSettingsForm.toUpdateRequest(): ParsedNotificationS
             ParsedNotificationSettingsRequest.Invalid("O lembrete deve ser enviado entre 15 minutos e 7 dias antes.")
         !quietStart.isAdminNotificationTime() || !quietEnd.isAdminNotificationTime() ->
             ParsedNotificationSettingsRequest.Invalid("As horas de silêncio devem estar no formato HH:MM.")
+        !quietTimeZone.isAdminNotificationTimeZone() ->
+            ParsedNotificationSettingsRequest.Invalid("Indique um fuso horário válido para o período de silêncio.")
         templates.map { it.key }.toSet() != NotificationTemplateKeys ->
             ParsedNotificationSettingsRequest.Invalid("Preencha todos os modelos de notificação.")
         templates.any { it.title.isBlank() || it.body.isBlank() } ->
@@ -381,6 +386,7 @@ private fun AdminNotificationSettingsForm.toUpdateRequest(): ParsedNotificationS
                 reminderLeadMinutes = reminderLead,
                 quietHoursStart = quietStart,
                 quietHoursEnd = quietEnd,
+                quietHoursTimeZone = quietTimeZone,
                 templates = templates.map {
                     AdminNotificationTemplateConfig(
                         key = it.key,
@@ -436,6 +442,11 @@ private fun AuthError.isRetryable(): Boolean {
 
 private fun String.isAdminNotificationTime(): Boolean {
     return Regex("^([01]\\d|2[0-3]):([0-5]\\d)$").matches(trim())
+}
+
+private fun String.isAdminNotificationTimeZone(): Boolean {
+    val value = trim()
+    return value.length in 1..80 && Regex("^[A-Za-z_]+(/[A-Za-z0-9_+\\-]+)*$").matches(value)
 }
 
 internal fun defaultNotificationTemplateForms(): List<AdminNotificationTemplateForm> {

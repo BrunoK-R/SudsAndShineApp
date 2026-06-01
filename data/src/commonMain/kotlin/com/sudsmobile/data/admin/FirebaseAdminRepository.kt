@@ -583,6 +583,8 @@ class FirebaseAdminRepository(
                 AdminError.Validation("O lembrete deve ser enviado entre 15 minutos e 7 dias antes.")
             !request.quietHoursStart.isValidAdminTime() || !request.quietHoursEnd.isValidAdminTime() ->
                 AdminError.Validation("As horas de silêncio devem estar no formato HH:MM.")
+            !request.quietHoursTimeZone.isValidNotificationTimeZone() ->
+                AdminError.Validation("Indique um fuso horário válido para o período de silêncio.")
             request.templates.map { it.key }.toSet() != NotificationTemplateKeys ->
                 AdminError.Validation("Preencha todos os modelos de notificação.")
             request.templates.any { it.title.isBlank() || it.body.isBlank() } ->
@@ -732,6 +734,7 @@ class FirebaseAdminRepository(
     private fun AdminNotificationSettingsUpdateRequest.normalized(): AdminNotificationSettingsUpdateRequest = copy(
         quietHoursStart = quietHoursStart.trim(),
         quietHoursEnd = quietHoursEnd.trim(),
+        quietHoursTimeZone = quietHoursTimeZone.trim().ifBlank { DefaultNotificationQuietHoursTimeZone },
         templates = templates
             .map {
                 it.copy(
@@ -795,6 +798,8 @@ private const val MinNotificationReminderLeadMinutes = 15
 private const val MaxNotificationReminderLeadMinutes = 7 * 24 * 60
 private const val MaxNotificationTemplateTitleLength = 120
 private const val MaxNotificationTemplateBodyLength = 500
+private const val MaxNotificationQuietHoursTimeZoneLength = 80
+private const val DefaultNotificationQuietHoursTimeZone = "Europe/Lisbon"
 private const val MaxNotificationCampaignTitleLength = 120
 private const val MaxNotificationCampaignBodyLength = 1000
 private const val MaxNotificationCampaignNotesLength = 500
@@ -815,6 +820,7 @@ private val CampaignIdRegex = Regex("^[A-Za-z0-9_-]{3,80}$")
 private val UtcInstantIsoRegex = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$")
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
 private val AdminTimeRegex = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
+private val NotificationTimeZoneRegex = Regex("^[A-Za-z_]+(/[A-Za-z0-9_+\\-]+)*$")
 private val NotificationCampaignTargetAudiences = setOf("test_users", "marketing_opt_in_users")
 
 private fun unauthenticatedError(): AdminError.Unauthenticated {
@@ -901,4 +907,10 @@ private fun String.hasAvailabilityTimeRange(): Boolean {
 
 private fun String.isValidAdminTime(): Boolean {
     return AdminTimeRegex.matches(trim())
+}
+
+private fun String.isValidNotificationTimeZone(): Boolean {
+    val value = trim()
+    return value.length in 1..MaxNotificationQuietHoursTimeZoneLength &&
+        NotificationTimeZoneRegex.matches(value)
 }

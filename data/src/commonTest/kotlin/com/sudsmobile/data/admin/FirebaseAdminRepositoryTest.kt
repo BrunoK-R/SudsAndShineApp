@@ -482,6 +482,7 @@ class FirebaseAdminRepositoryTest {
         val result = repository.updateNotificationSettingsConfiguration(
             adminNotificationSettingsRequest(
                 reminderLeadMinutes = 60,
+                quietHoursTimeZone = " Europe/Madrid ",
                 templates = adminNotificationTemplates().map {
                     if (it.key == "booking_request") it.copy(title = "  Pedido   recebido  ") else it
                 },
@@ -491,6 +492,7 @@ class FirebaseAdminRepositoryTest {
         val success = assertIs<AdminNotificationSettingsResult.Success>(result)
         assertEquals(60, success.config.reminderLeadMinutes)
         assertEquals("id-token-1", api.updateNotificationSettingsIdTokens.single())
+        assertEquals("Europe/Madrid", api.updateNotificationSettingsRequests.single().quietHoursTimeZone)
         assertEquals(
             "Pedido recebido",
             api.updateNotificationSettingsRequests.single().templates.first { it.key == "booking_request" }.title,
@@ -507,6 +509,23 @@ class FirebaseAdminRepositoryTest {
 
         val result = repository.updateNotificationSettingsConfiguration(
             adminNotificationSettingsRequest(reminderLeadMinutes = 5),
+        )
+
+        val failure = assertIs<AdminNotificationSettingsResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.updateNotificationSettingsRequests.size)
+    }
+
+    @Test
+    fun updateNotificationSettingsRejectsUnsafeTimeZoneBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateNotificationSettingsConfiguration(
+            adminNotificationSettingsRequest(quietHoursTimeZone = "../Europe/Lisbon"),
         )
 
         val failure = assertIs<AdminNotificationSettingsResult.Failure>(result)
@@ -1039,6 +1058,7 @@ private class FakeAdminFunctionsApi(
                 reminderLeadMinutes = request.reminderLeadMinutes,
                 quietHoursStart = request.quietHoursStart,
                 quietHoursEnd = request.quietHoursEnd,
+                quietHoursTimeZone = request.quietHoursTimeZone,
                 templates = request.templates,
             ),
         )
@@ -1354,6 +1374,7 @@ private fun adminNotificationSettingsConfig(): AdminNotificationSettingsConfig =
     reminderLeadMinutes = 120,
     quietHoursStart = "22:00",
     quietHoursEnd = "08:00",
+    quietHoursTimeZone = "Europe/Lisbon",
     templates = adminNotificationTemplates(),
 )
 
@@ -1366,6 +1387,7 @@ private fun adminNotificationSettingsRequest(
     reminderLeadMinutes: Int = 120,
     quietHoursStart: String = "22:00",
     quietHoursEnd: String = "08:00",
+    quietHoursTimeZone: String = "Europe/Lisbon",
     templates: List<AdminNotificationTemplateConfig> = adminNotificationTemplates(),
 ): AdminNotificationSettingsUpdateRequest = AdminNotificationSettingsUpdateRequest(
     bookingStatusEnabled = bookingStatusEnabled,
@@ -1376,6 +1398,7 @@ private fun adminNotificationSettingsRequest(
     reminderLeadMinutes = reminderLeadMinutes,
     quietHoursStart = quietHoursStart,
     quietHoursEnd = quietHoursEnd,
+    quietHoursTimeZone = quietHoursTimeZone,
     templates = templates,
 )
 

@@ -495,6 +495,7 @@ class KtorAdminFunctionsApiTest {
                     "reminderLeadMinutes": 60,
                     "quietHoursStart": "23:00",
                     "quietHoursEnd": "06:00",
+                    "quietHoursTimeZone": "Atlantic/Azores",
                     "templates": [
                       {
                         "key": "booking_rejected",
@@ -520,6 +521,7 @@ class KtorAdminFunctionsApiTest {
         assertEquals(60, success.config.reminderLeadMinutes)
         assertEquals(false, success.config.templates.single().enabled)
         assertEquals("23:00", success.config.quietHoursStart)
+        assertEquals("Atlantic/Azores", success.config.quietHoursTimeZone)
     }
 
     @Test
@@ -539,6 +541,7 @@ class KtorAdminFunctionsApiTest {
                     "reminderLeadMinutes": 60,
                     "quietHoursStart": "23:00",
                     "quietHoursEnd": "06:00",
+                    "quietHoursTimeZone": "Europe/Madrid",
                     "templates": [
                       {
                         "key": "booking_request",
@@ -568,6 +571,7 @@ class KtorAdminFunctionsApiTest {
                 reminderLeadMinutes = 60,
                 quietHoursStart = "23:00",
                 quietHoursEnd = "06:00",
+                quietHoursTimeZone = "Europe/Madrid",
                 templates = listOf(
                     AdminNotificationTemplateConfig(
                         key = "booking_request",
@@ -585,6 +589,7 @@ class KtorAdminFunctionsApiTest {
         assertEquals("/test-project/europe-west1/updateNotificationSettings", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals(false, success.config.adminPendingAlertEnabled)
+        assertEquals("Europe/Madrid", success.config.quietHoursTimeZone)
     }
 
     @Test

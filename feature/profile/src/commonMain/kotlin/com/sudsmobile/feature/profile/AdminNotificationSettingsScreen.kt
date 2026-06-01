@@ -438,6 +438,12 @@ private fun AdminNotificationSettingsFormCard(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                AdminNotificationTextField(
+                    value = form.quietHoursTimeZone,
+                    onValueChange = { onFormChange(form.copy(quietHoursTimeZone = it)) },
+                    label = "Fuso horário",
+                    enabled = !saving,
+                )
             }
         }
 

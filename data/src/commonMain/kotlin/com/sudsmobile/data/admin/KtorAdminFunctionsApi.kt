@@ -908,6 +908,7 @@ private data class NotificationSettingsPayload(
     val reminderLeadMinutes: Int,
     val quietHoursStart: String,
     val quietHoursEnd: String,
+    val quietHoursTimeZone: String,
     val templates: List<NotificationTemplatePayload>,
 ) {
     companion object {
@@ -921,6 +922,7 @@ private data class NotificationSettingsPayload(
                 reminderLeadMinutes = request.reminderLeadMinutes,
                 quietHoursStart = request.quietHoursStart,
                 quietHoursEnd = request.quietHoursEnd,
+                quietHoursTimeZone = request.quietHoursTimeZone,
                 templates = request.templates.map { NotificationTemplatePayload.from(it) },
             )
     }
@@ -1588,6 +1590,7 @@ private data class NotificationSettingsResultPayload(
     val reminderLeadMinutes: Int = 120,
     val quietHoursStart: String = "22:00",
     val quietHoursEnd: String = "08:00",
+    val quietHoursTimeZone: String = "Europe/Lisbon",
     val templates: List<NotificationTemplatePayload> = emptyList(),
 ) {
     fun toAdminNotificationSettingsConfig(): AdminNotificationSettingsConfig = AdminNotificationSettingsConfig(
@@ -1599,6 +1602,7 @@ private data class NotificationSettingsResultPayload(
         reminderLeadMinutes = reminderLeadMinutes.coerceIn(15, 10080),
         quietHoursStart = quietHoursStart.trim().ifBlank { "22:00" },
         quietHoursEnd = quietHoursEnd.trim().ifBlank { "08:00" },
+        quietHoursTimeZone = quietHoursTimeZone.trim().ifBlank { "Europe/Lisbon" },
         templates = templates.map { it.toAdminNotificationTemplate() },
     )
 }

@@ -180,6 +180,7 @@ data class AdminNotificationSettingsConfig(
     val reminderLeadMinutes: Int,
     val quietHoursStart: String,
     val quietHoursEnd: String,
+    val quietHoursTimeZone: String,
     val templates: List<AdminNotificationTemplateConfig>,
 )
 
@@ -211,6 +212,7 @@ data class AdminNotificationSettingsUpdateRequest(
     val reminderLeadMinutes: Int,
     val quietHoursStart: String,
     val quietHoursEnd: String,
+    val quietHoursTimeZone: String,
     val templates: List<AdminNotificationTemplateConfig>,
 )
 
