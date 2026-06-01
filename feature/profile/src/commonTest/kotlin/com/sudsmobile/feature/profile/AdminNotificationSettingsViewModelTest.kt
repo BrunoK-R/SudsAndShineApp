@@ -96,6 +96,27 @@ class AdminNotificationSettingsViewModelTest {
     }
 
     @Test
+    fun loadConfigurationShowsNotificationSettingsAuditLabel() = runTest {
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = FakeNotificationSettingsAuthRepository(authenticated = true),
+            adminRepository = FakeNotificationSettingsAdminRepository(
+                loadResult = AdminNotificationSettingsResult.Success(
+                    adminNotificationSettingsConfig(
+                        updatedAtIso = "2026-06-01T10:15:00.000Z",
+                        updatedByUid = "admin-updated-long",
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+
+        val loaded = assertIs<AdminNotificationSettingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Atualizado 2026-06-01 10:15 UTC por admin-up...", loaded.form.updatedAuditLabel)
+    }
+
+    @Test
     fun loadConfigurationIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<AdminNotificationSettingsResult>()
         val authRepository = FakeNotificationSettingsAuthRepository(authenticated = true)
@@ -164,6 +185,8 @@ class AdminNotificationSettingsViewModelTest {
         assertEquals("Europe/Madrid", request.quietHoursTimeZone)
         assertEquals("Pedido recebido", request.templates.first { it.key == "booking_request" }.title)
         assertEquals(false, request.adminPendingAlertEnabled)
+        val loaded = assertIs<AdminNotificationSettingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Atualizado 2026-06-01 10:15 UTC por uid-1", loaded.form.updatedAuditLabel)
     }
 
     @Test
@@ -297,6 +320,9 @@ private class FakeNotificationSettingsAdminRepository(
                 quietHoursEnd = request.quietHoursEnd,
                 quietHoursTimeZone = request.quietHoursTimeZone,
                 templates = request.templates,
+                source = "firestore",
+                updatedAtIso = "2026-06-01T10:15:00.000Z",
+                updatedByUid = "uid-1",
             ),
         )
     }
@@ -391,7 +417,11 @@ private class FakeNotificationSettingsAuthRepository(authenticated: Boolean) : A
     }
 }
 
-private fun adminNotificationSettingsConfig(): AdminNotificationSettingsConfig = AdminNotificationSettingsConfig(
+private fun adminNotificationSettingsConfig(
+    source: String = "",
+    updatedAtIso: String = "",
+    updatedByUid: String = "",
+): AdminNotificationSettingsConfig = AdminNotificationSettingsConfig(
     bookingStatusEnabled = true,
     appointmentReminderEnabled = true,
     loyaltyEnabled = true,
@@ -402,6 +432,9 @@ private fun adminNotificationSettingsConfig(): AdminNotificationSettingsConfig =
     quietHoursEnd = "08:00",
     quietHoursTimeZone = "Europe/Lisbon",
     templates = adminNotificationTemplates(),
+    source = source,
+    updatedAtIso = updatedAtIso,
+    updatedByUid = updatedByUid,
 )
 
 private fun notificationTestSuccess(templateKey: String): AdminNotificationTestResult.Success =

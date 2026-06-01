@@ -182,6 +182,9 @@ data class AdminNotificationSettingsConfig(
     val quietHoursEnd: String,
     val quietHoursTimeZone: String,
     val templates: List<AdminNotificationTemplateConfig>,
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 )
 
 data class AdminAvailabilityUpdateRequest(

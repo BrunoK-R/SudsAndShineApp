@@ -1594,6 +1594,9 @@ private data class NotificationSettingsResultPayload(
     val quietHoursEnd: String = "08:00",
     val quietHoursTimeZone: String = "Europe/Lisbon",
     val templates: List<NotificationTemplatePayload> = emptyList(),
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 ) {
     fun toAdminNotificationSettingsConfig(): AdminNotificationSettingsConfig = AdminNotificationSettingsConfig(
         bookingStatusEnabled = bookingStatusEnabled,
@@ -1606,6 +1609,9 @@ private data class NotificationSettingsResultPayload(
         quietHoursEnd = quietHoursEnd.trim().ifBlank { "08:00" },
         quietHoursTimeZone = quietHoursTimeZone.trim().ifBlank { "Europe/Lisbon" },
         templates = templates.map { it.toAdminNotificationTemplate() },
+        source = source.trim(),
+        updatedAtIso = updatedAtIso.trim(),
+        updatedByUid = updatedByUid.trim(),
     )
 }
 

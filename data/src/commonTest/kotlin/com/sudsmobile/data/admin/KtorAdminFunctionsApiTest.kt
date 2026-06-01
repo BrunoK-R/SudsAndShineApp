@@ -496,6 +496,9 @@ class KtorAdminFunctionsApiTest {
                     "quietHoursStart": "23:00",
                     "quietHoursEnd": "06:00",
                     "quietHoursTimeZone": "Atlantic/Azores",
+                    "source": "firestore",
+                    "updatedAtIso": "2026-06-01T10:15:00.000Z",
+                    "updatedByUid": "admin-updated",
                     "templates": [
                       {
                         "key": "booking_rejected",
@@ -522,6 +525,9 @@ class KtorAdminFunctionsApiTest {
         assertEquals(false, success.config.templates.single().enabled)
         assertEquals("23:00", success.config.quietHoursStart)
         assertEquals("Atlantic/Azores", success.config.quietHoursTimeZone)
+        assertEquals("firestore", success.config.source)
+        assertEquals("2026-06-01T10:15:00.000Z", success.config.updatedAtIso)
+        assertEquals("admin-updated", success.config.updatedByUid)
     }
 
     @Test
@@ -542,6 +548,9 @@ class KtorAdminFunctionsApiTest {
                     "quietHoursStart": "23:00",
                     "quietHoursEnd": "06:00",
                     "quietHoursTimeZone": "Europe/Madrid",
+                    "source": "firestore",
+                    "updatedAtIso": "2026-06-01T10:16:00.000Z",
+                    "updatedByUid": "admin-updated",
                     "templates": [
                       {
                         "key": "booking_request",
@@ -589,6 +598,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("/test-project/europe-west1/updateNotificationSettings", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals(false, success.config.adminPendingAlertEnabled)
+        assertEquals("2026-06-01T10:16:00.000Z", success.config.updatedAtIso)
+        assertEquals("admin-updated", success.config.updatedByUid)
         assertEquals("Europe/Madrid", success.config.quietHoursTimeZone)
     }
 

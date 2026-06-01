@@ -29,6 +29,7 @@ internal data class AdminNotificationSettingsForm(
     val quietHoursEnd: String = "08:00",
     val quietHoursTimeZone: String = "Europe/Lisbon",
     val templates: List<AdminNotificationTemplateForm> = defaultNotificationTemplateForms(),
+    val updatedAuditLabel: String = "",
 )
 
 internal data class AdminNotificationTemplateForm(
@@ -329,6 +330,7 @@ private fun AdminNotificationSettingsConfig.toForm(): AdminNotificationSettingsF
     quietHoursEnd = quietHoursEnd,
     quietHoursTimeZone = quietHoursTimeZone,
     templates = normalizedTemplates().map { it.toForm() },
+    updatedAuditLabel = notificationSettingsAuditLabel(updatedAtIso, updatedByUid),
 )
 
 private fun AdminNotificationSettingsConfig.normalizedTemplates(): List<AdminNotificationTemplateConfig> {
@@ -438,6 +440,26 @@ private fun AuthError.toAdminNotificationSettingsState(): AdminNotificationSetti
 
 private fun AuthError.isRetryable(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
+}
+
+private fun notificationSettingsAuditLabel(timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toNotificationSettingsAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortAuditUid()?.let { " por $it" }.orEmpty()
+    return "Atualizado $timestampLabel$actorLabel"
+}
+
+private fun String.toNotificationSettingsAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
 }
 
 private fun String.isAdminNotificationTime(): Boolean {
