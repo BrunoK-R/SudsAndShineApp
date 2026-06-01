@@ -92,28 +92,36 @@ internal class AdminAccessViewModel(
     private val _uiState = MutableStateFlow<AdminAccessUiState>(AdminAccessUiState.Idle)
     val uiState: StateFlow<AdminAccessUiState> = _uiState.asStateFlow()
     private var loadedUid: String? = null
+    private var loadedSessionMarker: String? = null
     private var loadingUid: String? = null
 
     fun refreshForSession() {
         when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
-                loadedUid = null
+                clearLoadedSession()
                 loadingUid = null
                 _uiState.value = AdminAccessUiState.Loading
             }
             is AuthSessionState.RestoreFailed -> {
-                loadedUid = null
+                clearLoadedSession()
                 loadingUid = null
                 _uiState.value = currentSessionState.error.toAdminAccessError()
             }
             AuthSessionState.Unauthenticated -> {
-                loadedUid = null
+                clearLoadedSession()
                 loadingUid = null
                 _uiState.value = AdminAccessUiState.NotAdmin
             }
             is AuthSessionState.Authenticated -> {
                 val uid = currentSessionState.session.user.uid
-                if (loadedUid == uid && _uiState.value == AdminAccessUiState.Admin) return
+                val sessionMarker = currentSessionState.session.adminAccessMarker()
+                if (
+                    loadedUid == uid &&
+                    loadedSessionMarker == sessionMarker &&
+                    _uiState.value == AdminAccessUiState.Admin
+                ) {
+                    return
+                }
                 syncRole(uid)
             }
         }
@@ -134,10 +142,12 @@ internal class AdminAccessViewModel(
 
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid == requestedUid) {
+                val currentSession = (sessionState.value as? AuthSessionState.Authenticated)?.session
                 loadedUid = requestedUid
+                loadedSessionMarker = currentSession?.adminAccessMarker()
                 _uiState.value = nextState
             } else {
-                loadedUid = null
+                clearLoadedSession()
                 _uiState.value = AdminAccessUiState.NotAdmin
             }
             if (loadingUid == requestedUid) {
@@ -145,6 +155,20 @@ internal class AdminAccessViewModel(
             }
         }
     }
+
+    private fun clearLoadedSession() {
+        loadedUid = null
+        loadedSessionMarker = null
+    }
+}
+
+private fun com.sudsmobile.data.auth.AuthSession.adminAccessMarker(): String {
+    return listOf(
+        user.uid,
+        idToken,
+        refreshToken,
+        issuedAtEpochSeconds.toString(),
+    ).joinToString(separator = "|")
 }
 
 internal class AdminBookingsViewModel(

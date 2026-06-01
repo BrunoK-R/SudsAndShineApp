@@ -148,6 +148,55 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
+    fun adminAccessResyncsWhenSameUserSessionTokenChanges() = runTest {
+        val authRepository = FakeAdminAuthRepository(authenticated = true)
+        val repository = FakeAdminRepository(
+            roleResult = AdminRoleResult.Success(adminRole(role = "admin")),
+        )
+        val viewModel = AdminAccessViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<AdminAccessUiState.Admin>(viewModel.uiState.value)
+        assertEquals(1, repository.syncRoleCalls)
+
+        repository.roleResult = AdminRoleResult.Success(adminRole(role = "customer"))
+        authRepository.authenticate(tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<AdminAccessUiState.NotAdmin>(viewModel.uiState.value)
+        assertEquals(2, repository.syncRoleCalls)
+    }
+
+    @Test
+    fun adminAccessStoresRefreshedSessionAfterRoleSync() = runTest {
+        val authRepository = FakeAdminAuthRepository(authenticated = true)
+        val repository = FakeAdminRepository(
+            roleResult = AdminRoleResult.Success(adminRole(role = "admin")),
+            onSyncRole = {
+                authRepository.authenticate(tokenVersion = 2)
+            },
+        )
+        val viewModel = AdminAccessViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<AdminAccessUiState.Admin>(viewModel.uiState.value)
+        assertEquals(1, repository.syncRoleCalls)
+    }
+
+    @Test
     fun loadRequestsRequiresAuthenticatedSessionBeforeRepositoryCall() = runTest {
         val repository = FakeAdminRepository(
             requestsResult = AdminBookingRequestsResult.Success(listOf(adminBookingRequest())),
@@ -364,6 +413,7 @@ private class FakeAdminRepository(
         decisionReceipt(status = "completed"),
     ),
     private val completeResultDeferred: CompletableDeferred<AdminBookingDecisionResult>? = null,
+    private val onSyncRole: (() -> Unit)? = null,
 ) : AdminRepository {
     var syncRoleCalls = 0
         private set
@@ -375,6 +425,7 @@ private class FakeAdminRepository(
 
     override suspend fun syncMyRole(): AdminRoleResult {
         syncRoleCalls += 1
+        onSyncRole?.invoke()
         return roleResult
     }
 
@@ -486,8 +537,8 @@ private class FakeAdminAuthRepository(
         return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
     }
 
-    fun authenticate(uid: String = "uid-1") {
-        mutableSessionState.value = adminAuthenticatedSession(uid)
+    fun authenticate(uid: String = "uid-1", tokenVersion: Int = 1) {
+        mutableSessionState.value = adminAuthenticatedSession(uid = uid, tokenVersion = tokenVersion)
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
@@ -514,7 +565,10 @@ private class FakeAdminAuthRepository(
     }
 }
 
-private fun adminAuthenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
+private fun adminAuthenticatedSession(
+    uid: String = "uid-1",
+    tokenVersion: Int = 1,
+): AuthSessionState.Authenticated {
     return AuthSessionState.Authenticated(
         AuthSession(
             user = AuthUser(
@@ -523,9 +577,10 @@ private fun adminAuthenticatedSession(uid: String = "uid-1"): AuthSessionState.A
                 displayName = "Admin",
                 phoneNumber = "",
             ),
-            idToken = "id-token-$uid",
-            refreshToken = "refresh-token-$uid",
+            idToken = "id-token-$uid-$tokenVersion",
+            refreshToken = "refresh-token-$uid-$tokenVersion",
             expiresInSeconds = 3600,
+            issuedAtEpochSeconds = tokenVersion.toLong(),
         ),
     )
 }
