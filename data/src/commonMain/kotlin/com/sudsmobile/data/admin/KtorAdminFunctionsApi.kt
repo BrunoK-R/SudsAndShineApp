@@ -1471,6 +1471,12 @@ private data class AdminServiceCatalogItemPayload(
     val popular: Boolean = false,
     val active: Boolean = true,
     val sortOrder: Int = 999,
+    val createdAtIso: String = "",
+    val updatedAtIso: String = "",
+    val archivedAtIso: String = "",
+    val createdByUid: String = "",
+    val updatedByUid: String = "",
+    val archivedByUid: String = "",
 ) {
     fun toAdminServiceCatalogItem(): AdminServiceCatalogItem = AdminServiceCatalogItem(
         id = id.trim(),
@@ -1483,6 +1489,12 @@ private data class AdminServiceCatalogItemPayload(
         popular = popular,
         active = active,
         sortOrder = sortOrder.coerceIn(0, 9999),
+        createdAtIso = createdAtIso.trim(),
+        updatedAtIso = updatedAtIso.trim(),
+        archivedAtIso = archivedAtIso.trim(),
+        createdByUid = createdByUid.trim(),
+        updatedByUid = updatedByUid.trim(),
+        archivedByUid = archivedByUid.trim(),
     )
 }
 

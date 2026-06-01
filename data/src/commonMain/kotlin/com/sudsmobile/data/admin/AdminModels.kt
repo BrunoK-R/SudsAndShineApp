@@ -68,6 +68,12 @@ data class AdminServiceCatalogItem(
     val popular: Boolean,
     val active: Boolean,
     val sortOrder: Int,
+    val createdAtIso: String = "",
+    val updatedAtIso: String = "",
+    val archivedAtIso: String = "",
+    val createdByUid: String = "",
+    val updatedByUid: String = "",
+    val archivedByUid: String = "",
 )
 
 data class AdminServiceCatalogConfig(

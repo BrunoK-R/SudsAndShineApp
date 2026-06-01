@@ -29,6 +29,7 @@ internal data class AdminServiceCatalogServiceUi(
     val popular: Boolean,
     val active: Boolean,
     val sortOrder: Int,
+    val auditLabels: List<String> = emptyList(),
 )
 
 internal data class AdminServiceCatalogForm(
@@ -341,6 +342,11 @@ private fun AdminServiceCatalogItem.toUi(): AdminServiceCatalogServiceUi = Admin
     popular = popular,
     active = active,
     sortOrder = sortOrder,
+    auditLabels = listOf(
+        serviceCatalogAuditLabel("Criado", createdAtIso, createdByUid),
+        serviceCatalogAuditLabel("Atualizado", updatedAtIso, updatedByUid),
+        serviceCatalogAuditLabel("Arquivado", archivedAtIso, archivedByUid),
+    ).filter { it.isNotBlank() },
 )
 
 private fun AdminServiceCatalogServiceUi.toForm(): AdminServiceCatalogForm = AdminServiceCatalogForm(
@@ -421,6 +427,28 @@ private fun AdminError.toAdminServiceCatalogMutationState(): AdminServiceCatalog
         message = message,
         retryable = this is AdminError.Unavailable || this is AdminError.Backend || this is AdminError.Conflict,
     )
+}
+
+private fun serviceCatalogAuditLabel(action: String, timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toServiceCatalogAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortServiceCatalogAuditUid()
+        ?.let { " por $it" }
+        .orEmpty()
+    return "$action $timestampLabel$actorLabel"
+}
+
+private fun String.toServiceCatalogAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortServiceCatalogAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
 }
 
 private fun AuthError.toAdminServiceCatalogState(): AdminServiceCatalogUiState.Error {

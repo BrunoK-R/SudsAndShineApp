@@ -117,7 +117,14 @@ class AdminServiceCatalogViewModelTest {
             adminRepository = FakeServiceCatalogAdminRepository(
                 loadResult = AdminServiceCatalogResult.Success(
                     adminServiceCatalogConfig(
-                        services = listOf(adminServiceCatalogItem(active = false, passengerPriceCents = 3200)),
+                        services = listOf(
+                            adminServiceCatalogItem(
+                                active = false,
+                                passengerPriceCents = 3200,
+                                updatedAtIso = "2026-06-01T11:30:00.000Z",
+                                updatedByUid = "admin-service-catalog-updater",
+                            ),
+                        ),
                     ),
                 ),
             ),
@@ -131,6 +138,10 @@ class AdminServiceCatalogViewModelTest {
         assertEquals("premium", service.id)
         assertEquals("32,00 €", service.passengerPriceLabel)
         assertEquals(false, service.active)
+        assertEquals(
+            listOf("Atualizado 2026-06-01 11:30 UTC por admin-se..."),
+            service.auditLabels,
+        )
     }
 
     @Test
@@ -430,6 +441,8 @@ private fun adminServiceCatalogItem(
     name: String = "Lavagem Premium",
     active: Boolean = true,
     passengerPriceCents: Int = 3200,
+    updatedAtIso: String = "",
+    updatedByUid: String = "",
 ): AdminServiceCatalogItem = AdminServiceCatalogItem(
     id = id,
     name = name,
@@ -441,4 +454,6 @@ private fun adminServiceCatalogItem(
     popular = true,
     active = active,
     sortOrder = 20,
+    updatedAtIso = updatedAtIso,
+    updatedByUid = updatedByUid,
 )

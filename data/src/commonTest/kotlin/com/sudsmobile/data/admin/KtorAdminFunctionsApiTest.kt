@@ -976,7 +976,13 @@ class KtorAdminFunctionsApiTest {
                         "iconKey": "sparkles",
                         "popular": true,
                         "active": false,
-                        "sortOrder": 20
+                        "sortOrder": 20,
+                        "createdAtIso": "2026-06-01T10:00:00.000Z",
+                        "updatedAtIso": "2026-06-01T11:30:00.000Z",
+                        "archivedAtIso": "2026-06-01T12:45:00.000Z",
+                        "createdByUid": " admin-create ",
+                        "updatedByUid": " admin-update ",
+                        "archivedByUid": " admin-archive "
                       }
                     ]
                   }
@@ -1001,6 +1007,12 @@ class KtorAdminFunctionsApiTest {
         assertEquals(3200, service.passengerPriceCents)
         assertEquals(false, service.active)
         assertEquals(20, service.sortOrder)
+        assertEquals("2026-06-01T10:00:00.000Z", service.createdAtIso)
+        assertEquals("2026-06-01T11:30:00.000Z", service.updatedAtIso)
+        assertEquals("2026-06-01T12:45:00.000Z", service.archivedAtIso)
+        assertEquals("admin-create", service.createdByUid)
+        assertEquals("admin-update", service.updatedByUid)
+        assertEquals("admin-archive", service.archivedByUid)
     }
 
     @Test
