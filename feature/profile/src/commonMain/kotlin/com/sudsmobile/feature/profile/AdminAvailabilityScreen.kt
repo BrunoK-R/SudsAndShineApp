@@ -81,6 +81,8 @@ fun AdminAvailabilityScreen(
         onSave = viewModel::save,
         onSaveCapacityOverride = viewModel::saveCapacityOverride,
         onClearCapacityOverride = viewModel::clearCapacityOverride,
+        onSaveBlockedSlot = viewModel::saveBlockedSlot,
+        onClearBlockedSlot = viewModel::clearBlockedSlot,
         onDismissSaveState = viewModel::clearSaveState,
     )
 }
@@ -97,6 +99,8 @@ private fun AdminAvailabilityScreenContent(
     onSave: () -> Unit,
     onSaveCapacityOverride: () -> Unit,
     onClearCapacityOverride: (String) -> Unit,
+    onSaveBlockedSlot: () -> Unit,
+    onClearBlockedSlot: (String) -> Unit,
     onDismissSaveState: () -> Unit,
 ) {
     Column(
@@ -158,6 +162,8 @@ private fun AdminAvailabilityScreenContent(
                     onSave = onSave,
                     onSaveCapacityOverride = onSaveCapacityOverride,
                     onClearCapacityOverride = onClearCapacityOverride,
+                    onSaveBlockedSlot = onSaveBlockedSlot,
+                    onClearBlockedSlot = onClearBlockedSlot,
                 )
             }
         }
@@ -338,6 +344,8 @@ private fun AdminAvailabilityFormCard(
     onSave: () -> Unit,
     onSaveCapacityOverride: () -> Unit,
     onClearCapacityOverride: (String) -> Unit,
+    onSaveBlockedSlot: () -> Unit,
+    onClearBlockedSlot: (String) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -461,6 +469,83 @@ private fun AdminAvailabilityFormCard(
                     }
                 }
             }
+
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Bloqueios de horário",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            AdminAvailabilityTextField(
+                value = form.blockedDate,
+                onValueChange = { onFormChange(form.copy(blockedDate = it)) },
+                label = "Data do bloqueio (AAAA-MM-DD)",
+                singleLine = true,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AdminAvailabilityTextField(
+                    value = form.blockedStartTime,
+                    onValueChange = { onFormChange(form.copy(blockedStartTime = it)) },
+                    label = "Início",
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                AdminAvailabilityTextField(
+                    value = form.blockedEndTime,
+                    onValueChange = { onFormChange(form.copy(blockedEndTime = it)) },
+                    label = "Fim",
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+            }
+            AdminAvailabilityTextField(
+                value = form.blockedReason,
+                onValueChange = { onFormChange(form.copy(blockedReason = it)) },
+                label = "Motivo",
+                singleLine = true,
+            )
+
+            Button(
+                onClick = onSaveBlockedSlot,
+                enabled = !saving,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Guardar bloqueio",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            if (form.blockedSlots.isEmpty()) {
+                Text(
+                    text = "Sem bloqueios de horário configurados.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    form.blockedSlots.forEach { blockedSlot ->
+                        AdminBlockedSlotRow(
+                            blockedSlot = blockedSlot,
+                            saving = saving,
+                            onClear = onClearBlockedSlot,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -500,6 +585,71 @@ private fun AdminCapacityOverrideRow(
             }
             OutlinedButton(
                 onClick = { onClear(override.date) },
+                enabled = !saving,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Limpar",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminBlockedSlotRow(
+    blockedSlot: AdminBlockedSlotUi,
+    saving: Boolean,
+    onClear: (String) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = blockedSlot.date,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = blockedSlot.timeLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (blockedSlot.reason.isNotBlank()) {
+                    Text(
+                        text = blockedSlot.reason,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = { onClear(blockedSlot.blockedSlotId) },
                 enabled = !saving,
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),

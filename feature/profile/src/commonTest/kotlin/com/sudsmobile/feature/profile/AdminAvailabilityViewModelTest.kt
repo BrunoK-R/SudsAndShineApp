@@ -3,6 +3,11 @@ package com.sudsmobile.feature.profile
 import com.sudsmobile.data.admin.AdminAvailabilityConfig
 import com.sudsmobile.data.admin.AdminAvailabilityResult
 import com.sudsmobile.data.admin.AdminAvailabilityUpdateRequest
+import com.sudsmobile.data.admin.AdminBlockedSlotClearRequest
+import com.sudsmobile.data.admin.AdminBlockedSlotItem
+import com.sudsmobile.data.admin.AdminBlockedSlotMutationReceipt
+import com.sudsmobile.data.admin.AdminBlockedSlotMutationResult
+import com.sudsmobile.data.admin.AdminBlockedSlotUpsertRequest
 import com.sudsmobile.data.admin.AdminBookingDecisionRequest
 import com.sudsmobile.data.admin.AdminBookingDecisionResult
 import com.sudsmobile.data.admin.AdminBookingRequestsResult
@@ -223,6 +228,80 @@ class AdminAvailabilityViewModelTest {
         assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
         assertEquals(2, repository.loadCalls)
     }
+
+    @Test
+    fun saveBlockedSlotSubmitsParsedWindowAndReloads() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(
+            loaded.form.copy(
+                blockedDate = "2026-06-10",
+                blockedStartTime = "09:30",
+                blockedEndTime = "11:00",
+                blockedReason = "  Reunião   equipa ",
+            ),
+        )
+        viewModel.saveBlockedSlot()
+        runCurrent()
+
+        val request = repository.upsertBlockedSlotRequests.single()
+        assertEquals("2026-06-10", request.date)
+        assertEquals("2026-06-10T09:30:00.000Z", request.slotStartIso)
+        assertEquals("2026-06-10T11:00:00.000Z", request.slotEndIso)
+        assertEquals("Reunião   equipa", request.reason)
+        assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
+        assertEquals(2, repository.loadCalls)
+    }
+
+    @Test
+    fun saveBlockedSlotValidatesBeforeRepositoryCall() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(
+            loaded.form.copy(
+                blockedDate = "2026-02-31",
+                blockedStartTime = "11:00",
+                blockedEndTime = "10:00",
+            ),
+        )
+        viewModel.saveBlockedSlot()
+        runCurrent()
+
+        assertIs<AdminAvailabilitySaveState.Error>(viewModel.saveState.value)
+        assertEquals(0, repository.upsertBlockedSlotRequests.size)
+    }
+
+    @Test
+    fun clearBlockedSlotSubmitsIdAndReloads() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.clearBlockedSlot("block-1")
+        runCurrent()
+
+        assertEquals("block-1", repository.clearBlockedSlotRequests.single().blockedSlotId)
+        assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
+        assertEquals(2, repository.loadCalls)
+    }
 }
 
 private class FakeAvailabilityAdminRepository(
@@ -235,6 +314,8 @@ private class FakeAvailabilityAdminRepository(
     val updateRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
     val upsertCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideUpsertRequest>()
     val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
+    val upsertBlockedSlotRequests = mutableListOf<AdminBlockedSlotUpsertRequest>()
+    val clearBlockedSlotRequests = mutableListOf<AdminBlockedSlotClearRequest>()
 
     override suspend fun syncMyRole(): AdminRoleResult {
         return AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin"))
@@ -294,6 +375,31 @@ private class FakeAvailabilityAdminRepository(
         return AdminCapacityOverrideMutationResult.Success(
             AdminCapacityOverrideMutationReceipt(
                 date = request.date,
+                status = "cleared",
+            ),
+        )
+    }
+
+    override suspend fun upsertBlockedSlot(
+        request: AdminBlockedSlotUpsertRequest,
+    ): AdminBlockedSlotMutationResult {
+        upsertBlockedSlotRequests += request
+        return AdminBlockedSlotMutationResult.Success(
+            AdminBlockedSlotMutationReceipt(
+                blockedSlotId = request.blockedSlotId.ifBlank { "block-1" },
+                date = request.date,
+                status = "updated",
+            ),
+        )
+    }
+
+    override suspend fun clearBlockedSlot(
+        request: AdminBlockedSlotClearRequest,
+    ): AdminBlockedSlotMutationResult {
+        clearBlockedSlotRequests += request
+        return AdminBlockedSlotMutationResult.Success(
+            AdminBlockedSlotMutationReceipt(
+                blockedSlotId = request.blockedSlotId,
                 status = "cleared",
             ),
         )
@@ -394,6 +500,15 @@ private fun adminAvailabilityConfig(
         AdminCapacityOverrideItem(
             date = "2026-06-10",
             maxBookingsPerSlot = 0,
+        ),
+    ),
+    blockedSlots = listOf(
+        AdminBlockedSlotItem(
+            blockedSlotId = "block-1",
+            date = "2026-06-10",
+            slotStartIso = "2026-06-10T14:00:00.000Z",
+            slotEndIso = "2026-06-10T15:00:00.000Z",
+            reason = "Manutenção",
         ),
     ),
 )

@@ -208,6 +208,32 @@ class FirebaseAdminRepository(
         return api.clearCapacityOverride(normalizedRequest, idToken)
     }
 
+    override suspend fun upsertBlockedSlot(
+        request: AdminBlockedSlotUpsertRequest,
+    ): AdminBlockedSlotMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminBlockedSlotMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBlockedSlotMutationResult.Failure(unauthenticatedError())
+
+        return api.upsertBlockedSlot(normalizedRequest, idToken)
+    }
+
+    override suspend fun clearBlockedSlot(
+        request: AdminBlockedSlotClearRequest,
+    ): AdminBlockedSlotMutationResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminBlockedSlotMutationResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBlockedSlotMutationResult.Failure(unauthenticatedError())
+
+        return api.clearBlockedSlot(normalizedRequest, idToken)
+    }
+
     override suspend fun acceptBookingRequest(
         request: AdminBookingDecisionRequest,
     ): AdminBookingDecisionResult {
@@ -448,6 +474,33 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminBlockedSlotUpsertRequest): AdminError.Validation? {
+        return when {
+            request.blockedSlotId.isNotBlank() && !request.blockedSlotId.isValidBlockedSlotId() ->
+                AdminError.Validation("O identificador do bloqueio é inválido.")
+            !request.date.isValidDateId() ->
+                AdminError.Validation("Indique uma data válida para o bloqueio.")
+            !request.slotStartIso.isValidUtcInstantIso() || !request.slotEndIso.isValidUtcInstantIso() ->
+                AdminError.Validation("Indique horas válidas para o bloqueio.")
+            request.slotStartIso.substring(0, 10) != request.date ||
+                request.slotEndIso.substring(0, 10) != request.date ->
+                AdminError.Validation("As horas do bloqueio devem pertencer à data indicada.")
+            request.slotEndIso <= request.slotStartIso ->
+                AdminError.Validation("A hora de fim deve ser posterior ao início.")
+            request.reason.length > MaxBlockedSlotReasonLength ->
+                AdminError.Validation("O motivo deve ter no máximo 160 caracteres.")
+            else -> null
+        }
+    }
+
+    private fun validate(request: AdminBlockedSlotClearRequest): AdminError.Validation? {
+        return when {
+            request.blockedSlotId.isBlank() || !request.blockedSlotId.isValidBlockedSlotId() ->
+                AdminError.Validation("O identificador do bloqueio é inválido.")
+            else -> null
+        }
+    }
+
     private fun validate(request: AdminBookingPolicyUpdateRequest): AdminError.Validation? {
         return when {
             request.pendingHoldMinutes !in MinPendingHoldMinutes..MaxPolicyWindowMinutes ->
@@ -612,6 +665,18 @@ class FirebaseAdminRepository(
         date = date.trim(),
     )
 
+    private fun AdminBlockedSlotUpsertRequest.normalized(): AdminBlockedSlotUpsertRequest = copy(
+        blockedSlotId = blockedSlotId.trim(),
+        date = date.trim(),
+        slotStartIso = slotStartIso.trim(),
+        slotEndIso = slotEndIso.trim(),
+        reason = reason.normalizeAdminText(),
+    )
+
+    private fun AdminBlockedSlotClearRequest.normalized(): AdminBlockedSlotClearRequest = copy(
+        blockedSlotId = blockedSlotId.trim(),
+    )
+
     private fun AdminBookingPolicyUpdateRequest.normalized(): AdminBookingPolicyUpdateRequest = copy(
         paymentEligibilityCopy = paymentEligibilityCopy.normalizeAdminText(),
     )
@@ -675,6 +740,7 @@ private const val MaxBusinessOpeningRows = 10
 private const val MaxBusinessSocialLinks = 8
 private const val MinAvailabilityCapacity = 0
 private const val MaxAvailabilityCapacity = 20
+private const val MaxBlockedSlotReasonLength = 160
 private const val MinPendingHoldMinutes = 15
 private const val MinPolicyWindowMinutes = 0
 private const val MaxPolicyWindowMinutes = 7 * 24 * 60
@@ -701,6 +767,7 @@ private val NotificationTemplateKeys = setOf(
     "admin_pending_booking",
 )
 private val CatalogIdRegex = Regex("^[A-Za-z0-9_-]{1,80}$")
+private val BlockedSlotIdRegex = Regex("^[A-Za-z0-9_-]{1,120}$")
 private val CampaignIdRegex = Regex("^[A-Za-z0-9_-]{3,80}$")
 private val UtcInstantIsoRegex = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$")
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
@@ -713,6 +780,10 @@ private fun unauthenticatedError(): AdminError.Unauthenticated {
 
 private fun String.isValidCatalogId(): Boolean {
     return CatalogIdRegex.matches(this)
+}
+
+private fun String.isValidBlockedSlotId(): Boolean {
+    return BlockedSlotIdRegex.matches(this) && !contains("/")
 }
 
 private fun String.isValidCampaignId(): Boolean {

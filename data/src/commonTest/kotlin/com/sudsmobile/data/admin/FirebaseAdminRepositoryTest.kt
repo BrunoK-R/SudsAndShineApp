@@ -650,6 +650,72 @@ class FirebaseAdminRepositoryTest {
         assertIs<AdminError.Unauthenticated>(failure.error)
         assertEquals(0, api.clearCapacityOverrideRequests.size)
     }
+
+    @Test
+    fun upsertBlockedSlotNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertBlockedSlot(
+            AdminBlockedSlotUpsertRequest(
+                blockedSlotId = " block-1 ",
+                date = " 2026-06-10 ",
+                slotStartIso = " 2026-06-10T09:00:00.000Z ",
+                slotEndIso = " 2026-06-10T10:30:00.000Z ",
+                reason = " Reunião   equipa ",
+            ),
+        )
+
+        val success = assertIs<AdminBlockedSlotMutationResult.Success>(result)
+        assertEquals("block-1", success.receipt.blockedSlotId)
+        assertEquals("id-token-1", api.upsertBlockedSlotIdTokens.single())
+        val request = api.upsertBlockedSlotRequests.single()
+        assertEquals("block-1", request.blockedSlotId)
+        assertEquals("2026-06-10T09:00:00.000Z", request.slotStartIso)
+        assertEquals("Reunião equipa", request.reason)
+    }
+
+    @Test
+    fun upsertBlockedSlotReturnsValidationBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.upsertBlockedSlot(
+            AdminBlockedSlotUpsertRequest(
+                blockedSlotId = "bad/id",
+                date = "2026-06-10",
+                slotStartIso = "2026-06-10T11:00:00.000Z",
+                slotEndIso = "2026-06-10T10:00:00.000Z",
+            ),
+        )
+
+        val failure = assertIs<AdminBlockedSlotMutationResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.upsertBlockedSlotRequests.size)
+    }
+
+    @Test
+    fun clearBlockedSlotRequiresAuthenticatedSession() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = false),
+        )
+
+        val result = repository.clearBlockedSlot(
+            AdminBlockedSlotClearRequest(blockedSlotId = "block-1"),
+        )
+
+        val failure = assertIs<AdminBlockedSlotMutationResult.Failure>(result)
+        assertIs<AdminError.Unauthenticated>(failure.error)
+        assertEquals(0, api.clearBlockedSlotRequests.size)
+    }
 }
 
 private class FakeAdminFunctionsApi : AdminFunctionsApi {
@@ -686,6 +752,10 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
     val upsertCapacityOverrideIdTokens = mutableListOf<String>()
     val clearCapacityOverrideRequests = mutableListOf<AdminCapacityOverrideClearRequest>()
     val clearCapacityOverrideIdTokens = mutableListOf<String>()
+    val upsertBlockedSlotRequests = mutableListOf<AdminBlockedSlotUpsertRequest>()
+    val upsertBlockedSlotIdTokens = mutableListOf<String>()
+    val clearBlockedSlotRequests = mutableListOf<AdminBlockedSlotClearRequest>()
+    val clearBlockedSlotIdTokens = mutableListOf<String>()
 
     override suspend fun syncMyRole(idToken: String): AdminRoleResult {
         return AdminRoleResult.Failure(AdminError.Backend("unused"))
@@ -729,6 +799,15 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
                     AdminCapacityOverrideItem(
                         date = "2026-06-10",
                         maxBookingsPerSlot = 0,
+                    ),
+                ),
+                blockedSlots = listOf(
+                    AdminBlockedSlotItem(
+                        blockedSlotId = "block-1",
+                        date = "2026-06-10",
+                        slotStartIso = "2026-06-10T09:00:00.000Z",
+                        slotEndIso = "2026-06-10T10:00:00.000Z",
+                        reason = "Manutenção",
                     ),
                 ),
             ),
@@ -935,6 +1014,35 @@ private class FakeAdminFunctionsApi : AdminFunctionsApi {
         return AdminCapacityOverrideMutationResult.Success(
             AdminCapacityOverrideMutationReceipt(
                 date = request.date,
+                status = "cleared",
+            ),
+        )
+    }
+
+    override suspend fun upsertBlockedSlot(
+        request: AdminBlockedSlotUpsertRequest,
+        idToken: String,
+    ): AdminBlockedSlotMutationResult {
+        upsertBlockedSlotRequests += request
+        upsertBlockedSlotIdTokens += idToken
+        return AdminBlockedSlotMutationResult.Success(
+            AdminBlockedSlotMutationReceipt(
+                blockedSlotId = request.blockedSlotId.ifBlank { "generated-block" },
+                date = request.date,
+                status = "updated",
+            ),
+        )
+    }
+
+    override suspend fun clearBlockedSlot(
+        request: AdminBlockedSlotClearRequest,
+        idToken: String,
+    ): AdminBlockedSlotMutationResult {
+        clearBlockedSlotRequests += request
+        clearBlockedSlotIdTokens += idToken
+        return AdminBlockedSlotMutationResult.Success(
+            AdminBlockedSlotMutationReceipt(
+                blockedSlotId = request.blockedSlotId,
                 status = "cleared",
             ),
         )

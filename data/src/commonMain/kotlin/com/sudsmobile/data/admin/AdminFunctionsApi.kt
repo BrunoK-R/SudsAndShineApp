@@ -95,6 +95,18 @@ interface AdminFunctionsApi {
         idToken: String,
     ): AdminCapacityOverrideMutationResult
 
+    suspend fun upsertBlockedSlot(
+        request: AdminBlockedSlotUpsertRequest,
+        idToken: String,
+    ): AdminBlockedSlotMutationResult =
+        AdminBlockedSlotMutationResult.Failure(AdminError.Backend("Blocked slot configuration is not implemented."))
+
+    suspend fun clearBlockedSlot(
+        request: AdminBlockedSlotClearRequest,
+        idToken: String,
+    ): AdminBlockedSlotMutationResult =
+        AdminBlockedSlotMutationResult.Failure(AdminError.Backend("Blocked slot configuration is not implemented."))
+
     suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
         idToken: String,

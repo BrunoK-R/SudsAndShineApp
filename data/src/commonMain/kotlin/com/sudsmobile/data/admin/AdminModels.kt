@@ -146,6 +146,7 @@ data class AdminAvailabilityConfig(
     val defaultMaxBookingsPerSlot: Int,
     val openingHours: List<AdminBusinessOpeningHours>,
     val capacityOverrides: List<AdminCapacityOverrideItem> = emptyList(),
+    val blockedSlots: List<AdminBlockedSlotItem> = emptyList(),
 )
 
 data class AdminBookingPolicyConfig(
@@ -272,6 +273,14 @@ data class AdminCapacityOverrideItem(
     val maxBookingsPerSlot: Int,
 )
 
+data class AdminBlockedSlotItem(
+    val blockedSlotId: String,
+    val date: String,
+    val slotStartIso: String,
+    val slotEndIso: String,
+    val reason: String,
+)
+
 data class AdminCapacityOverrideUpsertRequest(
     val date: String,
     val maxBookingsPerSlot: Int,
@@ -285,6 +294,24 @@ data class AdminCapacityOverrideMutationReceipt(
     val date: String,
     val status: String,
     val maxBookingsPerSlot: Int? = null,
+)
+
+data class AdminBlockedSlotUpsertRequest(
+    val blockedSlotId: String = "",
+    val date: String,
+    val slotStartIso: String,
+    val slotEndIso: String,
+    val reason: String = "",
+)
+
+data class AdminBlockedSlotClearRequest(
+    val blockedSlotId: String,
+)
+
+data class AdminBlockedSlotMutationReceipt(
+    val blockedSlotId: String,
+    val status: String,
+    val date: String = "",
 )
 
 data class AdminBusinessInfoUpdateRequest(
@@ -381,6 +408,11 @@ sealed interface AdminCapacityOverrideMutationResult {
     data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
 }
 
+sealed interface AdminBlockedSlotMutationResult {
+    data class Success(val receipt: AdminBlockedSlotMutationReceipt) : AdminBlockedSlotMutationResult
+    data class Failure(val error: AdminError) : AdminBlockedSlotMutationResult
+}
+
 sealed interface AdminError {
     val message: String
 
@@ -460,6 +492,16 @@ interface AdminRepository {
     suspend fun clearCapacityOverride(
         request: AdminCapacityOverrideClearRequest,
     ): AdminCapacityOverrideMutationResult
+
+    suspend fun upsertBlockedSlot(
+        request: AdminBlockedSlotUpsertRequest,
+    ): AdminBlockedSlotMutationResult =
+        AdminBlockedSlotMutationResult.Failure(AdminError.Backend("Blocked slot configuration is not implemented."))
+
+    suspend fun clearBlockedSlot(
+        request: AdminBlockedSlotClearRequest,
+    ): AdminBlockedSlotMutationResult =
+        AdminBlockedSlotMutationResult.Failure(AdminError.Backend("Blocked slot configuration is not implemented."))
 
     suspend fun acceptBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult
     suspend fun rejectBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult

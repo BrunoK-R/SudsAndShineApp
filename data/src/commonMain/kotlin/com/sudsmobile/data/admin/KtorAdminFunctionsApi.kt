@@ -484,6 +484,26 @@ class KtorAdminFunctionsApi(
         unavailableMessage = "Não foi possível limpar a exceção de capacidade. Tente novamente.",
     )
 
+    override suspend fun upsertBlockedSlot(
+        request: AdminBlockedSlotUpsertRequest,
+        idToken: String,
+    ): AdminBlockedSlotMutationResult = postBlockedSlotMutation(
+        url = config.upsertBlockedSlotUrl,
+        payload = BlockedSlotUpsertPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível guardar o bloqueio de horário. Tente novamente.",
+    )
+
+    override suspend fun clearBlockedSlot(
+        request: AdminBlockedSlotClearRequest,
+        idToken: String,
+    ): AdminBlockedSlotMutationResult = postBlockedSlotMutation(
+        url = config.clearBlockedSlotUrl,
+        payload = BlockedSlotClearPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível limpar o bloqueio de horário. Tente novamente.",
+    )
+
     override suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
         idToken: String,
@@ -605,6 +625,33 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    private suspend fun postBlockedSlotMutation(
+        url: String,
+        payload: BlockedSlotPayload,
+        idToken: String,
+        unavailableMessage: String,
+    ): AdminBlockedSlotMutationResult {
+        return try {
+            val response = httpClient.post(url) {
+                callableHeaders(idToken)
+                setBody(CallableBlockedSlotMutationRequest(payload))
+            }
+            val body = response.body<CallableBlockedSlotMutationResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminBlockedSlotMutationResult.Failure(error.toAdminError())
+                body.result != null -> AdminBlockedSlotMutationResult.Success(body.result.toReceipt())
+                else -> AdminBlockedSlotMutationResult.Failure(
+                    AdminError.Backend("A resposta do bloqueio veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminBlockedSlotMutationResult.Failure(AdminError.Unavailable(unavailableMessage))
+        }
+    }
+
     private suspend fun postNotificationCampaignDraftMutation(
         url: String,
         payload: NotificationCampaignDraftMutationPayload,
@@ -713,6 +760,11 @@ private data class CallableNotificationCampaignDraftMutationRequest(
 @Serializable
 private data class CallableCapacityOverrideMutationRequest(
     val data: CapacityOverridePayload,
+)
+
+@Serializable
+private data class CallableBlockedSlotMutationRequest(
+    val data: BlockedSlotPayload,
 )
 
 @Serializable
@@ -947,6 +999,41 @@ private data class CapacityOverrideClearPayload(
 }
 
 @Serializable
+private sealed interface BlockedSlotPayload
+
+@Serializable
+private data class BlockedSlotUpsertPayload(
+    val blockedSlotId: String = "",
+    val date: String,
+    val slotStart: String,
+    val slotEnd: String,
+    val reason: String = "",
+) : BlockedSlotPayload {
+    companion object {
+        fun from(request: AdminBlockedSlotUpsertRequest): BlockedSlotUpsertPayload {
+            return BlockedSlotUpsertPayload(
+                blockedSlotId = request.blockedSlotId,
+                date = request.date,
+                slotStart = request.slotStartIso,
+                slotEnd = request.slotEndIso,
+                reason = request.reason,
+            )
+        }
+    }
+}
+
+@Serializable
+private data class BlockedSlotClearPayload(
+    val blockedSlotId: String,
+) : BlockedSlotPayload {
+    companion object {
+        fun from(request: AdminBlockedSlotClearRequest): BlockedSlotClearPayload {
+            return BlockedSlotClearPayload(blockedSlotId = request.blockedSlotId)
+        }
+    }
+}
+
+@Serializable
 private data class BusinessOpeningHoursPayload(
     val dayLabel: String,
     val hoursLabel: String,
@@ -1144,6 +1231,12 @@ private data class CallableCapacityOverrideMutationResponse(
 )
 
 @Serializable
+private data class CallableBlockedSlotMutationResponse(
+    val result: BlockedSlotMutationResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class CallableServiceCatalogMutationResponse(
     val result: ServiceCatalogMutationResultPayload? = null,
     val error: CallableError? = null,
@@ -1296,6 +1389,19 @@ private data class CapacityOverrideMutationResultPayload(
 }
 
 @Serializable
+private data class BlockedSlotMutationResultPayload(
+    val blockedSlotId: String,
+    val status: String = "",
+    val date: String = "",
+) {
+    fun toReceipt(): AdminBlockedSlotMutationReceipt = AdminBlockedSlotMutationReceipt(
+        blockedSlotId = blockedSlotId.trim(),
+        status = status.trim(),
+        date = date.trim(),
+    )
+}
+
+@Serializable
 private data class AdminServiceCatalogPayload(
     val services: List<AdminServiceCatalogItemPayload> = emptyList(),
 ) {
@@ -1394,11 +1500,13 @@ private data class AvailabilityResultPayload(
     val defaultMaxBookingsPerSlot: Int = 2,
     val openingHours: List<BusinessOpeningHoursPayload> = emptyList(),
     val capacityOverrides: List<CapacityOverrideItemPayload> = emptyList(),
+    val blockedSlots: List<BlockedSlotItemPayload> = emptyList(),
 ) {
     fun toAdminAvailabilityConfig(): AdminAvailabilityConfig = AdminAvailabilityConfig(
         defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot.coerceIn(0, 20),
         openingHours = openingHours.map { it.toAdminOpeningHours() },
         capacityOverrides = capacityOverrides.map { it.toAdminCapacityOverrideItem() },
+        blockedSlots = blockedSlots.mapNotNull { it.toAdminBlockedSlotItemOrNull() },
     )
 }
 
@@ -1555,6 +1663,31 @@ private data class CapacityOverrideItemPayload(
         date = date.trim(),
         maxBookingsPerSlot = maxBookingsPerSlot.coerceIn(0, 20),
     )
+}
+
+@Serializable
+private data class BlockedSlotItemPayload(
+    val blockedSlotId: String = "",
+    val id: String = "",
+    val date: String = "",
+    val slotStart: String = "",
+    val slotEnd: String = "",
+    val reason: String = "",
+) {
+    fun toAdminBlockedSlotItemOrNull(): AdminBlockedSlotItem? {
+        val normalizedId = blockedSlotId.trim().ifBlank { id.trim() }
+        val normalizedDate = date.trim()
+        val start = slotStart.trim()
+        val end = slotEnd.trim()
+        if (normalizedId.isBlank() || normalizedDate.isBlank() || start.isBlank() || end.isBlank()) return null
+        return AdminBlockedSlotItem(
+            blockedSlotId = normalizedId,
+            date = normalizedDate,
+            slotStartIso = start,
+            slotEndIso = end,
+            reason = reason.trim().ifBlank { "Bloqueio administrativo" },
+        )
+    }
 }
 
 @Serializable

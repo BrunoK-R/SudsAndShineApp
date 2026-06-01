@@ -118,6 +118,12 @@ data class FirebaseFunctionsConfig(
     val clearCapacityOverrideUrl: String
         get() = functionUrl("clearCapacityOverride")
 
+    val upsertBlockedSlotUrl: String
+        get() = functionUrl("upsertBlockedSlot")
+
+    val clearBlockedSlotUrl: String
+        get() = functionUrl("clearBlockedSlot")
+
     val upsertServiceCatalogItemUrl: String
         get() = functionUrl("upsertServiceCatalogItem")
 

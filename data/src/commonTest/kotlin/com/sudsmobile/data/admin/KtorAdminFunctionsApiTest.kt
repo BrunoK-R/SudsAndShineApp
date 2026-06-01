@@ -232,6 +232,15 @@ class KtorAdminFunctionsApiTest {
                         "date": "2026-06-10",
                         "maxBookingsPerSlot": 0
                       }
+                    ],
+                    "blockedSlots": [
+                      {
+                        "blockedSlotId": "block-1",
+                        "date": "2026-06-10",
+                        "slotStart": "2026-06-10T09:00:00.000Z",
+                        "slotEnd": "2026-06-10T10:00:00.000Z",
+                        "reason": "Manutenção"
+                      }
                     ]
                   }
                 }
@@ -250,6 +259,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("Segunda a Sexta", success.config.openingHours.single().dayLabel)
         assertEquals("2026-06-10", success.config.capacityOverrides.single().date)
         assertEquals(0, success.config.capacityOverrides.single().maxBookingsPerSlot)
+        assertEquals("block-1", success.config.blockedSlots.single().blockedSlotId)
+        assertEquals("2026-06-10T09:00:00.000Z", success.config.blockedSlots.single().slotStartIso)
     }
 
     @Test
@@ -764,6 +775,75 @@ class KtorAdminFunctionsApiTest {
 
         val success = assertIs<AdminCapacityOverrideMutationResult.Success>(result)
         assertEquals("/test-project/europe-west1/clearCapacityOverride", requestedPath)
+        assertEquals("cleared", success.receipt.status)
+    }
+
+    @Test
+    fun postsBlockedSlotMutationWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "blockedSlotId": "block-1",
+                    "date": "2026-06-10",
+                    "status": "updated"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.upsertBlockedSlot(
+            AdminBlockedSlotUpsertRequest(
+                blockedSlotId = "block-1",
+                date = "2026-06-10",
+                slotStartIso = "2026-06-10T09:00:00.000Z",
+                slotEndIso = "2026-06-10T10:00:00.000Z",
+                reason = "Manutenção",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminBlockedSlotMutationResult.Success>(result)
+        assertEquals("/test-project/europe-west1/upsertBlockedSlot", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("block-1", success.receipt.blockedSlotId)
+        assertEquals("2026-06-10", success.receipt.date)
+    }
+
+    @Test
+    fun postsBlockedSlotClearWithAuthorization() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "blockedSlotId": "block-1",
+                    "status": "cleared"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+            },
+            config = testConfig(),
+        )
+
+        val result = api.clearBlockedSlot(
+            AdminBlockedSlotClearRequest(blockedSlotId = "block-1"),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminBlockedSlotMutationResult.Success>(result)
+        assertEquals("/test-project/europe-west1/clearBlockedSlot", requestedPath)
         assertEquals("cleared", success.receipt.status)
     }
 

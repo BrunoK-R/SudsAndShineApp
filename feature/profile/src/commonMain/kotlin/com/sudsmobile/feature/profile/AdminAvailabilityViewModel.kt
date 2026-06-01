@@ -5,6 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.admin.AdminAvailabilityConfig
 import com.sudsmobile.data.admin.AdminAvailabilityResult
 import com.sudsmobile.data.admin.AdminAvailabilityUpdateRequest
+import com.sudsmobile.data.admin.AdminBlockedSlotClearRequest
+import com.sudsmobile.data.admin.AdminBlockedSlotItem
+import com.sudsmobile.data.admin.AdminBlockedSlotMutationResult
+import com.sudsmobile.data.admin.AdminBlockedSlotUpsertRequest
 import com.sudsmobile.data.admin.AdminBusinessOpeningHours
 import com.sudsmobile.data.admin.AdminCapacityOverrideClearRequest
 import com.sudsmobile.data.admin.AdminCapacityOverrideItem
@@ -24,8 +28,13 @@ internal data class AdminAvailabilityForm(
     val defaultMaxBookingsPerSlot: String = "",
     val openingHoursText: String = "",
     val capacityOverrides: List<AdminCapacityOverrideUi> = emptyList(),
+    val blockedSlots: List<AdminBlockedSlotUi> = emptyList(),
     val overrideDate: String = "",
     val overrideMaxBookingsPerSlot: String = "",
+    val blockedDate: String = "",
+    val blockedStartTime: String = "09:00",
+    val blockedEndTime: String = "10:00",
+    val blockedReason: String = "",
 )
 
 internal data class AdminCapacityOverrideUi(
@@ -38,6 +47,17 @@ internal data class AdminCapacityOverrideUi(
         } else {
             "$maxBookingsPerSlot por horário"
         }
+}
+
+internal data class AdminBlockedSlotUi(
+    val blockedSlotId: String,
+    val date: String,
+    val startTime: String,
+    val endTime: String,
+    val reason: String,
+) {
+    val timeLabel: String
+        get() = "$startTime - $endTime"
 }
 
 internal sealed interface AdminAvailabilityUiState {
@@ -246,7 +266,7 @@ internal class AdminAvailabilityViewModel(
                         _saveState.value = AdminAvailabilitySaveState.Idle
                     }
                 }
-                is AdminCapacityOverrideMutationResult.Failure -> handleCapacityOverrideFailure(result.error)
+                is AdminCapacityOverrideMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
         }
     }
@@ -295,7 +315,102 @@ internal class AdminAvailabilityViewModel(
                         _saveState.value = AdminAvailabilitySaveState.Idle
                     }
                 }
-                is AdminCapacityOverrideMutationResult.Failure -> handleCapacityOverrideFailure(result.error)
+                is AdminCapacityOverrideMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
+            }
+        }
+    }
+
+    fun saveBlockedSlot() {
+        if (_saveState.value == AdminAvailabilitySaveState.Saving) return
+        val form = (_uiState.value as? AdminAvailabilityUiState.Loaded)?.form ?: return
+        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+        if (requestedUid == null) {
+            clearLoadedConfig()
+            _uiState.value = AdminAvailabilityUiState.Unauthenticated
+            return
+        }
+
+        val request = when (val parsed = form.toBlockedSlotRequest()) {
+            is ParsedBlockedSlotRequest.Invalid -> {
+                _saveState.value = AdminAvailabilitySaveState.Error(parsed.message, retryable = false)
+                return
+            }
+            is ParsedBlockedSlotRequest.Valid -> parsed.request
+        }
+
+        viewModelScope.launch {
+            _saveState.value = AdminAvailabilitySaveState.Saving
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid != requestedUid) {
+                clearLoadedConfig()
+                _uiState.value = AdminAvailabilityUiState.Unauthenticated
+                _saveState.value = AdminAvailabilitySaveState.Idle
+                return@launch
+            }
+
+            when (val result = adminRepository.upsertBlockedSlot(request)) {
+                is AdminBlockedSlotMutationResult.Success -> {
+                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+                    if (latestUid == requestedUid) {
+                        loadedUid = null
+                        _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário guardado.")
+                        loadConfiguration()
+                    } else {
+                        clearLoadedConfig()
+                        _uiState.value = AdminAvailabilityUiState.Unauthenticated
+                        _saveState.value = AdminAvailabilitySaveState.Idle
+                    }
+                }
+                is AdminBlockedSlotMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
+            }
+        }
+    }
+
+    fun clearBlockedSlot(blockedSlotId: String) {
+        if (_saveState.value == AdminAvailabilitySaveState.Saving) return
+        val cleanBlockedSlotId = blockedSlotId.trim()
+        if (!cleanBlockedSlotId.isValidBlockedSlotId()) {
+            _saveState.value = AdminAvailabilitySaveState.Error(
+                message = "O bloqueio selecionado é inválido.",
+                retryable = false,
+            )
+            return
+        }
+        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+        if (requestedUid == null) {
+            clearLoadedConfig()
+            _uiState.value = AdminAvailabilityUiState.Unauthenticated
+            return
+        }
+
+        viewModelScope.launch {
+            _saveState.value = AdminAvailabilitySaveState.Saving
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid != requestedUid) {
+                clearLoadedConfig()
+                _uiState.value = AdminAvailabilityUiState.Unauthenticated
+                _saveState.value = AdminAvailabilitySaveState.Idle
+                return@launch
+            }
+
+            when (
+                val result = adminRepository.clearBlockedSlot(
+                    AdminBlockedSlotClearRequest(cleanBlockedSlotId),
+                )
+            ) {
+                is AdminBlockedSlotMutationResult.Success -> {
+                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+                    if (latestUid == requestedUid) {
+                        loadedUid = null
+                        _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário limpo.")
+                        loadConfiguration()
+                    } else {
+                        clearLoadedConfig()
+                        _uiState.value = AdminAvailabilityUiState.Unauthenticated
+                        _saveState.value = AdminAvailabilitySaveState.Idle
+                    }
+                }
+                is AdminBlockedSlotMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
         }
     }
@@ -304,7 +419,7 @@ internal class AdminAvailabilityViewModel(
         _saveState.value = AdminAvailabilitySaveState.Idle
     }
 
-    private fun handleCapacityOverrideFailure(error: AdminError) {
+    private fun handleAvailabilityMutationFailure(error: AdminError) {
         _saveState.value = error.toAdminAvailabilitySaveState()
         if (error is AdminError.Permission) {
             _uiState.value = AdminAvailabilityUiState.NotAdmin
@@ -331,6 +446,11 @@ private sealed interface ParsedCapacityOverrideRequest {
     data class Invalid(val message: String) : ParsedCapacityOverrideRequest
 }
 
+private sealed interface ParsedBlockedSlotRequest {
+    data class Valid(val request: AdminBlockedSlotUpsertRequest) : ParsedBlockedSlotRequest
+    data class Invalid(val message: String) : ParsedBlockedSlotRequest
+}
+
 private fun AdminAvailabilityConfig.toForm(): AdminAvailabilityForm = AdminAvailabilityForm(
     defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot.toString(),
     openingHoursText = openingHours.joinToString("\n") { hours ->
@@ -341,11 +461,20 @@ private fun AdminAvailabilityConfig.toForm(): AdminAvailabilityForm = AdminAvail
         ).filter { it.isNotBlank() }.joinToString(" | ")
     },
     capacityOverrides = capacityOverrides.map { it.toUi() },
+    blockedSlots = blockedSlots.map { it.toUi() },
 )
 
 private fun AdminCapacityOverrideItem.toUi(): AdminCapacityOverrideUi = AdminCapacityOverrideUi(
     date = date,
     maxBookingsPerSlot = maxBookingsPerSlot,
+)
+
+private fun AdminBlockedSlotItem.toUi(): AdminBlockedSlotUi = AdminBlockedSlotUi(
+    blockedSlotId = blockedSlotId,
+    date = date,
+    startTime = slotStartIso.isoTimeLabel(),
+    endTime = slotEndIso.isoTimeLabel(),
+    reason = reason,
 )
 
 private fun AdminAvailabilityForm.toUpdateRequest(): ParsedAvailabilityRequest {
@@ -358,6 +487,31 @@ private fun AdminAvailabilityForm.toUpdateRequest(): ParsedAvailabilityRequest {
         AdminAvailabilityUpdateRequest(
             defaultMaxBookingsPerSlot = capacity,
             openingHours = openingHours,
+        ),
+    )
+}
+
+private fun AdminAvailabilityForm.toBlockedSlotRequest(): ParsedBlockedSlotRequest {
+    val cleanDate = blockedDate.trim()
+    if (!cleanDate.isValidDateId()) {
+        return ParsedBlockedSlotRequest.Invalid("Indique a data do bloqueio no formato AAAA-MM-DD.")
+    }
+    val cleanStartTime = blockedStartTime.trim()
+    val cleanEndTime = blockedEndTime.trim()
+    val startMinutes = cleanStartTime.minutesSinceMidnightOrNull()
+        ?: return ParsedBlockedSlotRequest.Invalid("Indique a hora de início no formato HH:MM.")
+    val endMinutes = cleanEndTime.minutesSinceMidnightOrNull()
+        ?: return ParsedBlockedSlotRequest.Invalid("Indique a hora de fim no formato HH:MM.")
+    if (endMinutes <= startMinutes) {
+        return ParsedBlockedSlotRequest.Invalid("A hora de fim deve ser posterior ao início.")
+    }
+
+    return ParsedBlockedSlotRequest.Valid(
+        AdminBlockedSlotUpsertRequest(
+            date = cleanDate,
+            slotStartIso = "${cleanDate}T${cleanStartTime}:00.000Z",
+            slotEndIso = "${cleanDate}T${cleanEndTime}:00.000Z",
+            reason = blockedReason.trim(),
         ),
     )
 }
@@ -411,6 +565,28 @@ private fun String.isValidDateId(): Boolean {
         else -> return false
     }
     return day in 1..maxDay
+}
+
+private fun String.isValidBlockedSlotId(): Boolean {
+    return Regex("^[A-Za-z0-9_-]{1,120}$").matches(trim()) && !contains("/")
+}
+
+private fun String.minutesSinceMidnightOrNull(): Int? {
+    val value = trim()
+    if (!Regex("^\\d{2}:\\d{2}$").matches(value)) return null
+    val hour = value.substring(0, 2).toIntOrNull() ?: return null
+    val minute = value.substring(3, 5).toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return hour * 60 + minute
+}
+
+private fun String.isoTimeLabel(): String {
+    val value = trim()
+    return if (value.length >= 16 && value[10] == 'T') {
+        value.substring(11, 16)
+    } else {
+        ""
+    }
 }
 
 private fun Int.isLeapYear(): Boolean {
