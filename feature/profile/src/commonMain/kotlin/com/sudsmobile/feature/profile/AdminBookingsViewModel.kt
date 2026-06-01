@@ -84,6 +84,11 @@ internal enum class AdminBookingDecisionAction {
     Complete,
 }
 
+private data class AdminSessionSnapshot(
+    val uid: String,
+    val marker: String,
+)
+
 internal class AdminAccessViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -184,8 +189,10 @@ internal class AdminBookingsViewModel(
         MutableStateFlow<AdminBookingDecisionUiState>(AdminBookingDecisionUiState.Idle)
     val decisionState: StateFlow<AdminBookingDecisionUiState> = _decisionState.asStateFlow()
     private var loadedUid: String? = null
+    private var loadedSessionMarker: String? = null
     private var loadedRevision: Long? = null
     private var loadingUid: String? = null
+    private var loadingSessionMarker: String? = null
     private var loadingRevision: Long? = null
     private var requestsSequence: Long = 0
 
@@ -209,12 +216,20 @@ internal class AdminBookingsViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val uid = session.session.user.uid
+        val requestedSession = session.session.toAdminSessionSnapshot()
         val revision = bookingRevision.value
         val hasReusableState = _uiState.value is AdminBookingsUiState.Loaded ||
             _uiState.value is AdminBookingsUiState.Empty ||
             _uiState.value is AdminBookingsUiState.NotAdmin
-        if (!force && loadedUid == uid && loadedRevision == revision && hasReusableState) return
+        if (
+            !force &&
+            loadedUid == requestedSession.uid &&
+            loadedSessionMarker == requestedSession.marker &&
+            loadedRevision == revision &&
+            hasReusableState
+        ) {
+            return
+        }
         loadRequests()
     }
 
@@ -238,13 +253,16 @@ internal class AdminBookingsViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val requestedUid = session.session.user.uid
+        val requestedSession = session.session.toAdminSessionSnapshot()
         val requestedRevision = bookingRevision.value
-        val sameRequestInFlight = loadingUid == requestedUid && loadingRevision == requestedRevision
+        val sameRequestInFlight = loadingUid == requestedSession.uid &&
+            loadingSessionMarker == requestedSession.marker &&
+            loadingRevision == requestedRevision
         if (sameRequestInFlight) return
 
         val requestSequence = ++requestsSequence
-        loadingUid = requestedUid
+        loadingUid = requestedSession.uid
+        loadingSessionMarker = requestedSession.marker
         loadingRevision = requestedRevision
         viewModelScope.launch {
             try {
@@ -264,18 +282,24 @@ internal class AdminBookingsViewModel(
                 }
                 if (requestSequence != requestsSequence) return@launch
 
-                val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                if (currentUid == requestedUid) {
-                    loadedUid = requestedUid
+                val currentSession = currentAuthenticatedSessionSnapshot()
+                if (currentSession == requestedSession) {
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     loadedRevision = requestedRevision
                     _uiState.value = nextState
                 } else {
                     clearLoadedRequests()
-                    _uiState.value = AdminBookingsUiState.Unauthenticated
+                    if (currentSession == null) {
+                        _uiState.value = AdminBookingsUiState.Unauthenticated
+                    } else {
+                        refreshForSession(force = true)
+                    }
                 }
             } finally {
                 if (requestSequence == requestsSequence) {
                     loadingUid = null
+                    loadingSessionMarker = null
                     loadingRevision = null
                 }
             }
@@ -326,8 +350,8 @@ internal class AdminBookingsViewModel(
             )
             return
         }
-        val requestedUid = currentAuthenticatedUid()
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedRequests()
             _uiState.value = AdminBookingsUiState.Unauthenticated
             _decisionState.value = AdminBookingDecisionUiState.Error(
@@ -340,9 +364,14 @@ internal class AdminBookingsViewModel(
 
         viewModelScope.launch {
             _decisionState.value = AdminBookingDecisionUiState.Loading(cleanReservationId, action)
-            if (currentAuthenticatedUid() != requestedUid) {
+            val sessionBeforeRequest = currentAuthenticatedSessionSnapshot()
+            if (sessionBeforeRequest != requestedSession) {
                 clearLoadedRequests()
-                _uiState.value = AdminBookingsUiState.Unauthenticated
+                if (sessionBeforeRequest == null) {
+                    _uiState.value = AdminBookingsUiState.Unauthenticated
+                } else {
+                    refreshForSession(force = true)
+                }
                 _decisionState.value = AdminBookingDecisionUiState.Idle
                 return@launch
             }
@@ -355,7 +384,7 @@ internal class AdminBookingsViewModel(
                 AdminBookingDecisionAction.Reject -> adminRepository.rejectBookingRequest(request)
                 AdminBookingDecisionAction.Complete -> adminRepository.completeBookingRequest(request)
             }
-            if (currentAuthenticatedUid() != requestedUid) {
+            if (currentAuthenticatedSessionSnapshot() != requestedSession) {
                 clearLoadedRequests()
                 refreshForSession(force = true)
                 _decisionState.value = AdminBookingDecisionUiState.Idle
@@ -364,6 +393,7 @@ internal class AdminBookingsViewModel(
             _decisionState.value = when (result) {
                 is AdminBookingDecisionResult.Success -> {
                     loadedUid = null
+                    loadedSessionMarker = null
                     loadedRevision = null
                     loadRequests()
                     val message = when (action) {
@@ -380,15 +410,26 @@ internal class AdminBookingsViewModel(
 
     private fun clearLoadedRequests() {
         loadedUid = null
+        loadedSessionMarker = null
         loadedRevision = null
         loadingUid = null
+        loadingSessionMarker = null
         loadingRevision = null
         requestsSequence += 1
     }
 
-    private fun currentAuthenticatedUid(): String? {
-        return (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+    private fun currentAuthenticatedSessionSnapshot(): AdminSessionSnapshot? {
+        return (sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.toAdminSessionSnapshot()
     }
+}
+
+private fun com.sudsmobile.data.auth.AuthSession.toAdminSessionSnapshot(): AdminSessionSnapshot {
+    return AdminSessionSnapshot(
+        uid = user.uid,
+        marker = adminAccessMarker(),
+    )
 }
 
 private fun toAdminBookingsState(

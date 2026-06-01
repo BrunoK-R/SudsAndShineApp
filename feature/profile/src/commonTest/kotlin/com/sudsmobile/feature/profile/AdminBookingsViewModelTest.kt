@@ -271,6 +271,59 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
+    fun refreshForSessionReloadsWhenSameUserSessionTokenChanges() = runTest {
+        val authRepository = FakeAdminAuthRepository(authenticated = true)
+        val repository = FakeAdminRepository(
+            requestsResult = AdminBookingRequestsResult.Success(listOf(adminBookingRequest())),
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadRequests()
+        runCurrent()
+
+        assertIs<AdminBookingsUiState.Loaded>(viewModel.uiState.value)
+
+        repository.requestsResult = AdminBookingRequestsResult.Success(emptyList())
+        authRepository.authenticate(tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.pendingRequestCalls)
+        assertIs<AdminBookingsUiState.Empty>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun loadRequestsIgnoresResultAfterSameUserSessionTokenChanges() = runTest {
+        val pendingResult = CompletableDeferred<AdminBookingRequestsResult>()
+        val authRepository = FakeAdminAuthRepository(authenticated = true)
+        val repository = FakeAdminRepository(
+            requestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            completableRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            requestsResultDeferred = pendingResult,
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadRequests()
+        runCurrent()
+
+        authRepository.authenticate(tokenVersion = 2)
+        pendingResult.complete(
+            AdminBookingRequestsResult.Success(listOf(adminBookingRequest(id = "stale-reservation"))),
+        )
+        runCurrent()
+        runCurrent()
+
+        assertEquals(2, repository.pendingRequestCalls)
+        assertIs<AdminBookingsUiState.Empty>(viewModel.uiState.value)
+    }
+
+    @Test
     fun acceptRequestSendsDecisionAndReloadsRequests() = runTest {
         val repository = FakeAdminRepository(
             requestsResult = AdminBookingRequestsResult.Success(emptyList()),
@@ -357,6 +410,34 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
+    fun completeRequestIgnoresResultAfterSameUserSessionTokenChanges() = runTest {
+        val completionResult = CompletableDeferred<AdminBookingDecisionResult>()
+        val authRepository = FakeAdminAuthRepository(authenticated = true)
+        val repository = FakeAdminRepository(
+            requestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            completableRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            completeResultDeferred = completionResult,
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.completeRequest("reservation-1")
+        runCurrent()
+
+        authRepository.authenticate(tokenVersion = 2)
+        completionResult.complete(AdminBookingDecisionResult.Success(decisionReceipt(status = "completed")))
+        runCurrent()
+        runCurrent()
+
+        assertEquals(1, repository.completeRequests.size)
+        assertEquals(1, repository.pendingRequestCalls)
+        assertIs<AdminBookingDecisionUiState.Idle>(viewModel.decisionState.value)
+        assertIs<AdminBookingsUiState.Empty>(viewModel.uiState.value)
+    }
+
+    @Test
     fun conflictDecisionErrorIsRetryableForAdminRefresh() = runTest {
         val repository = FakeAdminRepository(
             acceptResult = AdminBookingDecisionResult.Failure(
@@ -412,6 +493,7 @@ private class FakeAdminRepository(
     var completeResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
         decisionReceipt(status = "completed"),
     ),
+    private var requestsResultDeferred: CompletableDeferred<AdminBookingRequestsResult>? = null,
     private val completeResultDeferred: CompletableDeferred<AdminBookingDecisionResult>? = null,
     private val onSyncRole: (() -> Unit)? = null,
 ) : AdminRepository {
@@ -431,6 +513,11 @@ private class FakeAdminRepository(
 
     override suspend fun getPendingBookingRequests(): AdminBookingRequestsResult {
         pendingRequestCalls += 1
+        val deferred = requestsResultDeferred
+        if (deferred != null) {
+            requestsResultDeferred = null
+            return deferred.await()
+        }
         return requestsResult
     }
 
