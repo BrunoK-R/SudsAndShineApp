@@ -32,6 +32,9 @@ internal data class AdminNotificationCampaignDraftUi(
     val notes: String,
     val sendBlocked: Boolean,
     val sendBlockedReason: String,
+    val createdAuditLabel: String,
+    val updatedAuditLabel: String,
+    val archivedAuditLabel: String,
 )
 
 internal data class AdminNotificationCampaignDraftForm(
@@ -422,6 +425,9 @@ private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraf
         notes = notes,
         sendBlocked = sendBlocked,
         sendBlockedReason = sendBlockedReason,
+        createdAuditLabel = campaignAuditLabel("Criado", createdAtIso, createdByUid),
+        updatedAuditLabel = campaignAuditLabel("Atualizado", updatedAtIso, updatedByUid),
+        archivedAuditLabel = campaignAuditLabel("Arquivado", archivedAtIso, archivedByUid),
     )
 }
 
@@ -518,6 +524,26 @@ private fun String.toCampaignStatusLabel(): String {
         "archived" -> "Arquivado"
         else -> "Rascunho"
     }
+}
+
+private fun campaignAuditLabel(action: String, timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toCampaignAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortAuditUid()?.let { " por $it" }.orEmpty()
+    return "$action $timestampLabel$actorLabel"
+}
+
+private fun String.toCampaignAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
 }
 
 private fun String.isValidCampaignDraftId(): Boolean {

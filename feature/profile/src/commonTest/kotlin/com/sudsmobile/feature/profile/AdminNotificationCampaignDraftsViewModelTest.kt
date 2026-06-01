@@ -99,6 +99,23 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
+    fun loadDraftsMapsAuditMetadataForAdminCards() = runTest {
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = FakeCampaignDraftsAdminRepository(),
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+
+        val loaded = assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        val draft = loaded.drafts.single()
+        assertEquals("Criado 2026-06-01 10:00 UTC por admin-cr", draft.createdAuditLabel)
+        assertEquals("Atualizado 2026-06-01 11:30 UTC por admin-up...", draft.updatedAuditLabel)
+        assertEquals("", draft.archivedAuditLabel)
+    }
+
+    @Test
     fun loadDraftsIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<AdminNotificationCampaignDraftsResult>()
         val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
@@ -459,6 +476,10 @@ private fun campaignDraftsConfig(): AdminNotificationCampaignDraftsConfig = Admi
             notes = "QA",
             sendBlocked = true,
             sendBlockedReason = "campaign-send-not-implemented",
+            createdAtIso = "2026-06-01T10:00:00.000Z",
+            updatedAtIso = "2026-06-01T11:30:00.000Z",
+            createdByUid = "admin-cr",
+            updatedByUid = "admin-updated-long-id",
         ),
     ),
 )

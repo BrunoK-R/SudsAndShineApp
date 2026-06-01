@@ -242,6 +242,12 @@ data class AdminNotificationCampaignDraft(
     val notes: String,
     val sendBlocked: Boolean,
     val sendBlockedReason: String,
+    val createdAtIso: String = "",
+    val updatedAtIso: String = "",
+    val archivedAtIso: String = "",
+    val createdByUid: String = "",
+    val updatedByUid: String = "",
+    val archivedByUid: String = "",
 )
 
 data class AdminNotificationCampaignDraftsConfig(

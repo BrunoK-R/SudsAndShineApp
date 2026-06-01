@@ -649,7 +649,11 @@ class KtorAdminFunctionsApiTest {
                         "scheduledAtIso": "2026-06-10T10:00:00.000Z",
                         "notes": "QA",
                         "sendBlocked": true,
-                        "sendBlockedReason": "campaign-send-not-implemented"
+                        "sendBlockedReason": "campaign-send-not-implemented",
+                        "createdAtIso": "2026-06-01T10:00:00.000Z",
+                        "updatedAtIso": "2026-06-01T11:00:00.000Z",
+                        "createdByUid": "admin-created",
+                        "updatedByUid": "admin-updated"
                       }
                     ]
                   }
@@ -670,6 +674,10 @@ class KtorAdminFunctionsApiTest {
         assertEquals("summer-test", draft.campaignId)
         assertEquals("push", draft.channels.single())
         assertEquals(true, draft.sendBlocked)
+        assertEquals("2026-06-01T10:00:00.000Z", draft.createdAtIso)
+        assertEquals("2026-06-01T11:00:00.000Z", draft.updatedAtIso)
+        assertEquals("admin-created", draft.createdByUid)
+        assertEquals("admin-updated", draft.updatedByUid)
     }
 
     @Test

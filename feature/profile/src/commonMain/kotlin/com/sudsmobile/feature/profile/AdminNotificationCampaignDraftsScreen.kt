@@ -516,6 +516,13 @@ private fun AdminNotificationCampaignDraftCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (
+                draft.createdAuditLabel.isNotBlank() ||
+                draft.updatedAuditLabel.isNotBlank() ||
+                draft.archivedAuditLabel.isNotBlank()
+            ) {
+                CampaignAuditTrail(draft = draft)
+            }
             CampaignStatusPill(
                 text = if (draft.sendBlocked) "Envio bloqueado" else "Envio indisponível",
                 emphasized = true,
@@ -594,6 +601,36 @@ private fun AdminNotificationCampaignDraftCard(
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CampaignAuditTrail(draft: AdminNotificationCampaignDraftUi) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "Auditoria",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            if (draft.createdAuditLabel.isNotBlank()) {
+                Text(text = draft.createdAuditLabel, style = MaterialTheme.typography.labelMedium)
+            }
+            if (draft.updatedAuditLabel.isNotBlank()) {
+                Text(text = draft.updatedAuditLabel, style = MaterialTheme.typography.labelMedium)
+            }
+            if (draft.archivedAuditLabel.isNotBlank()) {
+                Text(text = draft.archivedAuditLabel, style = MaterialTheme.typography.labelMedium)
             }
         }
     }

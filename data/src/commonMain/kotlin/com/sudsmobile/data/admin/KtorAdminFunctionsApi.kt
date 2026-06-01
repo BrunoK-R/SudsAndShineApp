@@ -1654,6 +1654,12 @@ private data class NotificationCampaignDraftPayload(
     val notes: String = "",
     val sendBlocked: Boolean = true,
     val sendBlockedReason: String = "",
+    val createdAtIso: String = "",
+    val updatedAtIso: String = "",
+    val archivedAtIso: String = "",
+    val createdByUid: String = "",
+    val updatedByUid: String = "",
+    val archivedByUid: String = "",
 ) {
     fun toAdminNotificationCampaignDraftOrNull(): AdminNotificationCampaignDraft? {
         val id = campaignId.trim()
@@ -1673,6 +1679,12 @@ private data class NotificationCampaignDraftPayload(
             notes = notes.trim(),
             sendBlocked = sendBlocked,
             sendBlockedReason = sendBlockedReason.trim(),
+            createdAtIso = createdAtIso.trim(),
+            updatedAtIso = updatedAtIso.trim(),
+            archivedAtIso = archivedAtIso.trim(),
+            createdByUid = createdByUid.trim(),
+            updatedByUid = updatedByUid.trim(),
+            archivedByUid = archivedByUid.trim(),
         )
     }
 }
