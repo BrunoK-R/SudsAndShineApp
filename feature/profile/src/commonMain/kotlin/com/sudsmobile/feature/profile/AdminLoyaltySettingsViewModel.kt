@@ -20,6 +20,7 @@ internal data class AdminLoyaltySettingsForm(
     val rewardType: String = "free_wash",
     val rewardValue: String = "",
     val rewardDescription: String = "",
+    val updatedAuditLabel: String = "",
 )
 
 internal sealed interface AdminLoyaltySettingsUiState {
@@ -208,6 +209,7 @@ private fun AdminLoyaltySettingsConfig.toForm(): AdminLoyaltySettingsForm = Admi
     rewardType = rewardType.normalizeRewardType(),
     rewardValue = rewardValue.toString(),
     rewardDescription = rewardDescription,
+    updatedAuditLabel = loyaltySettingsAuditLabel(updatedAtIso, updatedByUid),
 )
 
 private fun AdminLoyaltySettingsForm.toUpdateRequest(): ParsedLoyaltySettingsRequest {
@@ -297,4 +299,24 @@ private fun AuthError.toAdminLoyaltySettingsState(): AdminLoyaltySettingsUiState
 
 private fun AuthError.isRetryable(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
+}
+
+private fun loyaltySettingsAuditLabel(timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toLoyaltySettingsAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortLoyaltyAuditUid()?.let { " por $it" }.orEmpty()
+    return "Atualizado $timestampLabel$actorLabel"
+}
+
+private fun String.toLoyaltySettingsAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortLoyaltyAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
 }

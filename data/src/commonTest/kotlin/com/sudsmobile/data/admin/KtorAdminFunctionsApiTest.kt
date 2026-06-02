@@ -444,7 +444,10 @@ class KtorAdminFunctionsApiTest {
                     "stampsRequired": 8,
                     "rewardType": "discount_percent",
                     "rewardValue": 15,
-                    "rewardDescription": "15% de desconto"
+                    "rewardDescription": "15% de desconto",
+                    "source": "firestore",
+                    "updatedAtIso": "2026-06-01T10:15:00.000Z",
+                    "updatedByUid": " admin-loyalty "
                   }
                 }
                 """.trimIndent(),
@@ -462,6 +465,9 @@ class KtorAdminFunctionsApiTest {
         assertEquals("discount_percent", success.config.rewardType)
         assertEquals(15, success.config.rewardValue)
         assertEquals("15% de desconto", success.config.rewardDescription)
+        assertEquals("firestore", success.config.source)
+        assertEquals("2026-06-01T10:15:00.000Z", success.config.updatedAtIso)
+        assertEquals("admin-loyalty", success.config.updatedByUid)
     }
 
     @Test
@@ -476,7 +482,10 @@ class KtorAdminFunctionsApiTest {
                     "stampsRequired": 8,
                     "rewardType": "free_wash",
                     "rewardValue": 1,
-                    "rewardDescription": "1 lavagem grátis"
+                    "rewardDescription": "1 lavagem grátis",
+                    "source": "firestore",
+                    "updatedAtIso": "2026-06-01T10:16:00.000Z",
+                    "updatedByUid": "admin-save"
                   }
                 }
                 """.trimIndent(),
@@ -501,6 +510,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("/test-project/europe-west1/updateLoyaltySettings", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals(8, success.config.stampsRequired)
+        assertEquals("2026-06-01T10:16:00.000Z", success.config.updatedAtIso)
+        assertEquals("admin-save", success.config.updatedByUid)
     }
 
     @Test

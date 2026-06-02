@@ -1609,12 +1609,18 @@ private data class LoyaltySettingsResultPayload(
     val rewardType: String = "free_wash",
     val rewardValue: Int = 1,
     val rewardDescription: String = "",
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 ) {
     fun toAdminLoyaltySettingsConfig(): AdminLoyaltySettingsConfig = AdminLoyaltySettingsConfig(
         stampsRequired = stampsRequired.coerceIn(1, 50),
         rewardType = rewardType.trim().ifBlank { "free_wash" },
         rewardValue = rewardValue.coerceAtLeast(1),
         rewardDescription = rewardDescription.trim().ifBlank { "1 lavagem grátis" },
+        source = source.trim(),
+        updatedAtIso = updatedAtIso.trim(),
+        updatedByUid = updatedByUid.trim(),
     )
 }
 

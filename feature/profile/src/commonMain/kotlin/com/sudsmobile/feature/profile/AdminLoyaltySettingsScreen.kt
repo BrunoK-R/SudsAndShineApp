@@ -331,6 +331,7 @@ private fun AdminLoyaltySettingsFormCard(
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            AdminLoyaltySettingsAuditLabel(label = form.updatedAuditLabel)
             AdminLoyaltySettingsTextField(
                 value = form.stampsRequired,
                 onValueChange = { onFormChange(form.copy(stampsRequired = it)) },
@@ -397,6 +398,33 @@ private fun AdminLoyaltySettingsFormCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AdminLoyaltySettingsAuditLabel(label: String) {
+    if (label.isBlank()) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

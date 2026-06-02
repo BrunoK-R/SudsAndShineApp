@@ -179,6 +179,9 @@ data class AdminLoyaltySettingsConfig(
     val rewardType: String,
     val rewardValue: Int,
     val rewardDescription: String,
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 )
 
 data class AdminNotificationTemplateConfig(

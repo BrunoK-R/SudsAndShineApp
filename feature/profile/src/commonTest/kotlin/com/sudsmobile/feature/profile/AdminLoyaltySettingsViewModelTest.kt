@@ -93,6 +93,27 @@ class AdminLoyaltySettingsViewModelTest {
     }
 
     @Test
+    fun loadConfigurationMapsAuditMetadata() = runTest {
+        val viewModel = AdminLoyaltySettingsViewModel(
+            authRepository = FakeLoyaltySettingsAuthRepository(authenticated = true),
+            adminRepository = FakeLoyaltySettingsAdminRepository(
+                loadResult = AdminLoyaltySettingsResult.Success(
+                    adminLoyaltySettingsConfig(
+                        updatedAtIso = "2026-06-01T10:15:00.000Z",
+                        updatedByUid = "admin-loyalty-updater",
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+
+        val loaded = assertIs<AdminLoyaltySettingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Atualizado 2026-06-01 10:15 UTC por admin-lo...", loaded.form.updatedAuditLabel)
+    }
+
+    @Test
     fun loadConfigurationIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<AdminLoyaltySettingsResult>()
         val authRepository = FakeLoyaltySettingsAuthRepository(authenticated = true)
@@ -162,6 +183,8 @@ class AdminLoyaltySettingsViewModelTest {
         assertEquals("discount_percent", request.rewardType)
         assertEquals(15, request.rewardValue)
         assertEquals("15% de desconto", request.rewardDescription)
+        val loaded = assertIs<AdminLoyaltySettingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Atualizado 2026-06-01 10:15 UTC por uid-1", loaded.form.updatedAuditLabel)
     }
 
     @Test
@@ -238,6 +261,8 @@ private class FakeLoyaltySettingsAdminRepository(
                 rewardType = request.rewardType,
                 rewardValue = request.rewardValue,
                 rewardDescription = request.rewardDescription,
+                updatedAtIso = "2026-06-01T10:15:00.000Z",
+                updatedByUid = "uid-1",
             ),
         )
     }
@@ -321,9 +346,14 @@ private class FakeLoyaltySettingsAuthRepository(authenticated: Boolean) : AuthRe
     }
 }
 
-private fun adminLoyaltySettingsConfig(): AdminLoyaltySettingsConfig = AdminLoyaltySettingsConfig(
+private fun adminLoyaltySettingsConfig(
+    updatedAtIso: String = "",
+    updatedByUid: String = "",
+): AdminLoyaltySettingsConfig = AdminLoyaltySettingsConfig(
     stampsRequired = 10,
     rewardType = "free_wash",
     rewardValue = 1,
     rewardDescription = "1 lavagem grátis",
+    updatedAtIso = updatedAtIso,
+    updatedByUid = updatedByUid,
 )
