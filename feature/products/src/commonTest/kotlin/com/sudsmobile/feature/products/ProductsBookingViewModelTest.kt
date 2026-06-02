@@ -111,6 +111,26 @@ class ProductsBookingViewModelTest {
     }
 
     @Test
+    fun availabilitySlotCapacityLabelMapsBackendCapacity() {
+        assertEquals(
+            "1 vaga",
+            BookingAvailabilitySlot(time = "09:00", available = true, remainingCapacity = 1).capacityLabel(),
+        )
+        assertEquals(
+            "3 vagas",
+            BookingAvailabilitySlot(time = "10:00", available = true, remainingCapacity = 3).capacityLabel(),
+        )
+        assertEquals(
+            "Cheio",
+            BookingAvailabilitySlot(time = "11:00", available = false, remainingCapacity = 0).capacityLabel(),
+        )
+        assertEquals(
+            "Indisponível",
+            BookingAvailabilitySlot(time = "12:00", available = false, remainingCapacity = 2).capacityLabel(),
+        )
+    }
+
+    @Test
     fun loadAvailabilityAcceptsNewMonthWhilePreviousRequestIsLoading() = runTest {
         val firstResult = CompletableDeferred<BookingAvailabilityResult>()
         val secondResult = CompletableDeferred<BookingAvailabilityResult>()

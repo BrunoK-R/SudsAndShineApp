@@ -81,6 +81,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.data.auth.AuthSessionState
@@ -2990,7 +2991,7 @@ private fun TimeSlotButton(
 ) {
     Surface(
         modifier = modifier
-            .height(48.dp)
+            .height(60.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = slot.available, onClick = onSelected),
         shape = RoundedCornerShape(12.dp),
@@ -3005,11 +3006,27 @@ private fun TimeSlotButton(
             else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f)
         },
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
             Text(
                 text = slot.time,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = slot.capacityLabel(),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
             )
         }
     }
@@ -3905,6 +3922,16 @@ private fun ProductServiceUi.priceCentsForVehicle(vehicleType: String?): Int {
 
 private fun ProductExtraUi.isEligibleFor(serviceId: String?): Boolean {
     return eligibleServiceIds.isEmpty() || serviceId in eligibleServiceIds
+}
+
+internal fun BookingAvailabilitySlot.capacityLabel(): String {
+    return when {
+        !available && remainingCapacity <= 0 -> "Cheio"
+        !available -> "Indisponível"
+        remainingCapacity == 1 -> "1 vaga"
+        remainingCapacity > 1 -> "$remainingCapacity vagas"
+        else -> "Disponível"
+    }
 }
 
 private fun List<ProductExtraUi>.countLabel(): String {
