@@ -116,7 +116,14 @@ class AdminServiceExtrasViewModelTest {
             adminRepository = FakeServiceExtrasAdminRepository(
                 loadResult = AdminServiceExtrasResult.Success(
                     adminServiceExtrasConfig(
-                        extras = listOf(adminServiceExtraItem(active = false, priceCents = 1500)),
+                        extras = listOf(
+                            adminServiceExtraItem(
+                                active = false,
+                                priceCents = 1500,
+                                updatedAtIso = "2026-06-01T11:30:00.000Z",
+                                updatedByUid = "admin-service-extra-updater",
+                            ),
+                        ),
                     ),
                 ),
             ),
@@ -130,6 +137,10 @@ class AdminServiceExtrasViewModelTest {
         assertEquals("wax", extra.id)
         assertEquals("15,00 €", extra.priceLabel)
         assertEquals(false, extra.active)
+        assertEquals(
+            listOf("Atualizado 2026-06-01 11:30 UTC por admin-se..."),
+            extra.auditLabels,
+        )
     }
 
     @Test
@@ -406,6 +417,8 @@ private fun adminServiceExtraItem(
     name: String = "Enceramento",
     active: Boolean = true,
     priceCents: Int = 1500,
+    updatedAtIso: String = "",
+    updatedByUid: String = "",
 ): AdminServiceExtraItem = AdminServiceExtraItem(
     id = id,
     name = name,
@@ -415,4 +428,6 @@ private fun adminServiceExtraItem(
     eligibleServiceIds = listOf("premium"),
     active = active,
     sortOrder = 30,
+    updatedAtIso = updatedAtIso,
+    updatedByUid = updatedByUid,
 )

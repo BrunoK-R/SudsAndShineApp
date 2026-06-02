@@ -27,6 +27,7 @@ internal data class AdminServiceExtraUi(
     val eligibleServiceIdsLabel: String,
     val active: Boolean,
     val sortOrder: Int,
+    val auditLabels: List<String> = emptyList(),
 )
 
 internal data class AdminServiceExtraForm(
@@ -335,6 +336,11 @@ private fun AdminServiceExtraItem.toUi(): AdminServiceExtraUi = AdminServiceExtr
     eligibleServiceIdsLabel = eligibleServiceIds.joinToString(", "),
     active = active,
     sortOrder = sortOrder,
+    auditLabels = listOf(
+        serviceExtraAuditLabel("Criado", createdAtIso, createdByUid),
+        serviceExtraAuditLabel("Atualizado", updatedAtIso, updatedByUid),
+        serviceExtraAuditLabel("Arquivado", archivedAtIso, archivedByUid),
+    ).filter { it.isNotBlank() },
 )
 
 private fun AdminServiceExtraUi.toForm(): AdminServiceExtraForm = AdminServiceExtraForm(
@@ -403,6 +409,28 @@ private fun Int.toExtraEuroLabel(): String {
 
 private fun nextExtraSortOrder(extras: List<AdminServiceExtraUi>): Int {
     return ((extras.maxOfOrNull { it.sortOrder } ?: 0) + 10).coerceAtMost(9999)
+}
+
+private fun serviceExtraAuditLabel(action: String, timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toServiceExtraAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortServiceExtraAuditUid()
+        ?.let { " por $it" }
+        .orEmpty()
+    return "$action $timestampLabel$actorLabel"
+}
+
+private fun String.toServiceExtraAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortServiceExtraAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
 }
 
 private fun AdminError.toAdminServiceExtrasState(): AdminServiceExtrasUiState {
