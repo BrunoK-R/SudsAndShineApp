@@ -146,8 +146,7 @@ internal class AdminNotificationSettingsViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedConfig()
-                    _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -198,24 +197,24 @@ internal class AdminNotificationSettingsViewModel(
             _saveState.value = AdminNotificationSettingsSaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
                 _saveState.value = AdminNotificationSettingsSaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.updateNotificationSettingsConfiguration(request)) {
+            val result = adminRepository.updateNotificationSettingsConfiguration(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminNotificationSettingsSaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminNotificationSettingsResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = requestedUid
-                        _uiState.value = AdminNotificationSettingsUiState.Loaded(result.config.toForm())
-                        _saveState.value = AdminNotificationSettingsSaveState.Success("Notificações guardadas.")
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
-                        _saveState.value = AdminNotificationSettingsSaveState.Idle
-                    }
+                    loadedUid = requestedUid
+                    _uiState.value = AdminNotificationSettingsUiState.Loaded(result.config.toForm())
+                    _saveState.value = AdminNotificationSettingsSaveState.Success("Notificações guardadas.")
                 }
                 is AdminNotificationSettingsResult.Failure -> {
                     _saveState.value = result.error.toAdminNotificationSettingsSaveState()
@@ -254,9 +253,8 @@ internal class AdminNotificationSettingsViewModel(
             _testState.value = AdminNotificationTestState.Sending(template.key)
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
                 _testState.value = AdminNotificationTestState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
@@ -265,9 +263,8 @@ internal class AdminNotificationSettingsViewModel(
 
             val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (latestUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
                 _testState.value = AdminNotificationTestState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
@@ -319,6 +316,11 @@ internal class AdminNotificationSettingsViewModel(
         if (_testState.value !is AdminNotificationTestState.Sending) {
             clearTestState()
         }
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedConfig()
+        refreshForSession(force = true)
     }
 }
 

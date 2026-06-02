@@ -209,6 +209,30 @@ class AdminNotificationSettingsViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationSettingsResult>()
+        val authRepository = FakeNotificationSettingsAuthRepository(authenticated = true)
+        val repository = FakeNotificationSettingsAdminRepository(updateResultDeferred = deferred)
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        authRepository.authenticateAs("uid-2")
+        deferred.complete(AdminNotificationSettingsResult.Failure(AdminError.Permission("denied")))
+        runCurrent()
+
+        assertEquals(1, repository.updateRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationSettingsUiState.Loaded>(viewModel.uiState.value)
+        assertIs<AdminNotificationSettingsSaveState.Idle>(viewModel.saveState.value)
+    }
+
+    @Test
     fun sendTestSubmitsSelectedTemplate() = runTest {
         val repository = FakeNotificationSettingsAdminRepository()
         val viewModel = AdminNotificationSettingsViewModel(
@@ -301,6 +325,7 @@ private class FakeNotificationSettingsAdminRepository(
     var updateResult: AdminNotificationSettingsResult? = null,
     var testResult: AdminNotificationTestResult? = null,
     private val loadResultDeferred: CompletableDeferred<AdminNotificationSettingsResult>? = null,
+    private val updateResultDeferred: CompletableDeferred<AdminNotificationSettingsResult>? = null,
     private val testResultDeferred: CompletableDeferred<AdminNotificationTestResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
@@ -336,6 +361,7 @@ private class FakeNotificationSettingsAdminRepository(
         request: AdminNotificationSettingsUpdateRequest,
     ): AdminNotificationSettingsResult {
         updateRequests += request
+        updateResultDeferred?.let { return it.await() }
         return updateResult ?: AdminNotificationSettingsResult.Success(
             AdminNotificationSettingsConfig(
                 bookingStatusEnabled = request.bookingStatusEnabled,
@@ -402,19 +428,8 @@ private class FakeNotificationSettingsAdminRepository(
 }
 
 private class FakeNotificationSettingsAuthRepository(authenticated: Boolean) : AuthRepository {
-    private val authSession = AuthSession(
-        user = AuthUser(
-            uid = "uid-1",
-            email = "admin@example.com",
-            displayName = "Admin",
-            phoneNumber = "",
-        ),
-        idToken = "id-token-1",
-        refreshToken = "refresh-token-1",
-        expiresInSeconds = 3600,
-    )
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) AuthSessionState.Authenticated(authSession) else AuthSessionState.Unauthenticated,
+        if (authenticated) AuthSessionState.Authenticated(authSession()) else AuthSessionState.Unauthenticated,
     )
 
     override val sessionState = mutableSessionState
@@ -424,8 +439,9 @@ private class FakeNotificationSettingsAuthRepository(authenticated: Boolean) : A
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
-        mutableSessionState.value = AuthSessionState.Authenticated(authSession)
-        return AuthResult.Success(authSession)
+        val session = authSession()
+        mutableSessionState.value = AuthSessionState.Authenticated(session)
+        return AuthResult.Success(session)
     }
 
     override suspend fun register(
@@ -434,14 +450,33 @@ private class FakeNotificationSettingsAuthRepository(authenticated: Boolean) : A
         phoneNumber: String,
         password: String,
     ): AuthResult {
-        mutableSessionState.value = AuthSessionState.Authenticated(authSession)
-        return AuthResult.Success(authSession)
+        val session = authSession()
+        mutableSessionState.value = AuthSessionState.Authenticated(session)
+        return AuthResult.Success(session)
     }
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult = AuthActionResult.Success
 
     override fun signOut() {
         mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+
+    fun authenticateAs(uid: String) {
+        mutableSessionState.value = AuthSessionState.Authenticated(authSession(uid))
+    }
+
+    private fun authSession(uid: String = "uid-1"): AuthSession {
+        return AuthSession(
+            user = AuthUser(
+                uid = uid,
+                email = "admin@example.com",
+                displayName = "Admin",
+                phoneNumber = "",
+            ),
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
+            expiresInSeconds = 3600,
+        )
     }
 }
 
