@@ -169,6 +169,9 @@ data class AdminBookingPolicyConfig(
     val cancellationWindowMinutes: Int,
     val rescheduleWindowMinutes: Int,
     val paymentEligibilityCopy: String,
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 )
 
 data class AdminLoyaltySettingsConfig(

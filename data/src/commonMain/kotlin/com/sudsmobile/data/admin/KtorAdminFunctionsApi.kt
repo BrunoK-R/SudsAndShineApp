@@ -1586,6 +1586,9 @@ private data class BookingPolicyResultPayload(
     val cancellationWindowMinutes: Int = 0,
     val rescheduleWindowMinutes: Int = 0,
     val paymentEligibilityCopy: String = "",
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 ) {
     fun toAdminBookingPolicyConfig(): AdminBookingPolicyConfig = AdminBookingPolicyConfig(
         pendingHoldMinutes = pendingHoldMinutes.coerceIn(15, 10080),
@@ -1594,6 +1597,9 @@ private data class BookingPolicyResultPayload(
         paymentEligibilityCopy = paymentEligibilityCopy.trim().ifBlank {
             "Pagamento confirmado no local após validação da marcação."
         },
+        source = source.trim(),
+        updatedAtIso = updatedAtIso.trim(),
+        updatedByUid = updatedByUid.trim(),
     )
 }
 

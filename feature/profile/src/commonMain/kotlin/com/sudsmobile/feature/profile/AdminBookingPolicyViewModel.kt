@@ -20,6 +20,7 @@ internal data class AdminBookingPolicyForm(
     val cancellationWindowMinutes: String = "",
     val rescheduleWindowMinutes: String = "",
     val paymentEligibilityCopy: String = "",
+    val updatedAuditLabel: String = "",
 )
 
 internal sealed interface AdminBookingPolicyUiState {
@@ -208,7 +209,30 @@ private fun AdminBookingPolicyConfig.toForm(): AdminBookingPolicyForm = AdminBoo
     cancellationWindowMinutes = cancellationWindowMinutes.toString(),
     rescheduleWindowMinutes = rescheduleWindowMinutes.toString(),
     paymentEligibilityCopy = paymentEligibilityCopy,
+    updatedAuditLabel = bookingPolicyAuditLabel(updatedAtIso, updatedByUid),
 )
+
+private fun bookingPolicyAuditLabel(timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toBookingPolicyAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortBookingPolicyAuditUid()
+        ?.let { " por $it" }
+        .orEmpty()
+    return "Atualizado $timestampLabel$actorLabel"
+}
+
+private fun String.toBookingPolicyAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortBookingPolicyAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
+}
 
 private fun AdminBookingPolicyForm.toUpdateRequest(): ParsedBookingPolicyRequest {
     val pendingHold = pendingHoldMinutes.trim().toIntOrNull()

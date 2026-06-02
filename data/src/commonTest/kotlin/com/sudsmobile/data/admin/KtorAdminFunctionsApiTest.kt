@@ -365,7 +365,10 @@ class KtorAdminFunctionsApiTest {
                     "pendingHoldMinutes": 240,
                     "cancellationWindowMinutes": 120,
                     "rescheduleWindowMinutes": 60,
-                    "paymentEligibilityCopy": "Pagamento no local"
+                    "paymentEligibilityCopy": "Pagamento no local",
+                    "source": " firestore ",
+                    "updatedAtIso": " 2026-06-01T10:15:00.000Z ",
+                    "updatedByUid": " admin-policy "
                   }
                 }
                 """.trimIndent(),
@@ -382,6 +385,9 @@ class KtorAdminFunctionsApiTest {
         assertEquals(240, success.config.pendingHoldMinutes)
         assertEquals(120, success.config.cancellationWindowMinutes)
         assertEquals("Pagamento no local", success.config.paymentEligibilityCopy)
+        assertEquals("firestore", success.config.source)
+        assertEquals("2026-06-01T10:15:00.000Z", success.config.updatedAtIso)
+        assertEquals("admin-policy", success.config.updatedByUid)
     }
 
     @Test
@@ -396,7 +402,9 @@ class KtorAdminFunctionsApiTest {
                     "pendingHoldMinutes": 240,
                     "cancellationWindowMinutes": 120,
                     "rescheduleWindowMinutes": 60,
-                    "paymentEligibilityCopy": "Pagamento no local"
+                    "paymentEligibilityCopy": "Pagamento no local",
+                    "updatedAtIso": "2026-06-01T11:30:00.000Z",
+                    "updatedByUid": "admin-save"
                   }
                 }
                 """.trimIndent(),
@@ -421,6 +429,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("/test-project/europe-west1/updateBookingPolicy", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals(60, success.config.rescheduleWindowMinutes)
+        assertEquals("2026-06-01T11:30:00.000Z", success.config.updatedAtIso)
+        assertEquals("admin-save", success.config.updatedByUid)
     }
 
     @Test

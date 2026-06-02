@@ -331,6 +331,7 @@ private fun AdminBookingPolicyFormCard(
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            AdminBookingPolicyAuditLabel(label = form.updatedAuditLabel)
             AdminBookingPolicyTextField(
                 value = form.pendingHoldMinutes,
                 onValueChange = { onFormChange(form.copy(pendingHoldMinutes = it)) },
@@ -393,6 +394,33 @@ private fun AdminBookingPolicyFormCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AdminBookingPolicyAuditLabel(label: String) {
+    if (label.isBlank()) return
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

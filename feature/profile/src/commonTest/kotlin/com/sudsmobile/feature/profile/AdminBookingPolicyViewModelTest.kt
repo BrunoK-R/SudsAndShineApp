@@ -91,6 +91,27 @@ class AdminBookingPolicyViewModelTest {
     }
 
     @Test
+    fun loadConfigurationFormatsAuditLabel() = runTest {
+        val viewModel = AdminBookingPolicyViewModel(
+            authRepository = FakeBookingPolicyAuthRepository(authenticated = true),
+            adminRepository = FakeBookingPolicyAdminRepository(
+                loadResult = AdminBookingPolicyResult.Success(
+                    adminBookingPolicyConfig(
+                        updatedAtIso = "2026-06-01T10:15:00.000Z",
+                        updatedByUid = "administrator-user-1",
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+
+        val loaded = assertIs<AdminBookingPolicyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Atualizado 2026-06-01 10:15 UTC por administ...", loaded.form.updatedAuditLabel)
+    }
+
+    @Test
     fun loadConfigurationIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<AdminBookingPolicyResult>()
         val authRepository = FakeBookingPolicyAuthRepository(authenticated = true)
@@ -338,9 +359,14 @@ private class FakeBookingPolicyAuthRepository(authenticated: Boolean) : AuthRepo
     }
 }
 
-private fun adminBookingPolicyConfig(): AdminBookingPolicyConfig = AdminBookingPolicyConfig(
+private fun adminBookingPolicyConfig(
+    updatedAtIso: String = "",
+    updatedByUid: String = "",
+): AdminBookingPolicyConfig = AdminBookingPolicyConfig(
     pendingHoldMinutes = 1440,
     cancellationWindowMinutes = 0,
     rescheduleWindowMinutes = 0,
     paymentEligibilityCopy = "Pagamento no local",
+    updatedAtIso = updatedAtIso,
+    updatedByUid = updatedByUid,
 )
