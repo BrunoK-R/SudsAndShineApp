@@ -177,7 +177,7 @@ data class BookingRewardRedemptionReceipt(
 data class BookingAvailabilityRequest(
     val anchorDate: String? = null,
     val serviceDurationMinutes: Int = 30,
-    val slotIntervalMinutes: Int = 30,
+    val slotIntervalMinutes: Int? = null,
 )
 
 data class BookingAvailabilityMonth(

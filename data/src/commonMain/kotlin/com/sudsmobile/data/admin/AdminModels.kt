@@ -159,6 +159,7 @@ data class AdminBusinessSocialLink(
 
 data class AdminAvailabilityConfig(
     val defaultMaxBookingsPerSlot: Int,
+    val defaultSlotIntervalMinutes: Int = 30,
     val openingHours: List<AdminBusinessOpeningHours>,
     val capacityOverrides: List<AdminCapacityOverrideItem> = emptyList(),
     val blockedSlots: List<AdminBlockedSlotItem> = emptyList(),
@@ -210,6 +211,7 @@ data class AdminNotificationSettingsConfig(
 
 data class AdminAvailabilityUpdateRequest(
     val defaultMaxBookingsPerSlot: Int,
+    val defaultSlotIntervalMinutes: Int,
     val openingHours: List<AdminBusinessOpeningHours>,
 )
 

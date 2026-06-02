@@ -276,6 +276,7 @@ class FirebaseAdminRepositoryTest {
         val result = repository.updateAvailabilityConfiguration(
             AdminAvailabilityUpdateRequest(
                 defaultMaxBookingsPerSlot = 4,
+                defaultSlotIntervalMinutes = 20,
                 openingHours = listOf(
                     AdminBusinessOpeningHours(
                         dayLabel = " Segunda   a Sexta ",
@@ -293,6 +294,7 @@ class FirebaseAdminRepositoryTest {
 
         val success = assertIs<AdminAvailabilityResult.Success>(result)
         assertEquals(4, success.config.defaultMaxBookingsPerSlot)
+        assertEquals(20, success.config.defaultSlotIntervalMinutes)
         assertEquals("id-token-1", api.updateAvailabilityIdTokens.single())
         assertEquals("Segunda a Sexta", api.updateAvailabilityRequests.single().openingHours.first().dayLabel)
     }
@@ -308,6 +310,30 @@ class FirebaseAdminRepositoryTest {
         val result = repository.updateAvailabilityConfiguration(
             AdminAvailabilityUpdateRequest(
                 defaultMaxBookingsPerSlot = 21,
+                defaultSlotIntervalMinutes = 30,
+                openingHours = listOf(
+                    AdminBusinessOpeningHours("Segunda", "09:00 - 19:00", closed = false),
+                ),
+            ),
+        )
+
+        val failure = assertIs<AdminAvailabilityResult.Failure>(result)
+        assertIs<AdminError.Validation>(failure.error)
+        assertEquals(0, api.updateAvailabilityRequests.size)
+    }
+
+    @Test
+    fun updateAvailabilityConfigurationRejectsInvalidSlotIntervalBeforeApiCall() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateAvailabilityConfiguration(
+            AdminAvailabilityUpdateRequest(
+                defaultMaxBookingsPerSlot = 2,
+                defaultSlotIntervalMinutes = 241,
                 openingHours = listOf(
                     AdminBusinessOpeningHours("Segunda", "09:00 - 19:00", closed = false),
                 ),
@@ -978,6 +1004,7 @@ private class FakeAdminFunctionsApi(
         return AdminAvailabilityResult.Success(
             AdminAvailabilityConfig(
                 defaultMaxBookingsPerSlot = 2,
+                defaultSlotIntervalMinutes = 30,
                 openingHours = listOf(
                     AdminBusinessOpeningHours(
                         dayLabel = "Segunda a Sexta",
@@ -1176,6 +1203,7 @@ private class FakeAdminFunctionsApi(
         return AdminAvailabilityResult.Success(
             AdminAvailabilityConfig(
                 defaultMaxBookingsPerSlot = request.defaultMaxBookingsPerSlot,
+                defaultSlotIntervalMinutes = request.defaultSlotIntervalMinutes,
                 openingHours = request.openingHours,
             ),
         )

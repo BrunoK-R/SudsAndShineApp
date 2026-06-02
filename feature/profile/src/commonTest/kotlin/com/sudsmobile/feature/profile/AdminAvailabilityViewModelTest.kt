@@ -150,6 +150,7 @@ class AdminAvailabilityViewModelTest {
         viewModel.updateForm(
             AdminAvailabilityForm(
                 defaultMaxBookingsPerSlot = "abc",
+                defaultSlotIntervalMinutes = "30",
                 openingHoursText = "Segunda | 09:00 - 19:00",
             ),
         )
@@ -157,6 +158,31 @@ class AdminAvailabilityViewModelTest {
         runCurrent()
 
         assertIs<AdminAvailabilitySaveState.Error>(viewModel.saveState.value)
+        assertEquals(0, repository.updateRequests.size)
+    }
+
+    @Test
+    fun saveRejectsInvalidSlotIntervalBeforeRepositoryCall() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.updateForm(
+            AdminAvailabilityForm(
+                defaultMaxBookingsPerSlot = "2",
+                defaultSlotIntervalMinutes = "241",
+                openingHoursText = "Segunda | 09:00 - 19:00",
+            ),
+        )
+        viewModel.save()
+        runCurrent()
+
+        val error = assertIs<AdminAvailabilitySaveState.Error>(viewModel.saveState.value)
+        assertEquals("O intervalo entre horários deve estar entre 5 e 240 minutos.", error.message)
         assertEquals(0, repository.updateRequests.size)
     }
 
@@ -173,6 +199,7 @@ class AdminAvailabilityViewModelTest {
         viewModel.updateForm(
             AdminAvailabilityForm(
                 defaultMaxBookingsPerSlot = "4",
+                defaultSlotIntervalMinutes = "20",
                 openingHoursText = "Segunda a Sexta | 09:00 - 13:00, 14:00 - 19:00\nDomingo | Encerrado | fechado",
             ),
         )
@@ -182,6 +209,7 @@ class AdminAvailabilityViewModelTest {
         assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
         val request = repository.updateRequests.single()
         assertEquals(4, request.defaultMaxBookingsPerSlot)
+        assertEquals(20, request.defaultSlotIntervalMinutes)
         assertEquals("Segunda a Sexta", request.openingHours.first().dayLabel)
         assertEquals(true, request.openingHours.last().closed)
     }
@@ -508,8 +536,10 @@ private class FakeAvailabilityAuthRepository(authenticated: Boolean) : AuthRepos
 
 private fun adminAvailabilityConfig(
     defaultMaxBookingsPerSlot: Int = 2,
+    defaultSlotIntervalMinutes: Int = 30,
 ): AdminAvailabilityConfig = AdminAvailabilityConfig(
     defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot,
+    defaultSlotIntervalMinutes = defaultSlotIntervalMinutes,
     openingHours = listOf(
         AdminBusinessOpeningHours(
             dayLabel = "Segunda a Sexta",

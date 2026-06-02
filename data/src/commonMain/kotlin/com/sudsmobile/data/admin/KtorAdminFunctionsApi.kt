@@ -854,11 +854,13 @@ private data class BusinessInfoPayload(
 @Serializable
 private data class AvailabilityPayload(
     val defaultMaxBookingsPerSlot: Int,
+    val defaultSlotIntervalMinutes: Int,
     val openingHours: List<BusinessOpeningHoursPayload>,
 ) {
     companion object {
         fun from(request: AdminAvailabilityUpdateRequest): AvailabilityPayload = AvailabilityPayload(
             defaultMaxBookingsPerSlot = request.defaultMaxBookingsPerSlot,
+            defaultSlotIntervalMinutes = request.defaultSlotIntervalMinutes,
             openingHours = request.openingHours.map { BusinessOpeningHoursPayload.from(it) },
         )
     }
@@ -1568,12 +1570,14 @@ private data class BusinessInfoResultPayload(
 @Serializable
 private data class AvailabilityResultPayload(
     val defaultMaxBookingsPerSlot: Int = 2,
+    val defaultSlotIntervalMinutes: Int = 30,
     val openingHours: List<BusinessOpeningHoursPayload> = emptyList(),
     val capacityOverrides: List<CapacityOverrideItemPayload> = emptyList(),
     val blockedSlots: List<BlockedSlotItemPayload> = emptyList(),
 ) {
     fun toAdminAvailabilityConfig(): AdminAvailabilityConfig = AdminAvailabilityConfig(
         defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot.coerceIn(0, 20),
+        defaultSlotIntervalMinutes = defaultSlotIntervalMinutes.coerceIn(5, 240),
         openingHours = openingHours.map { it.toAdminOpeningHours() },
         capacityOverrides = capacityOverrides.map { it.toAdminCapacityOverrideItem() },
         blockedSlots = blockedSlots.mapNotNull { it.toAdminBlockedSlotItemOrNull() },

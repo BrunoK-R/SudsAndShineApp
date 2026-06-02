@@ -482,6 +482,8 @@ class FirebaseAdminRepository(
         return when {
             request.defaultMaxBookingsPerSlot !in MinAvailabilityCapacity..MaxAvailabilityCapacity ->
                 AdminError.Validation("A capacidade deve estar entre 0 e 20 marcações por horário.")
+            request.defaultSlotIntervalMinutes !in MinAvailabilitySlotIntervalMinutes..MaxAvailabilitySlotIntervalMinutes ->
+                AdminError.Validation("O intervalo entre horários deve estar entre 5 e 240 minutos.")
             request.openingHours.isEmpty() ->
                 AdminError.Validation("Indique pelo menos um horário.")
             request.openingHours.size > MaxBusinessOpeningRows ->
@@ -791,6 +793,8 @@ private const val MaxBusinessOpeningRows = 10
 private const val MaxBusinessSocialLinks = 8
 private const val MinAvailabilityCapacity = 0
 private const val MaxAvailabilityCapacity = 20
+private const val MinAvailabilitySlotIntervalMinutes = 5
+private const val MaxAvailabilitySlotIntervalMinutes = 240
 private const val MaxBlockedSlotReasonLength = 160
 private const val MinPendingHoldMinutes = 15
 private const val MinPolicyWindowMinutes = 0

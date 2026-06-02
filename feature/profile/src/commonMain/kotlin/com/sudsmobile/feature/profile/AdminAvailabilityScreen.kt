@@ -371,6 +371,12 @@ private fun AdminAvailabilityFormCard(
                 singleLine = true,
             )
             AdminAvailabilityTextField(
+                value = form.defaultSlotIntervalMinutes,
+                onValueChange = { onFormChange(form.copy(defaultSlotIntervalMinutes = it)) },
+                label = "Intervalo entre horários (min)",
+                singleLine = true,
+            )
+            AdminAvailabilityTextField(
                 value = form.openingHoursText,
                 onValueChange = { onFormChange(form.copy(openingHoursText = it)) },
                 label = "Horários",

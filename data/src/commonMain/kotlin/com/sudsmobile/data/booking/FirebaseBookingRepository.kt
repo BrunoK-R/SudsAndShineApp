@@ -143,7 +143,7 @@ class FirebaseBookingRepository(
                 BookingAvailabilityError.Validation("A data de disponibilidade é inválida.")
             request.serviceDurationMinutes !in 5..480 ->
                 BookingAvailabilityError.Validation("A duração do serviço é inválida.")
-            request.slotIntervalMinutes !in 5..240 ->
+            request.slotIntervalMinutes != null && request.slotIntervalMinutes !in 5..240 ->
                 BookingAvailabilityError.Validation("O intervalo de horários é inválido.")
             else -> null
         }

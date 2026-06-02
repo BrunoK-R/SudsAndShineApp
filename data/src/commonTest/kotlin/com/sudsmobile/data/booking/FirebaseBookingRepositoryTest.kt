@@ -32,6 +32,23 @@ class FirebaseBookingRepositoryTest {
     }
 
     @Test
+    fun rejectsInvalidAvailabilitySlotIntervalBeforeCallingApi() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.getAvailability(
+            BookingAvailabilityRequest(
+                serviceDurationMinutes = 30,
+                slotIntervalMinutes = 241,
+            ),
+        )
+
+        assertIs<BookingAvailabilityResult.Failure>(result)
+        assertIs<BookingAvailabilityError.Validation>(result.error)
+        assertEquals(0, api.availabilityCalls)
+    }
+
+    @Test
     fun rejectsInvalidEmailBeforeCallingApi() = runTest {
         val api = RecordingBookingFunctionsApi()
         val repository = FirebaseBookingRepository(api, FakeAuthRepository())

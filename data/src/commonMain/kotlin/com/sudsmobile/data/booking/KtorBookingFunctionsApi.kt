@@ -314,7 +314,7 @@ private data class CallableRedeemRewardRequest(
 private data class GetAvailabilityPayload(
     val anchorDate: String? = null,
     val serviceDurationMinutes: Int,
-    val slotIntervalMinutes: Int,
+    val slotIntervalMinutes: Int? = null,
 ) {
     companion object {
         fun from(request: BookingAvailabilityRequest): GetAvailabilityPayload = GetAvailabilityPayload(

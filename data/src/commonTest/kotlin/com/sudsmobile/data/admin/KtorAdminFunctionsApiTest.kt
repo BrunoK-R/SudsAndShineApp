@@ -303,6 +303,7 @@ class KtorAdminFunctionsApiTest {
                 {
                   "result": {
                     "defaultMaxBookingsPerSlot": 3,
+                    "defaultSlotIntervalMinutes": 20,
                     "openingHours": [
                       {
                         "dayLabel": "Segunda a Sexta",
@@ -343,6 +344,7 @@ class KtorAdminFunctionsApiTest {
         val success = assertIs<AdminAvailabilityResult.Success>(result)
         assertEquals("/test-project/europe-west1/getAdminAvailabilityConfiguration", requestedPath)
         assertEquals(3, success.config.defaultMaxBookingsPerSlot)
+        assertEquals(20, success.config.defaultSlotIntervalMinutes)
         assertEquals("Segunda a Sexta", success.config.openingHours.single().dayLabel)
         assertEquals("2026-06-10", success.config.capacityOverrides.single().date)
         assertEquals(0, success.config.capacityOverrides.single().maxBookingsPerSlot)
@@ -811,6 +813,7 @@ class KtorAdminFunctionsApiTest {
                 {
                   "result": {
                     "defaultMaxBookingsPerSlot": 4,
+                    "defaultSlotIntervalMinutes": 20,
                     "openingHours": [
                       {
                         "dayLabel": "Segunda a Sexta",
@@ -831,6 +834,7 @@ class KtorAdminFunctionsApiTest {
         val result = api.updateAvailabilityConfiguration(
             AdminAvailabilityUpdateRequest(
                 defaultMaxBookingsPerSlot = 4,
+                defaultSlotIntervalMinutes = 20,
                 openingHours = listOf(
                     AdminBusinessOpeningHours(
                         dayLabel = "Segunda a Sexta",
@@ -846,6 +850,7 @@ class KtorAdminFunctionsApiTest {
         assertEquals("/test-project/europe-west1/updateAvailabilityConfiguration", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals(4, success.config.defaultMaxBookingsPerSlot)
+        assertEquals(20, success.config.defaultSlotIntervalMinutes)
     }
 
     @Test

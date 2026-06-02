@@ -89,6 +89,7 @@ class ProductsBookingViewModelTest {
 
         assertEquals("2026-06-01", repository.lastAvailabilityRequest?.anchorDate)
         assertEquals(45, repository.lastAvailabilityRequest?.serviceDurationMinutes)
+        assertEquals(null, repository.lastAvailabilityRequest?.slotIntervalMinutes)
         assertIs<BookingAvailabilityUiState.Loaded>(viewModel.availabilityState.value)
     }
 

@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 
 internal data class AdminAvailabilityForm(
     val defaultMaxBookingsPerSlot: String = "",
+    val defaultSlotIntervalMinutes: String = "",
     val openingHoursText: String = "",
     val capacityOverrides: List<AdminCapacityOverrideUi> = emptyList(),
     val blockedSlots: List<AdminBlockedSlotUi> = emptyList(),
@@ -455,6 +456,7 @@ private sealed interface ParsedBlockedSlotRequest {
 
 private fun AdminAvailabilityConfig.toForm(): AdminAvailabilityForm = AdminAvailabilityForm(
     defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot.toString(),
+    defaultSlotIntervalMinutes = defaultSlotIntervalMinutes.toString(),
     openingHoursText = openingHours.joinToString("\n") { hours ->
         listOf(
             hours.dayLabel,
@@ -484,12 +486,18 @@ private fun AdminBlockedSlotItem.toUi(): AdminBlockedSlotUi = AdminBlockedSlotUi
 private fun AdminAvailabilityForm.toUpdateRequest(): ParsedAvailabilityRequest {
     val capacity = defaultMaxBookingsPerSlot.trim().toIntOrNull()
         ?: return ParsedAvailabilityRequest.Invalid("Indique uma capacidade válida.")
+    val slotInterval = defaultSlotIntervalMinutes.trim().toIntOrNull()
+        ?: return ParsedAvailabilityRequest.Invalid("Indique um intervalo entre horários válido.")
+    if (slotInterval !in 5..240) {
+        return ParsedAvailabilityRequest.Invalid("O intervalo entre horários deve estar entre 5 e 240 minutos.")
+    }
     val openingHours = openingHoursText.parseAvailabilityOpeningHours()
         ?: return ParsedAvailabilityRequest.Invalid("Revise os horários.")
 
     return ParsedAvailabilityRequest.Valid(
         AdminAvailabilityUpdateRequest(
             defaultMaxBookingsPerSlot = capacity,
+            defaultSlotIntervalMinutes = slotInterval,
             openingHours = openingHours,
         ),
     )
