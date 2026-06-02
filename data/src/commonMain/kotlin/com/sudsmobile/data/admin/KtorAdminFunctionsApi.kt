@@ -1697,6 +1697,8 @@ private data class NotificationCampaignDraftsPayload(
     }
 }
 
+private const val NotificationCampaignDraftSendBlockedReason = "campaign-send-not-implemented"
+
 @Serializable
 private data class NotificationCampaignDraftPayload(
     val campaignId: String = "",
@@ -1723,6 +1725,8 @@ private data class NotificationCampaignDraftPayload(
         val cleanBody = body.trim()
         if (id.isBlank() || cleanTitle.isBlank() || cleanBody.isBlank()) return null
         val normalizedAudience = targetAudience.trim().ifBlank { "test_users" }
+        val normalizedSendBlockedReason = sendBlockedReason.trim()
+            .ifBlank { NotificationCampaignDraftSendBlockedReason }
         return AdminNotificationCampaignDraft(
             campaignId = id,
             title = cleanTitle,
@@ -1733,8 +1737,8 @@ private data class NotificationCampaignDraftPayload(
             status = status.trim().ifBlank { "draft" },
             scheduledAtIso = scheduledAtIso.trim(),
             notes = notes.trim(),
-            sendBlocked = sendBlocked,
-            sendBlockedReason = sendBlockedReason.trim(),
+            sendBlocked = true,
+            sendBlockedReason = normalizedSendBlockedReason,
             createdAtIso = createdAtIso.trim(),
             updatedAtIso = updatedAtIso.trim(),
             archivedAtIso = archivedAtIso.trim(),
@@ -1755,13 +1759,15 @@ private data class NotificationCampaignDraftMutationResultPayload(
     val sendBlockedReason: String = "",
 ) {
     fun toReceipt(): AdminNotificationCampaignDraftMutationReceipt {
+        val normalizedSendBlockedReason = sendBlockedReason.trim()
+            .ifBlank { NotificationCampaignDraftSendBlockedReason }
         return AdminNotificationCampaignDraftMutationReceipt(
             campaignId = campaignId.trim(),
             status = status.trim(),
             created = created,
             targetAudience = targetAudience.trim(),
-            sendBlocked = sendBlocked,
-            sendBlockedReason = sendBlockedReason.trim(),
+            sendBlocked = true,
+            sendBlockedReason = normalizedSendBlockedReason,
         )
     }
 }

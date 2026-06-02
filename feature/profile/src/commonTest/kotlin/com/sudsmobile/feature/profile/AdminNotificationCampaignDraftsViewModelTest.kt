@@ -116,6 +116,26 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
+    fun loadDraftsShowsCampaignDraftsAsBlockedWhenMetadataIsUnsafe() = runTest {
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = FakeCampaignDraftsAdminRepository(
+                loadResult = AdminNotificationCampaignDraftsResult.Success(
+                    campaignDraftsConfig(sendBlocked = false, sendBlockedReason = ""),
+                ),
+            ),
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+
+        val loaded = assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        val draft = loaded.drafts.single()
+        assertEquals(true, draft.sendBlocked)
+        assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
+    }
+
+    @Test
     fun loadDraftsIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<AdminNotificationCampaignDraftsResult>()
         val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
@@ -491,7 +511,10 @@ private fun notificationTestSuccess(campaignId: String): AdminNotificationTestRe
         ),
     )
 
-private fun campaignDraftsConfig(): AdminNotificationCampaignDraftsConfig = AdminNotificationCampaignDraftsConfig(
+private fun campaignDraftsConfig(
+    sendBlocked: Boolean = true,
+    sendBlockedReason: String = "campaign-send-not-implemented",
+): AdminNotificationCampaignDraftsConfig = AdminNotificationCampaignDraftsConfig(
     source = "firestore",
     campaigns = listOf(
         AdminNotificationCampaignDraft(
@@ -504,8 +527,8 @@ private fun campaignDraftsConfig(): AdminNotificationCampaignDraftsConfig = Admi
             status = "draft",
             scheduledAtIso = "",
             notes = "QA",
-            sendBlocked = true,
-            sendBlockedReason = "campaign-send-not-implemented",
+            sendBlocked = sendBlocked,
+            sendBlockedReason = sendBlockedReason,
             createdAtIso = "2026-06-01T10:00:00.000Z",
             updatedAtIso = "2026-06-01T11:30:00.000Z",
             createdByUid = "admin-cr",

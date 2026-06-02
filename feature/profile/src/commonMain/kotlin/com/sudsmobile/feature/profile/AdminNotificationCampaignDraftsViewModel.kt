@@ -409,6 +409,8 @@ private sealed interface ParsedCampaignDraftRequest {
     data class Invalid(val message: String) : ParsedCampaignDraftRequest
 }
 
+private const val CampaignDraftSendBlockedReason = "campaign-send-not-implemented"
+
 private fun List<AdminNotificationCampaignDraft>.toCampaignDraftsState(): AdminNotificationCampaignDraftsUiState {
     val drafts = map { it.toUi() }
     return if (drafts.isEmpty()) {
@@ -419,6 +421,7 @@ private fun List<AdminNotificationCampaignDraft>.toCampaignDraftsState(): AdminN
 }
 
 private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraftUi {
+    val normalizedSendBlockedReason = sendBlockedReason.trim().ifBlank { CampaignDraftSendBlockedReason }
     return AdminNotificationCampaignDraftUi(
         campaignId = campaignId,
         title = title.ifBlank { "Campanha sem título" },
@@ -430,8 +433,8 @@ private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraf
         scheduledAtIso = scheduledAtIso,
         scheduledAtLabel = scheduledAtIso.ifBlank { "Sem agendamento" },
         notes = notes,
-        sendBlocked = sendBlocked,
-        sendBlockedReason = sendBlockedReason,
+        sendBlocked = true,
+        sendBlockedReason = normalizedSendBlockedReason,
         createdAuditLabel = campaignAuditLabel("Criado", createdAtIso, createdByUid),
         updatedAuditLabel = campaignAuditLabel("Atualizado", updatedAtIso, updatedByUid),
         archivedAuditLabel = campaignAuditLabel("Arquivado", archivedAtIso, archivedByUid),

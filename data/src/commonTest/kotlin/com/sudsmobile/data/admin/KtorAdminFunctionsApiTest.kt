@@ -726,10 +726,42 @@ class KtorAdminFunctionsApiTest {
         assertEquals("summer-test", draft.campaignId)
         assertEquals("push", draft.channels.single())
         assertEquals(true, draft.sendBlocked)
+        assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
         assertEquals("2026-06-01T10:00:00.000Z", draft.createdAtIso)
         assertEquals("2026-06-01T11:00:00.000Z", draft.updatedAtIso)
         assertEquals("admin-created", draft.createdByUid)
         assertEquals("admin-updated", draft.updatedByUid)
+    }
+
+    @Test
+    fun mapsAdminNotificationCampaignDraftsAsBlockedWhenCallableReturnsUnsafeSendMetadata() = runTest {
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "campaigns": [
+                      {
+                        "campaignId": "summer-test",
+                        "title": "Oferta verão",
+                        "body": "Campanha apenas em rascunho",
+                        "sendBlocked": false,
+                        "sendBlockedReason": ""
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.getNotificationCampaignDrafts("id-token-1")
+
+        val success = assertIs<AdminNotificationCampaignDraftsResult.Success>(result)
+        val draft = success.config.campaigns.single()
+        assertEquals(true, draft.sendBlocked)
+        assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
     }
 
     @Test
@@ -776,6 +808,39 @@ class KtorAdminFunctionsApiTest {
         assertEquals("summer-test", success.receipt.campaignId)
         assertEquals(true, success.receipt.created)
         assertEquals(true, success.receipt.sendBlocked)
+    }
+
+    @Test
+    fun mapsNotificationCampaignDraftMutationReceiptAsBlockedWhenCallableReturnsUnsafeSendMetadata() = runTest {
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "campaignId": "summer-test",
+                    "status": "draft",
+                    "sendBlocked": false,
+                    "sendBlockedReason": ""
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.upsertNotificationCampaignDraft(
+            AdminNotificationCampaignDraftMutationRequest(
+                campaignId = "summer-test",
+                title = "Oferta verão",
+                body = "Campanha apenas em rascunho",
+                targetAudience = "test_users",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminNotificationCampaignDraftMutationResult.Success>(result)
+        assertEquals(true, success.receipt.sendBlocked)
+        assertEquals("campaign-send-not-implemented", success.receipt.sendBlockedReason)
     }
 
     @Test
