@@ -99,64 +99,72 @@ internal class AdminAccessViewModel(
     private var loadedUid: String? = null
     private var loadedSessionMarker: String? = null
     private var loadingUid: String? = null
+    private var loadingSessionMarker: String? = null
+    private var accessRequestSequence: Long = 0
 
     fun refreshForSession() {
         when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedSession()
-                loadingUid = null
+                clearLoadingSession()
                 _uiState.value = AdminAccessUiState.Loading
             }
             is AuthSessionState.RestoreFailed -> {
                 clearLoadedSession()
-                loadingUid = null
+                clearLoadingSession()
                 _uiState.value = currentSessionState.error.toAdminAccessError()
             }
             AuthSessionState.Unauthenticated -> {
                 clearLoadedSession()
-                loadingUid = null
+                clearLoadingSession()
                 _uiState.value = AdminAccessUiState.NotAdmin
             }
             is AuthSessionState.Authenticated -> {
-                val uid = currentSessionState.session.user.uid
-                val sessionMarker = currentSessionState.session.adminAccessMarker()
+                val requestedSession = currentSessionState.session.toAdminSessionSnapshot()
                 if (
-                    loadedUid == uid &&
-                    loadedSessionMarker == sessionMarker &&
+                    loadedUid == requestedSession.uid &&
+                    loadedSessionMarker == requestedSession.marker &&
                     _uiState.value == AdminAccessUiState.Admin
                 ) {
                     return
                 }
-                syncRole(uid)
+                syncRole(requestedSession)
             }
         }
     }
 
-    private fun syncRole(requestedUid: String) {
-        if (loadingUid == requestedUid) return
+    private fun syncRole(requestedSession: AdminSessionSnapshot) {
+        val sameRequestInFlight = loadingUid == requestedSession.uid &&
+            loadingSessionMarker == requestedSession.marker
+        if (sameRequestInFlight) return
 
-        loadingUid = requestedUid
+        val requestSequence = ++accessRequestSequence
+        loadingUid = requestedSession.uid
+        loadingSessionMarker = requestedSession.marker
         viewModelScope.launch {
-            _uiState.value = AdminAccessUiState.Loading
-            val nextState = when (val result = adminRepository.syncMyRole()) {
-                is AdminRoleResult.Success -> {
-                    if (result.role.isAdmin) AdminAccessUiState.Admin else AdminAccessUiState.NotAdmin
+            try {
+                _uiState.value = AdminAccessUiState.Loading
+                val nextState = when (val result = adminRepository.syncMyRole()) {
+                    is AdminRoleResult.Success -> {
+                        if (result.role.isAdmin) AdminAccessUiState.Admin else AdminAccessUiState.NotAdmin
+                    }
+                    is AdminRoleResult.Failure -> result.error.toAdminAccessState()
                 }
-                is AdminRoleResult.Failure -> result.error.toAdminAccessState()
-            }
+                if (requestSequence != accessRequestSequence) return@launch
 
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid == requestedUid) {
-                val currentSession = (sessionState.value as? AuthSessionState.Authenticated)?.session
-                loadedUid = requestedUid
-                loadedSessionMarker = currentSession?.adminAccessMarker()
-                _uiState.value = nextState
-            } else {
-                clearLoadedSession()
-                _uiState.value = AdminAccessUiState.NotAdmin
-            }
-            if (loadingUid == requestedUid) {
-                loadingUid = null
+                val currentSession = currentAuthenticatedSessionSnapshot()
+                if (currentSession?.uid == requestedSession.uid) {
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = currentSession.marker
+                    _uiState.value = nextState
+                } else {
+                    clearLoadedSession()
+                    _uiState.value = AdminAccessUiState.NotAdmin
+                }
+            } finally {
+                if (requestSequence == accessRequestSequence) {
+                    clearLoadingSession()
+                }
             }
         }
     }
@@ -164,6 +172,17 @@ internal class AdminAccessViewModel(
     private fun clearLoadedSession() {
         loadedUid = null
         loadedSessionMarker = null
+    }
+
+    private fun clearLoadingSession() {
+        loadingUid = null
+        loadingSessionMarker = null
+    }
+
+    private fun currentAuthenticatedSessionSnapshot(): AdminSessionSnapshot? {
+        return (sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.toAdminSessionSnapshot()
     }
 }
 

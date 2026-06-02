@@ -174,6 +174,39 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
+    fun adminAccessStartsNewSyncAndIgnoresStaleResultWhenSameUserSessionTokenChanges() = runTest {
+        val firstRoleResult = CompletableDeferred<AdminRoleResult>()
+        val authRepository = FakeAdminAuthRepository(authenticated = true)
+        val repository = FakeAdminRepository(
+            roleResult = AdminRoleResult.Success(adminRole(role = "customer")),
+            roleResultDeferred = firstRoleResult,
+        )
+        val viewModel = AdminAccessViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<AdminAccessUiState.Loading>(viewModel.uiState.value)
+        assertEquals(1, repository.syncRoleCalls)
+
+        authRepository.authenticate(tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.syncRoleCalls)
+        assertIs<AdminAccessUiState.NotAdmin>(viewModel.uiState.value)
+
+        firstRoleResult.complete(AdminRoleResult.Success(adminRole(role = "admin")))
+        runCurrent()
+
+        assertEquals(2, repository.syncRoleCalls)
+        assertIs<AdminAccessUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun adminAccessStoresRefreshedSessionAfterRoleSync() = runTest {
         val authRepository = FakeAdminAuthRepository(authenticated = true)
         val repository = FakeAdminRepository(
@@ -493,6 +526,7 @@ private class FakeAdminRepository(
     var completeResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
         decisionReceipt(status = "completed"),
     ),
+    private var roleResultDeferred: CompletableDeferred<AdminRoleResult>? = null,
     private var requestsResultDeferred: CompletableDeferred<AdminBookingRequestsResult>? = null,
     private val completeResultDeferred: CompletableDeferred<AdminBookingDecisionResult>? = null,
     private val onSyncRole: (() -> Unit)? = null,
@@ -508,6 +542,11 @@ private class FakeAdminRepository(
     override suspend fun syncMyRole(): AdminRoleResult {
         syncRoleCalls += 1
         onSyncRole?.invoke()
+        val deferred = roleResultDeferred
+        if (deferred != null) {
+            roleResultDeferred = null
+            return deferred.await()
+        }
         return roleResult
     }
 
