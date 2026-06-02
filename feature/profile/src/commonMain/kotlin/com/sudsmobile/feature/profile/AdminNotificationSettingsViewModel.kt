@@ -273,10 +273,18 @@ internal class AdminNotificationSettingsViewModel(
 
             when (result) {
                 is AdminNotificationTestResult.Success -> {
-                    _testState.value = AdminNotificationTestState.Success(
-                        templateLabel = template.label,
-                        message = "Teste de notificação em fila para o seu dispositivo.",
-                    )
+                    if (result.receipt.isCurrentAdminSelfTest(requestedUid)) {
+                        _testState.value = AdminNotificationTestState.Success(
+                            templateLabel = template.label,
+                            message = result.receipt.toSelfTestQueuedMessage("Teste de notificação"),
+                        )
+                    } else {
+                        _testState.value = AdminNotificationTestState.Error(
+                            templateLabel = template.label,
+                            message = UnsafeAdminNotificationTestReceiptMessage,
+                            retryable = false,
+                        )
+                    }
                 }
                 is AdminNotificationTestResult.Failure -> {
                     _testState.value = result.error.toAdminNotificationTestState(template.label)

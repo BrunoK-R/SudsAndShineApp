@@ -236,8 +236,36 @@ class AdminNotificationCampaignDraftsViewModelTest {
         runCurrent()
 
         val success = assertIs<AdminNotificationCampaignDraftMutationState.Success>(viewModel.mutationState.value)
-        assertEquals("Teste de campanha em fila para o seu dispositivo.", success.message)
+        assertEquals("Teste de campanha em fila apenas para o administrador atual.", success.message)
         assertEquals("summer-test", repository.testRequests.single().campaignId)
+    }
+
+    @Test
+    fun sendTestRejectsCampaignReceiptWithoutExplicitCurrentAdminSelfScope() = runTest {
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = FakeCampaignDraftsAdminRepository(
+                testResult = AdminNotificationTestResult.Success(
+                    AdminNotificationTestReceipt(
+                        notificationId = "unsafe-notification",
+                        templateKey = "campaign_draft",
+                        campaignId = "summer-test",
+                        deliveryState = "queued",
+                        recipientUid = "uid-1",
+                        message = "queued",
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.sendTest("summer-test")
+        runCurrent()
+
+        val error = assertIs<AdminNotificationCampaignDraftMutationState.Error>(viewModel.mutationState.value)
+        assertEquals(UnsafeAdminNotificationTestReceiptMessage, error.message)
+        assertEquals(false, error.retryable)
     }
 
     @Test
@@ -458,6 +486,8 @@ private fun notificationTestSuccess(campaignId: String): AdminNotificationTestRe
             deliveryState = "queued",
             recipientUid = "uid-1",
             message = "queued",
+            targetScope = "self",
+            testOnly = true,
         ),
     )
 

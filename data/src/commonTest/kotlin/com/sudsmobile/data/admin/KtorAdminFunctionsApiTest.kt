@@ -653,6 +653,8 @@ class KtorAdminFunctionsApiTest {
                     "templateKey": "booking_request",
                     "deliveryState": "queued",
                     "recipientUid": "admin-1",
+                    "targetScope": "self",
+                    "testOnly": true,
                     "message": "queued"
                   }
                 }
@@ -674,6 +676,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals("test-notification-1", success.receipt.notificationId)
         assertEquals("queued", success.receipt.deliveryState)
+        assertEquals("self", success.receipt.targetScope)
+        assertEquals(true, success.receipt.testOnly)
     }
 
     @Test

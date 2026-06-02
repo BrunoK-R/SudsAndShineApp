@@ -1668,6 +1668,8 @@ private data class NotificationTestResultPayload(
     val campaignId: String = "",
     val deliveryState: String = "",
     val recipientUid: String = "",
+    val targetScope: String = "",
+    val testOnly: Boolean = false,
     val message: String = "",
 ) {
     fun toAdminNotificationTestReceipt(): AdminNotificationTestReceipt = AdminNotificationTestReceipt(
@@ -1676,6 +1678,8 @@ private data class NotificationTestResultPayload(
         campaignId = campaignId.trim(),
         deliveryState = deliveryState.trim(),
         recipientUid = recipientUid.trim(),
+        targetScope = targetScope.trim(),
+        testOnly = testOnly,
         message = message.trim(),
     )
 }

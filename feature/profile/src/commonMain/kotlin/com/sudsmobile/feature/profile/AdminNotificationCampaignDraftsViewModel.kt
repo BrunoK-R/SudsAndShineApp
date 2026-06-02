@@ -364,9 +364,16 @@ internal class AdminNotificationCampaignDraftsViewModel(
                 is AdminNotificationTestResult.Success -> {
                     val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
                     if (latestUid == requestedUid) {
-                        _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
-                            "Teste de campanha em fila para o seu dispositivo.",
-                        )
+                        _mutationState.value = if (result.receipt.isCurrentAdminSelfTest(requestedUid)) {
+                            AdminNotificationCampaignDraftMutationState.Success(
+                                result.receipt.toSelfTestQueuedMessage("Teste de campanha"),
+                            )
+                        } else {
+                            AdminNotificationCampaignDraftMutationState.Error(
+                                message = UnsafeAdminNotificationTestReceiptMessage,
+                                retryable = false,
+                            )
+                        }
                     } else {
                         clearLoadedDrafts()
                         _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated

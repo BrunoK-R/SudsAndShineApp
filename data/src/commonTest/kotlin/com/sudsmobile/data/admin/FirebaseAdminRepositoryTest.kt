@@ -577,6 +577,8 @@ class FirebaseAdminRepositoryTest {
 
         val success = assertIs<AdminNotificationTestResult.Success>(result)
         assertEquals("test-notification-1", success.receipt.notificationId)
+        assertEquals("self", success.receipt.targetScope)
+        assertEquals(true, success.receipt.testOnly)
         assertEquals("id-token-1", api.notificationTestIdTokens.single())
         assertEquals("loyalty_reward", api.notificationTestRequests.single().templateKey)
     }
@@ -1134,6 +1136,8 @@ private class FakeAdminFunctionsApi(
                 deliveryState = "queued",
                 recipientUid = "admin-1",
                 message = "queued",
+                targetScope = "self",
+                testOnly = true,
             ),
         )
     }

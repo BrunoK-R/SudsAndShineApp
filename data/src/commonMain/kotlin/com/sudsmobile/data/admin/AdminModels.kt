@@ -254,6 +254,8 @@ data class AdminNotificationTestReceipt(
     val recipientUid: String,
     val message: String,
     val campaignId: String = "",
+    val targetScope: String = "",
+    val testOnly: Boolean = false,
 )
 
 data class AdminNotificationCampaignDraft(

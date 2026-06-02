@@ -223,7 +223,35 @@ class AdminNotificationSettingsViewModelTest {
 
         val success = assertIs<AdminNotificationTestState.Success>(viewModel.testState.value)
         assertEquals("Pedido recebido", success.templateLabel)
+        assertEquals("Teste de notificação em fila apenas para o administrador atual.", success.message)
         assertEquals("booking_request", repository.testRequests.single().templateKey)
+    }
+
+    @Test
+    fun sendTestRejectsReceiptWithoutExplicitCurrentAdminSelfScope() = runTest {
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = FakeNotificationSettingsAuthRepository(authenticated = true),
+            adminRepository = FakeNotificationSettingsAdminRepository(
+                testResult = AdminNotificationTestResult.Success(
+                    AdminNotificationTestReceipt(
+                        notificationId = "unsafe-notification",
+                        templateKey = "booking_request",
+                        deliveryState = "queued",
+                        recipientUid = "uid-1",
+                        message = "queued",
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.sendTest("booking_request")
+        runCurrent()
+
+        val error = assertIs<AdminNotificationTestState.Error>(viewModel.testState.value)
+        assertEquals(UnsafeAdminNotificationTestReceiptMessage, error.message)
+        assertEquals(false, error.retryable)
     }
 
     @Test
@@ -443,8 +471,10 @@ private fun notificationTestSuccess(templateKey: String): AdminNotificationTestR
             notificationId = "test-notification-1",
             templateKey = templateKey,
             deliveryState = "queued",
-            recipientUid = "admin-1",
+            recipientUid = "uid-1",
             message = "queued",
+            targetScope = "self",
+            testOnly = true,
         ),
     )
 
