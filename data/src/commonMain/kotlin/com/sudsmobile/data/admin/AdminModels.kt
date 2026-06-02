@@ -31,6 +31,12 @@ data class AdminBookingRequest(
     val createdAtIso: String,
     val pendingExpiresAtIso: String?,
     val loyaltyRewardApplied: Boolean,
+    val acceptedAtIso: String? = null,
+    val acceptedByUid: String = "",
+    val rejectedAtIso: String? = null,
+    val rejectedByUid: String = "",
+    val completedAtIso: String? = null,
+    val completedByUid: String = "",
 )
 
 data class AdminBookingDecisionRequest(

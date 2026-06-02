@@ -130,7 +130,9 @@ class KtorAdminFunctionsApiTest {
                         "paymentStatus": "paid",
                         "vehicleType": "passageiros",
                         "priceCents": 3200,
-                        "createdAt": "2026-05-29T09:00:00.000Z"
+                        "createdAt": "2026-05-29T09:00:00.000Z",
+                        "acceptedAt": "2026-05-29T10:15:00.000Z",
+                        "acceptedByUid": " admin-uid "
                       }
                     ]
                   }
@@ -150,6 +152,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("reservation-2", request.id)
         assertEquals("confirmed", request.status)
         assertEquals("paid", request.paymentStatus)
+        assertEquals("2026-05-29T10:15:00.000Z", request.acceptedAtIso)
+        assertEquals("admin-uid", request.acceptedByUid)
     }
 
     @Test

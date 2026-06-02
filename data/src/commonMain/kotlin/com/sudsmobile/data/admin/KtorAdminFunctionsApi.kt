@@ -1341,6 +1341,12 @@ private data class AdminBookingRequestPayload(
     val createdAt: String = "",
     val pendingExpiresAt: String? = null,
     val loyaltyRewardApplied: Boolean = false,
+    val acceptedAt: String? = null,
+    val acceptedByUid: String = "",
+    val rejectedAt: String? = null,
+    val rejectedByUid: String = "",
+    val completedAt: String? = null,
+    val completedByUid: String = "",
 ) {
     fun toAdminBookingRequest(): AdminBookingRequest = AdminBookingRequest(
         id = id,
@@ -1362,6 +1368,12 @@ private data class AdminBookingRequestPayload(
         createdAtIso = createdAt,
         pendingExpiresAtIso = pendingExpiresAt,
         loyaltyRewardApplied = loyaltyRewardApplied,
+        acceptedAtIso = acceptedAt,
+        acceptedByUid = acceptedByUid.trim(),
+        rejectedAtIso = rejectedAt,
+        rejectedByUid = rejectedByUid.trim(),
+        completedAtIso = completedAt,
+        completedByUid = completedByUid.trim(),
     )
 }
 

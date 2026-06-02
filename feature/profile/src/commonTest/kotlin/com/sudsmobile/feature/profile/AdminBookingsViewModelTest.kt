@@ -284,6 +284,8 @@ class AdminBookingsViewModelTest {
                     adminBookingRequest(
                         id = "reservation-2",
                         status = "confirmed",
+                        acceptedAtIso = "2026-05-29T10:15:00.000Z",
+                        acceptedByUid = "admin-uid",
                     ),
                 ),
             ),
@@ -301,6 +303,10 @@ class AdminBookingsViewModelTest {
         assertEquals("reservation-2", loaded.completableRequests.single().id)
         assertEquals("Confirmada", loaded.completableRequests.single().statusLabel)
         assertEquals("Pronta a concluir", loaded.completableRequests.single().statusDetail)
+        assertEquals(
+            "Aceite em 29 de maio, 2026 às 10:15 por admin-uid",
+            loaded.completableRequests.single().auditLabels.single(),
+        )
     }
 
     @Test
@@ -728,6 +734,8 @@ private fun adminBookingRequest(
     customerName: String = "Bruno Ribeiro",
     status: String = "pending",
     extras: List<BookingReservationExtra> = emptyList(),
+    acceptedAtIso: String? = null,
+    acceptedByUid: String = "",
 ): AdminBookingRequest = AdminBookingRequest(
     id = id,
     reservationCode = "SS-0001",
@@ -748,4 +756,6 @@ private fun adminBookingRequest(
     createdAtIso = "2026-05-29T08:00:00.000Z",
     pendingExpiresAtIso = "2026-05-30T08:00:00.000Z",
     loyaltyRewardApplied = false,
+    acceptedAtIso = acceptedAtIso,
+    acceptedByUid = acceptedByUid,
 )

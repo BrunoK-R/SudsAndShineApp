@@ -47,6 +47,7 @@ internal data class AdminBookingRequestUi(
     val createdAt: String,
     val expiresAt: String,
     val loyaltyRewardApplied: Boolean,
+    val auditLabels: List<String>,
 )
 
 internal data class AdminBookingExtraUi(
@@ -486,6 +487,7 @@ private fun AdminBookingRequest.toUi(): AdminBookingRequestUi = AdminBookingRequ
     createdAt = createdAtIso.toDateTimeLabel() ?: "Data a confirmar",
     expiresAt = pendingExpiresAtIso?.toDateTimeLabel() ?: "Sem expiração automática",
     loyaltyRewardApplied = loyaltyRewardApplied,
+    auditLabels = decisionAuditLabels(),
 )
 
 private fun List<BookingReservationExtra>.toAdminExtraUi(): List<AdminBookingExtraUi> {
@@ -508,6 +510,29 @@ private fun AdminError.toAdminAccessState(): AdminAccessUiState {
         is AdminError.Validation,
         is AdminError.NotFound,
         is AdminError.Conflict -> AdminAccessUiState.Error(message = message, retryable = false)
+    }
+}
+
+private fun AdminBookingRequest.decisionAuditLabels(): List<String> {
+    return listOfNotNull(
+        decisionAuditLabel("Aceite", acceptedAtIso, acceptedByUid),
+        decisionAuditLabel("Rejeitada", rejectedAtIso, rejectedByUid),
+        decisionAuditLabel("Concluída", completedAtIso, completedByUid),
+    )
+}
+
+private fun decisionAuditLabel(
+    action: String,
+    atIso: String?,
+    byUid: String,
+): String? {
+    val atLabel = atIso?.toDateTimeLabel()
+    val actor = byUid.trim().takeIf { it.isNotBlank() }
+    return when {
+        atLabel != null && actor != null -> "$action em $atLabel por $actor"
+        atLabel != null -> "$action em $atLabel"
+        actor != null -> "$action por $actor"
+        else -> null
     }
 }
 

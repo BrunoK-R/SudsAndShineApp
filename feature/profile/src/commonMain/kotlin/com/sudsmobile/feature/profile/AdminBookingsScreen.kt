@@ -458,6 +458,9 @@ private fun AdminBookingRequestCard(
             AdminField(label = "Preço", value = request.price)
             AdminField(label = "Pagamento", value = request.paymentStatus)
             AdminField(label = "Criado", value = request.createdAt)
+            if (request.auditLabels.isNotEmpty()) {
+                AdminField(label = "Auditoria", value = request.auditLabels.joinToString(separator = "\n"))
+            }
             if (request.extras.isNotEmpty()) {
                 AdminField(
                     label = "Extras",
