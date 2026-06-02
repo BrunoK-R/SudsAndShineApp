@@ -18,15 +18,15 @@ class AndroidNotificationDeviceRegistrar(
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
 
-    override suspend fun currentState(): NotificationDeviceRegistrationState {
+    override suspend fun currentState(userUid: String): NotificationDeviceRegistrationState {
         return NotificationDeviceRegistrationState(
             permissionStatus = currentPermissionStatus(),
-            registeredTokenId = preferences.getString(RegisteredTokenIdKey, null),
+            registeredTokenId = preferences.getString(registeredTokenIdKey(userUid), null),
             platform = NotificationTokenPlatform.Android,
         )
     }
 
-    override suspend fun buildRegistrationRequest(): NotificationDeviceRegistrationRequestResult {
+    override suspend fun buildRegistrationRequest(userUid: String): NotificationDeviceRegistrationRequestResult {
         val permissionStatus = currentPermissionStatus()
         if (permissionStatus == NotificationDevicePermissionStatus.RequiresPermission) {
             return NotificationDeviceRegistrationRequestResult.PermissionRequired(
@@ -54,13 +54,28 @@ class AndroidNotificationDeviceRegistrar(
         }
     }
 
-    override suspend fun markRegistered(tokenId: String) {
-        preferences.edit().putString(RegisteredTokenIdKey, tokenId).apply()
+    override suspend fun markRegistered(userUid: String, tokenId: String) {
+        preferences.edit().putString(registeredTokenIdKey(userUid), tokenId).apply()
     }
 
-    override suspend fun markDeleted(tokenId: String) {
+    override suspend fun markDeleted(userUid: String, tokenId: String) {
+        val userKey = registeredTokenIdKey(userUid)
+        val editor = preferences.edit()
+        if (preferences.getString(userKey, null) == tokenId) {
+            editor.remove(userKey)
+        }
         if (preferences.getString(RegisteredTokenIdKey, null) == tokenId) {
-            preferences.edit().remove(RegisteredTokenIdKey).apply()
+            editor.remove(RegisteredTokenIdKey)
+        }
+        editor.apply()
+    }
+
+    private fun registeredTokenIdKey(userUid: String): String {
+        val cleanUid = userUid.trim()
+        return if (cleanUid.isBlank()) {
+            RegisteredTokenIdKey
+        } else {
+            "$RegisteredTokenIdKey:$cleanUid"
         }
     }
 

@@ -240,13 +240,13 @@ internal class NotificationPreferencesViewModel(
         viewModelScope.launch {
             _deviceState.value = NotificationDeviceUiState.Registering
 
-            when (val requestResult = notificationDeviceRegistrar.buildRegistrationRequest()) {
+            when (val requestResult = notificationDeviceRegistrar.buildRegistrationRequest(requestedUid)) {
                 is NotificationDeviceRegistrationRequestResult.Success -> {
                     if (!isSameAuthenticatedUser(requestedUid, requestSequence)) return@launch
                     when (val result = notificationRepository.registerNotificationToken(requestResult.request)) {
                         is com.sudsmobile.data.notification.NotificationTokenRegistrationResult.Success -> {
                             if (!isSameAuthenticatedUser(requestedUid, requestSequence)) return@launch
-                            notificationDeviceRegistrar.markRegistered(result.tokenId)
+                            notificationDeviceRegistrar.markRegistered(requestedUid, result.tokenId)
                             _deviceState.value = NotificationDeviceUiState.Success(
                                 message = "Este dispositivo está pronto para receber notificações.",
                                 registeredTokenId = result.tokenId,
@@ -316,7 +316,7 @@ internal class NotificationPreferencesViewModel(
             ) {
                 is com.sudsmobile.data.notification.NotificationTokenDeleteResult.Success -> {
                     if (!isSameAuthenticatedUser(requestedUid, requestSequence)) return@launch
-                    notificationDeviceRegistrar.markDeleted(result.tokenId)
+                    notificationDeviceRegistrar.markDeleted(requestedUid, result.tokenId)
                     _deviceState.value = NotificationDeviceUiState.Success(
                         message = "Este dispositivo deixou de receber notificações.",
                         registeredTokenId = null,
@@ -354,7 +354,7 @@ internal class NotificationPreferencesViewModel(
         val requestSequence = ++deviceSequence
         viewModelScope.launch {
             _deviceState.value = NotificationDeviceUiState.Checking
-            val state = notificationDeviceRegistrar.currentState()
+            val state = notificationDeviceRegistrar.currentState(uid)
             if (requestSequence != deviceSequence) return@launch
 
             val currentUid = authenticatedUidOrNull()

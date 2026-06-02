@@ -10,8 +10,8 @@ class NotificationDeviceRegistrarTest {
     fun unsupportedRegistrarReportsPlatformUnavailable() = runTest {
         val registrar = UnsupportedNotificationDeviceRegistrar()
 
-        val state = registrar.currentState()
-        val request = registrar.buildRegistrationRequest()
+        val state = registrar.currentState("uid-1")
+        val request = registrar.buildRegistrationRequest("uid-1")
 
         assertEquals(NotificationDevicePermissionStatus.Unsupported, state.permissionStatus)
         assertEquals(null, state.registeredTokenId)

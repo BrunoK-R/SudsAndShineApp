@@ -25,26 +25,26 @@ sealed interface NotificationDeviceRegistrationRequestResult {
 }
 
 interface NotificationDeviceRegistrar {
-    suspend fun currentState(): NotificationDeviceRegistrationState
-    suspend fun buildRegistrationRequest(): NotificationDeviceRegistrationRequestResult
-    suspend fun markRegistered(tokenId: String)
-    suspend fun markDeleted(tokenId: String)
+    suspend fun currentState(userUid: String): NotificationDeviceRegistrationState
+    suspend fun buildRegistrationRequest(userUid: String): NotificationDeviceRegistrationRequestResult
+    suspend fun markRegistered(userUid: String, tokenId: String)
+    suspend fun markDeleted(userUid: String, tokenId: String)
 }
 
 class UnsupportedNotificationDeviceRegistrar : NotificationDeviceRegistrar {
-    override suspend fun currentState(): NotificationDeviceRegistrationState {
+    override suspend fun currentState(userUid: String): NotificationDeviceRegistrationState {
         return NotificationDeviceRegistrationState(
             permissionStatus = NotificationDevicePermissionStatus.Unsupported,
         )
     }
 
-    override suspend fun buildRegistrationRequest(): NotificationDeviceRegistrationRequestResult {
+    override suspend fun buildRegistrationRequest(userUid: String): NotificationDeviceRegistrationRequestResult {
         return NotificationDeviceRegistrationRequestResult.Unsupported(
             "As notificações push ainda não estão disponíveis nesta plataforma.",
         )
     }
 
-    override suspend fun markRegistered(tokenId: String) = Unit
+    override suspend fun markRegistered(userUid: String, tokenId: String) = Unit
 
-    override suspend fun markDeleted(tokenId: String) = Unit
+    override suspend fun markDeleted(userUid: String, tokenId: String) = Unit
 }

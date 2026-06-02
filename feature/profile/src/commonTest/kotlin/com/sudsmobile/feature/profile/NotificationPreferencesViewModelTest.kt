@@ -195,7 +195,9 @@ class NotificationPreferencesViewModelTest {
         val state = assertIs<NotificationDeviceUiState.Success>(viewModel.deviceState.value)
         assertEquals("token-id-1", state.registeredTokenId)
         assertEquals(notificationTokenRequest(), repository.registerRequests.single())
+        assertEquals(listOf("uid-1"), registrar.registrationRequestUserUids)
         assertEquals(listOf("token-id-1"), registrar.markedRegisteredTokenIds)
+        assertEquals(listOf("uid-1" to "token-id-1"), registrar.markedRegisteredCalls)
     }
 
     @Test
@@ -217,6 +219,43 @@ class NotificationPreferencesViewModelTest {
 
         assertIs<NotificationDeviceUiState.Unauthenticated>(viewModel.deviceState.value)
         assertEquals(0, repository.registerRequests.size)
+    }
+
+    @Test
+    fun refreshDeviceStateUsesCurrentUserScopeAfterUserSwitch() = runTest {
+        val authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true)
+        val registrar = FakeNotificationDeviceRegistrar(
+            currentStatesByUid = mapOf(
+                "uid-1" to NotificationDeviceRegistrationState(
+                    permissionStatus = NotificationDevicePermissionStatus.Granted,
+                    registeredTokenId = "token-for-uid-1",
+                    platform = NotificationTokenPlatform.Android,
+                ),
+                "uid-2" to NotificationDeviceRegistrationState(
+                    permissionStatus = NotificationDevicePermissionStatus.Granted,
+                    registeredTokenId = null,
+                    platform = NotificationTokenPlatform.Android,
+                ),
+            ),
+        )
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = authRepository,
+            notificationRepository = FakeNotificationPreferencesRepository(),
+            notificationDeviceRegistrar = registrar,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+        val firstState = assertIs<NotificationDeviceUiState.Ready>(viewModel.deviceState.value)
+        assertEquals("token-for-uid-1", firstState.registeredTokenId)
+
+        authRepository.authenticateAs("uid-2")
+        viewModel.refreshForSession(force = true)
+        runCurrent()
+
+        val secondState = assertIs<NotificationDeviceUiState.Ready>(viewModel.deviceState.value)
+        assertEquals(null, secondState.registeredTokenId)
+        assertEquals(listOf("uid-1", "uid-2"), registrar.currentStateUserUids)
     }
 
     @Test
@@ -282,6 +321,7 @@ class NotificationPreferencesViewModelTest {
         assertEquals(null, state.registeredTokenId)
         assertEquals(NotificationTokenDeleteRequest("token-id-1"), repository.deleteRequests.single())
         assertEquals(listOf("token-id-1"), registrar.markedDeletedTokenIds)
+        assertEquals(listOf("uid-1" to "token-id-1"), registrar.markedDeletedCalls)
     }
 
     @Test
@@ -312,6 +352,7 @@ class NotificationPreferencesViewModelTest {
 
         assertEquals(listOf(NotificationTokenDeleteRequest("token-id-1")), repository.deleteRequests)
         assertEquals(listOf("token-id-1"), registrar.markedDeletedTokenIds)
+        assertEquals(listOf("uid-1" to "token-id-1"), registrar.markedDeletedCalls)
     }
 }
 
@@ -368,27 +409,36 @@ private class FakeNotificationDeviceRegistrar(
         registeredTokenId = null,
         platform = NotificationTokenPlatform.Android,
     ),
+    private val currentStatesByUid: Map<String, NotificationDeviceRegistrationState> = emptyMap(),
     private val requestResult: NotificationDeviceRegistrationRequestResult =
         NotificationDeviceRegistrationRequestResult.Success(notificationTokenRequest()),
     private val requestDeferred: CompletableDeferred<NotificationDeviceRegistrationRequestResult>? = null,
 ) : NotificationDeviceRegistrar {
-    val markedRegisteredTokenIds = mutableListOf<String>()
-    val markedDeletedTokenIds = mutableListOf<String>()
+    val currentStateUserUids = mutableListOf<String>()
+    val registrationRequestUserUids = mutableListOf<String>()
+    val markedRegisteredCalls = mutableListOf<Pair<String, String>>()
+    val markedDeletedCalls = mutableListOf<Pair<String, String>>()
+    val markedRegisteredTokenIds: List<String>
+        get() = markedRegisteredCalls.map { it.second }
+    val markedDeletedTokenIds: List<String>
+        get() = markedDeletedCalls.map { it.second }
 
-    override suspend fun currentState(): NotificationDeviceRegistrationState {
-        return currentState
+    override suspend fun currentState(userUid: String): NotificationDeviceRegistrationState {
+        currentStateUserUids += userUid
+        return currentStatesByUid[userUid] ?: currentState
     }
 
-    override suspend fun buildRegistrationRequest(): NotificationDeviceRegistrationRequestResult {
+    override suspend fun buildRegistrationRequest(userUid: String): NotificationDeviceRegistrationRequestResult {
+        registrationRequestUserUids += userUid
         return requestDeferred?.await() ?: requestResult
     }
 
-    override suspend fun markRegistered(tokenId: String) {
-        markedRegisteredTokenIds += tokenId
+    override suspend fun markRegistered(userUid: String, tokenId: String) {
+        markedRegisteredCalls += userUid to tokenId
     }
 
-    override suspend fun markDeleted(tokenId: String) {
-        markedDeletedTokenIds += tokenId
+    override suspend fun markDeleted(userUid: String, tokenId: String) {
+        markedDeletedCalls += userUid to tokenId
     }
 }
 
@@ -424,6 +474,10 @@ private class FakeNotificationPreferencesAuthRepository(
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
         error("Not used")
+    }
+
+    fun authenticateAs(uid: String) {
+        mutableSessionState.value = AuthSessionState.Authenticated(authSession(uid))
     }
 
     override fun signOut() {
