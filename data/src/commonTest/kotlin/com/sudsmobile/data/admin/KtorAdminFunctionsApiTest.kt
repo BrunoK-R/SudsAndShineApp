@@ -200,6 +200,9 @@ class KtorAdminFunctionsApiTest {
                     "addressLine2": "Leiria, Portugal",
                     "mapsUri": "https://maps.example.test",
                     "whatsappUri": "https://wa.me/351913005855",
+                    "source": "firestore",
+                    "updatedAtIso": "2026-06-01T10:15:00.000Z",
+                    "updatedByUid": " admin-business ",
                     "openingHours": [
                       {
                         "dayLabel": "Segunda a Sexta",
@@ -229,6 +232,9 @@ class KtorAdminFunctionsApiTest {
         assertEquals("913 005 855", success.config.phone)
         assertEquals("Segunda a Sexta", success.config.openingHours.single().dayLabel)
         assertEquals("Instagram", success.config.socialLinks.single().label)
+        assertEquals("firestore", success.config.source)
+        assertEquals("2026-06-01T10:15:00.000Z", success.config.updatedAtIso)
+        assertEquals("admin-business", success.config.updatedByUid)
     }
 
     @Test

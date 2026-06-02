@@ -1534,6 +1534,9 @@ private data class BusinessInfoResultPayload(
     val whatsappUri: String = "",
     val openingHours: List<BusinessOpeningHoursPayload> = emptyList(),
     val socialLinks: List<BusinessSocialLinkPayload> = emptyList(),
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 ) {
     fun toAdminBusinessInfoConfig(): AdminBusinessInfoConfig = AdminBusinessInfoConfig(
         phone = phone.trim(),
@@ -1544,6 +1547,9 @@ private data class BusinessInfoResultPayload(
         whatsappUri = whatsappUri.trim(),
         openingHours = openingHours.map { it.toAdminOpeningHours() },
         socialLinks = socialLinks.map { it.toAdminSocialLink() },
+        source = source.trim(),
+        updatedAtIso = updatedAtIso.trim(),
+        updatedByUid = updatedByUid.trim(),
     )
 }
 

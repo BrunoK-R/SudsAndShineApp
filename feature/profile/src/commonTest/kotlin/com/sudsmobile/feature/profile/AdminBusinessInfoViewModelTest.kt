@@ -93,6 +93,28 @@ class AdminBusinessInfoViewModelTest {
     }
 
     @Test
+    fun loadConfigurationShowsBusinessInfoAuditLabel() = runTest {
+        val repository = FakeBusinessInfoAdminRepository(
+            loadResult = AdminBusinessInfoResult.Success(
+                adminBusinessInfoConfig(
+                    updatedAtIso = "2026-06-01T10:15:00.000Z",
+                    updatedByUid = "admin-business-long",
+                ),
+            ),
+        )
+        val viewModel = AdminBusinessInfoViewModel(
+            authRepository = FakeBusinessInfoAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+
+        val loaded = assertIs<AdminBusinessInfoUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Atualizado 2026-06-01 10:15 UTC por admin-bu...", loaded.form.updatedAuditLabel)
+    }
+
+    @Test
     fun loadConfigurationIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<AdminBusinessInfoResult>()
         val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
@@ -340,6 +362,8 @@ private fun businessInfoAuthenticatedSession(): AuthSessionState.Authenticated {
 
 private fun adminBusinessInfoConfig(
     phone: String = "913 005 855",
+    updatedAtIso: String = "",
+    updatedByUid: String = "",
 ): AdminBusinessInfoConfig = AdminBusinessInfoConfig(
     phone = phone,
     email = "info@sudsshine.pt",
@@ -360,4 +384,6 @@ private fun adminBusinessInfoConfig(
             uri = "https://instagram.com/sudsshine",
         ),
     ),
+    updatedAtIso = updatedAtIso,
+    updatedByUid = updatedByUid,
 )

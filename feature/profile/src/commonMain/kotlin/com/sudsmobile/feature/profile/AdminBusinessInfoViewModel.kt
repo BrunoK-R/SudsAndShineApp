@@ -26,6 +26,7 @@ internal data class AdminBusinessInfoForm(
     val whatsappUri: String = "",
     val openingHoursText: String = "",
     val socialLinksText: String = "",
+    val updatedAuditLabel: String = "",
 )
 
 internal sealed interface AdminBusinessInfoUiState {
@@ -226,7 +227,30 @@ private fun AdminBusinessInfoConfig.toForm(): AdminBusinessInfoForm = AdminBusin
     socialLinksText = socialLinks.joinToString("\n") { link ->
         "${link.label} | ${link.uri}"
     },
+    updatedAuditLabel = businessInfoAuditLabel(updatedAtIso, updatedByUid),
 )
+
+private fun businessInfoAuditLabel(timestampIso: String, actorUid: String): String {
+    val timestampLabel = timestampIso.toBusinessInfoAuditDateTimeLabel() ?: return ""
+    val actorLabel = actorUid.trim().takeIf { it.isNotBlank() }?.toShortBusinessInfoAuditUid()
+        ?.let { " por $it" }
+        .orEmpty()
+    return "Atualizado $timestampLabel$actorLabel"
+}
+
+private fun String.toBusinessInfoAuditDateTimeLabel(): String? {
+    val value = trim()
+    if (value.isBlank()) return null
+    val date = value.substringBefore("T", missingDelimiterValue = "")
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    if (date.length != 10 || time.length != 5) return value
+    return "$date $time UTC"
+}
+
+private fun String.toShortBusinessInfoAuditUid(): String {
+    val value = trim()
+    return if (value.length <= 12) value else "${value.take(8)}..."
+}
 
 private fun AdminBusinessInfoForm.toUpdateRequest(): ParsedBusinessInfoRequest {
     val openingHours = openingHoursText.parseOpeningHours()

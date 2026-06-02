@@ -135,6 +135,9 @@ data class AdminBusinessInfoConfig(
     val whatsappUri: String,
     val openingHours: List<AdminBusinessOpeningHours>,
     val socialLinks: List<AdminBusinessSocialLink>,
+    val source: String = "",
+    val updatedAtIso: String = "",
+    val updatedByUid: String = "",
 )
 
 data class AdminBusinessOpeningHours(
