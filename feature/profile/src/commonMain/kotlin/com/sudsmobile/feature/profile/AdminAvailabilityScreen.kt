@@ -368,18 +368,21 @@ private fun AdminAvailabilityFormCard(
                 value = form.defaultMaxBookingsPerSlot,
                 onValueChange = { onFormChange(form.copy(defaultMaxBookingsPerSlot = it)) },
                 label = "Capacidade por horário",
+                enabled = !saving,
                 singleLine = true,
             )
             AdminAvailabilityTextField(
                 value = form.defaultSlotIntervalMinutes,
                 onValueChange = { onFormChange(form.copy(defaultSlotIntervalMinutes = it)) },
                 label = "Intervalo entre horários (min)",
+                enabled = !saving,
                 singleLine = true,
             )
             AdminAvailabilityTextField(
                 value = form.openingHoursText,
                 onValueChange = { onFormChange(form.copy(openingHoursText = it)) },
                 label = "Horários",
+                enabled = !saving,
                 minLines = 5,
             )
 
@@ -426,12 +429,14 @@ private fun AdminAvailabilityFormCard(
                 value = form.overrideDate,
                 onValueChange = { onFormChange(form.copy(overrideDate = it)) },
                 label = "Data da exceção (AAAA-MM-DD)",
+                enabled = !saving,
                 singleLine = true,
             )
             AdminAvailabilityTextField(
                 value = form.overrideMaxBookingsPerSlot,
                 onValueChange = { onFormChange(form.copy(overrideMaxBookingsPerSlot = it)) },
                 label = "Capacidade nessa data",
+                enabled = !saving,
                 singleLine = true,
             )
 
@@ -487,6 +492,7 @@ private fun AdminAvailabilityFormCard(
                 value = form.blockedDate,
                 onValueChange = { onFormChange(form.copy(blockedDate = it)) },
                 label = "Data do bloqueio (AAAA-MM-DD)",
+                enabled = !saving,
                 singleLine = true,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -494,6 +500,7 @@ private fun AdminAvailabilityFormCard(
                     value = form.blockedStartTime,
                     onValueChange = { onFormChange(form.copy(blockedStartTime = it)) },
                     label = "Início",
+                    enabled = !saving,
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
@@ -501,6 +508,7 @@ private fun AdminAvailabilityFormCard(
                     value = form.blockedEndTime,
                     onValueChange = { onFormChange(form.copy(blockedEndTime = it)) },
                     label = "Fim",
+                    enabled = !saving,
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
@@ -509,6 +517,7 @@ private fun AdminAvailabilityFormCard(
                 value = form.blockedReason,
                 onValueChange = { onFormChange(form.copy(blockedReason = it)) },
                 label = "Motivo",
+                enabled = !saving,
                 singleLine = true,
             )
 
@@ -698,6 +707,7 @@ private fun AdminAvailabilityTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
     singleLine: Boolean = false,
     minLines: Int = 1,
@@ -705,6 +715,7 @@ private fun AdminAvailabilityTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        enabled = enabled,
         modifier = modifier.fillMaxWidth(),
         singleLine = singleLine,
         minLines = minLines,

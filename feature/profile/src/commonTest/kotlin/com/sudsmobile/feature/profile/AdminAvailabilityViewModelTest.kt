@@ -234,6 +234,35 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun updateFormIgnoresChangesWhileAvailabilitySaveIsInFlight() = runTest {
+        val deferred = CompletableDeferred<AdminAvailabilityResult>()
+        val repository = FakeAvailabilityAdminRepository(updateResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.save()
+        runCurrent()
+        viewModel.updateForm(loaded.form.copy(defaultMaxBookingsPerSlot = "9"))
+
+        assertIs<AdminAvailabilitySaveState.Saving>(viewModel.saveState.value)
+        assertEquals(
+            loaded.form,
+            assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value).form,
+        )
+
+        deferred.complete(AdminAvailabilityResult.Success(adminAvailabilityConfig(defaultMaxBookingsPerSlot = 3)))
+        runCurrent()
+
+        val saved = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("3", saved.form.defaultMaxBookingsPerSlot)
+    }
+
+    @Test
     fun saveCapacityOverrideSubmitsParsedDateCapacityAndReloads() = runTest {
         val repository = FakeAvailabilityAdminRepository()
         val viewModel = AdminAvailabilityViewModel(
@@ -375,6 +404,47 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun saveBlockedSlotIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBlockedSlotMutationResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(
+            upsertBlockedSlotResultDeferred = deferred,
+            loadResults = ArrayDeque(
+                listOf(
+                    AdminAvailabilityResult.Success(adminAvailabilityConfig(defaultMaxBookingsPerSlot = 2)),
+                    AdminAvailabilityResult.Success(adminAvailabilityConfig(defaultMaxBookingsPerSlot = 5)),
+                ),
+            ),
+        )
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(
+            loaded.form.copy(
+                blockedDate = "2026-06-10",
+                blockedStartTime = "09:30",
+                blockedEndTime = "11:00",
+            ),
+        )
+        viewModel.saveBlockedSlot()
+        runCurrent()
+        authRepository.switchTo("uid-2")
+        deferred.complete(AdminBlockedSlotMutationResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals("2026-06-10", repository.upsertBlockedSlotRequests.single().date)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilitySaveState.Idle>(viewModel.saveState.value)
+        val reloaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("5", reloaded.form.defaultMaxBookingsPerSlot)
+    }
+
+    @Test
     fun clearBlockedSlotSubmitsIdAndReloads() = runTest {
         val repository = FakeAvailabilityAdminRepository()
         val viewModel = AdminAvailabilityViewModel(
@@ -398,7 +468,9 @@ private class FakeAvailabilityAdminRepository(
     var updateResult: AdminAvailabilityResult = AdminAvailabilityResult.Success(adminAvailabilityConfig()),
     private val loadResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
     private val loadResults: ArrayDeque<AdminAvailabilityResult>? = null,
+    private val updateResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
     private val upsertCapacityOverrideResultDeferred: CompletableDeferred<AdminCapacityOverrideMutationResult>? = null,
+    private val upsertBlockedSlotResultDeferred: CompletableDeferred<AdminBlockedSlotMutationResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
@@ -443,7 +515,7 @@ private class FakeAvailabilityAdminRepository(
         request: AdminAvailabilityUpdateRequest,
     ): AdminAvailabilityResult {
         updateRequests += request
-        return updateResult
+        return updateResultDeferred?.await() ?: updateResult
     }
 
     override suspend fun upsertCapacityOverride(
@@ -475,7 +547,7 @@ private class FakeAvailabilityAdminRepository(
         request: AdminBlockedSlotUpsertRequest,
     ): AdminBlockedSlotMutationResult {
         upsertBlockedSlotRequests += request
-        return AdminBlockedSlotMutationResult.Success(
+        return upsertBlockedSlotResultDeferred?.await() ?: AdminBlockedSlotMutationResult.Success(
             AdminBlockedSlotMutationReceipt(
                 blockedSlotId = request.blockedSlotId.ifBlank { "block-1" },
                 date = request.date,

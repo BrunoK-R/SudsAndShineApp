@@ -167,6 +167,7 @@ internal class AdminAvailabilityViewModel(
     }
 
     fun updateForm(form: AdminAvailabilityForm) {
+        if (_saveState.value == AdminAvailabilitySaveState.Saving) return
         if (_uiState.value is AdminAvailabilityUiState.Loaded) {
             _uiState.value = AdminAvailabilityUiState.Loaded(form)
             _saveState.value = AdminAvailabilitySaveState.Idle
