@@ -75,7 +75,9 @@ class AdminBookingsViewModelTest {
         viewModel.refreshForSession()
         runCurrent()
 
-        assertIs<AdminAccessUiState.Admin>(viewModel.uiState.value)
+        val admin = assertIs<AdminAccessUiState.Admin>(viewModel.uiState.value)
+        assertEquals("admin@example.com", admin.email)
+        assertEquals("Administrador", admin.roleLabel)
         assertEquals(1, repository.syncRoleCalls)
     }
 
@@ -243,6 +245,30 @@ class AdminBookingsViewModelTest {
 
         assertIs<AdminAccessUiState.Admin>(viewModel.uiState.value)
         assertEquals(1, repository.syncRoleCalls)
+    }
+
+    @Test
+    fun adminAccessForceRefreshResyncsLoadedAdminRole() = runTest {
+        val repository = FakeAdminRepository(
+            roleResult = AdminRoleResult.Success(adminRole(role = "admin")),
+        )
+        val viewModel = AdminAccessViewModel(
+            authRepository = FakeAdminAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<AdminAccessUiState.Admin>(viewModel.uiState.value)
+        assertEquals(1, repository.syncRoleCalls)
+
+        repository.roleResult = AdminRoleResult.Success(adminRole(role = "customer"))
+        viewModel.refreshForSession(force = true)
+        runCurrent()
+
+        assertIs<AdminAccessUiState.NotAdmin>(viewModel.uiState.value)
+        assertEquals(2, repository.syncRoleCalls)
     }
 
     @Test

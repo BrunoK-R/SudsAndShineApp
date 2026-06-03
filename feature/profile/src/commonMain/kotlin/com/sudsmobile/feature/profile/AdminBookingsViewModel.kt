@@ -8,6 +8,7 @@ import com.sudsmobile.data.admin.AdminBookingRequest
 import com.sudsmobile.data.admin.AdminBookingRequestsResult
 import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
+import com.sudsmobile.data.admin.AdminRole
 import com.sudsmobile.data.admin.AdminRoleResult
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
@@ -24,7 +25,7 @@ internal sealed interface AdminAccessUiState {
     data object Idle : AdminAccessUiState
     data object Loading : AdminAccessUiState
     data object NotAdmin : AdminAccessUiState
-    data object Admin : AdminAccessUiState
+    data class Admin(val email: String, val roleLabel: String) : AdminAccessUiState
     data class Error(val message: String, val retryable: Boolean) : AdminAccessUiState
 }
 
@@ -103,7 +104,7 @@ internal class AdminAccessViewModel(
     private var loadingSessionMarker: String? = null
     private var accessRequestSequence: Long = 0
 
-    fun refreshForSession() {
+    fun refreshForSession(force: Boolean = false) {
         when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedSession()
@@ -123,9 +124,10 @@ internal class AdminAccessViewModel(
             is AuthSessionState.Authenticated -> {
                 val requestedSession = currentSessionState.session.toAdminSessionSnapshot()
                 if (
+                    !force &&
                     loadedUid == requestedSession.uid &&
                     loadedSessionMarker == requestedSession.marker &&
-                    _uiState.value == AdminAccessUiState.Admin
+                    _uiState.value is AdminAccessUiState.Admin
                 ) {
                     return
                 }
@@ -148,7 +150,7 @@ internal class AdminAccessViewModel(
                 val nextState = when (val result = adminRepository.syncMyRole()) {
                     is AdminRoleResult.Success -> {
                         if (result.role.uid == requestedSession.uid && result.role.isAdmin) {
-                            AdminAccessUiState.Admin
+                            result.role.toAdminAccessUiState()
                         } else {
                             AdminAccessUiState.NotAdmin
                         }
@@ -198,6 +200,16 @@ private fun com.sudsmobile.data.auth.AuthSession.adminAccessMarker(): String {
         refreshToken,
         issuedAtEpochSeconds.toString(),
     ).joinToString(separator = "|")
+}
+
+private fun AdminRole.toAdminAccessUiState(): AdminAccessUiState.Admin {
+    return AdminAccessUiState.Admin(
+        email = email.trim().ifBlank { "Conta atual" },
+        roleLabel = when (role.trim().lowercase()) {
+            "admin" -> "Administrador"
+            else -> role.trim().ifBlank { "Admin" }
+        },
+    )
 }
 
 internal class AdminBookingsViewModel(

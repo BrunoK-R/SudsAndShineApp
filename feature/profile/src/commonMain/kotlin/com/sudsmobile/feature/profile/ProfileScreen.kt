@@ -252,7 +252,7 @@ fun ProfileScreen(
         onRetryStats = viewModel::loadStats,
         onRetryPreferences = viewModel::loadPreferences,
         onRetryPreferenceSave = viewModel::retryPreferenceSave,
-        onRetryAdminAccess = adminAccessViewModel::refreshForSession,
+        onRetryAdminAccess = { adminAccessViewModel.refreshForSession(force = true) },
         onRetryBusinessInfo = { contactViewModel.loadBusinessInfo(force = true) },
         onMarketingOptInChange = viewModel::updateMarketingOptIn,
         onAppointmentReminderOptInChange = viewModel::updateAppointmentReminderOptIn,
@@ -1134,14 +1134,17 @@ private fun AdminOperationsCard(
     onOpenAdminServiceExtras: () -> Unit,
 ) {
     when (adminAccessState) {
-        AdminAccessUiState.Admin -> Card(
+        is AdminAccessUiState.Admin -> Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
         ) {
             Column {
-                AdminOperationsHeader()
+                AdminOperationsHeader(
+                    state = adminAccessState,
+                    onRetryAdminAccess = onRetryAdminAccess,
+                )
                 adminMenuItems.forEachIndexed { index, item ->
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 68.dp),
@@ -1190,7 +1193,10 @@ private fun AdminOperationsCard(
 }
 
 @Composable
-private fun AdminOperationsHeader() {
+private fun AdminOperationsHeader(
+    state: AdminAccessUiState.Admin,
+    onRetryAdminAccess: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1213,6 +1219,23 @@ private fun AdminOperationsHeader() {
                 text = "Acesso confirmado para operações protegidas.",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "${state.roleLabel} - ${state.email}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(
+            onClick = onRetryAdminAccess,
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.tertiary,
+            ),
+        ) {
+            Text(
+                text = "Verificar",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
