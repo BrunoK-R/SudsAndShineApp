@@ -117,6 +117,48 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun loadConfigurationIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminAvailabilityResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(loadResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        repository.loadResult = AdminAvailabilityResult.Success(adminAvailabilityConfig(defaultMaxBookingsPerSlot = 5))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminAvailabilityResult.Failure(AdminError.Permission("old token denied")))
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        val reloaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("5", reloaded.form.defaultMaxBookingsPerSlot)
+    }
+
+    @Test
+    fun refreshReloadsWhenSameUserSessionTokenChanges() = runTest {
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        repository.loadResult = AdminAvailabilityResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilityUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun loadConfigurationMapsAuditLabelsForAvailabilityExceptions() = runTest {
         val viewModel = AdminAvailabilityViewModel(
             authRepository = FakeAvailabilityAuthRepository(authenticated = true),
@@ -234,6 +276,31 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminAvailabilityResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(updateResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        repository.loadResult = AdminAvailabilityResult.Failure(AdminError.Permission("new token denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminAvailabilityResult.Success(adminAvailabilityConfig(defaultMaxBookingsPerSlot = 5)))
+        runCurrent()
+
+        assertEquals(1, repository.updateRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilitySaveState.Idle>(viewModel.saveState.value)
+        assertIs<AdminAvailabilityUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun updateFormIgnoresChangesWhileAvailabilitySaveIsInFlight() = runTest {
         val deferred = CompletableDeferred<AdminAvailabilityResult>()
         val repository = FakeAvailabilityAdminRepository(updateResultDeferred = deferred)
@@ -330,6 +397,46 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun saveCapacityOverrideIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminCapacityOverrideMutationResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(upsertCapacityOverrideResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(
+            loaded.form.copy(
+                overrideDate = "2026-06-10",
+                overrideMaxBookingsPerSlot = "0",
+            ),
+        )
+        viewModel.saveCapacityOverride()
+        runCurrent()
+        repository.loadResult = AdminAvailabilityResult.Failure(AdminError.Permission("new token denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(
+            AdminCapacityOverrideMutationResult.Success(
+                AdminCapacityOverrideMutationReceipt(
+                    date = "2026-06-10",
+                    status = "updated",
+                    maxBookingsPerSlot = 0,
+                ),
+            ),
+        )
+        runCurrent()
+
+        assertEquals(1, repository.upsertCapacityOverrideRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilitySaveState.Idle>(viewModel.saveState.value)
+        assertIs<AdminAvailabilityUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun clearCapacityOverrideSubmitsDateAndReloads() = runTest {
         val repository = FakeAvailabilityAdminRepository()
         val viewModel = AdminAvailabilityViewModel(
@@ -345,6 +452,38 @@ class AdminAvailabilityViewModelTest {
         assertEquals("2026-06-10", repository.clearCapacityOverrideRequests.single().date)
         assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
         assertEquals(2, repository.loadCalls)
+    }
+
+    @Test
+    fun clearCapacityOverrideIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminCapacityOverrideMutationResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(clearCapacityOverrideResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.clearCapacityOverride("2026-06-10")
+        runCurrent()
+        repository.loadResult = AdminAvailabilityResult.Failure(AdminError.Permission("new token denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(
+            AdminCapacityOverrideMutationResult.Success(
+                AdminCapacityOverrideMutationReceipt(
+                    date = "2026-06-10",
+                    status = "cleared",
+                ),
+            ),
+        )
+        runCurrent()
+
+        assertEquals(1, repository.clearCapacityOverrideRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilitySaveState.Idle>(viewModel.saveState.value)
+        assertIs<AdminAvailabilityUiState.NotAdmin>(viewModel.uiState.value)
     }
 
     @Test
@@ -445,6 +584,47 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun saveBlockedSlotIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBlockedSlotMutationResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(upsertBlockedSlotResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(
+            loaded.form.copy(
+                blockedDate = "2026-06-10",
+                blockedStartTime = "09:30",
+                blockedEndTime = "11:00",
+            ),
+        )
+        viewModel.saveBlockedSlot()
+        runCurrent()
+        repository.loadResult = AdminAvailabilityResult.Failure(AdminError.Permission("new token denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(
+            AdminBlockedSlotMutationResult.Success(
+                AdminBlockedSlotMutationReceipt(
+                    blockedSlotId = "block-1",
+                    date = "2026-06-10",
+                    status = "updated",
+                ),
+            ),
+        )
+        runCurrent()
+
+        assertEquals(1, repository.upsertBlockedSlotRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilitySaveState.Idle>(viewModel.saveState.value)
+        assertIs<AdminAvailabilityUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun clearBlockedSlotSubmitsIdAndReloads() = runTest {
         val repository = FakeAvailabilityAdminRepository()
         val viewModel = AdminAvailabilityViewModel(
@@ -461,17 +641,57 @@ class AdminAvailabilityViewModelTest {
         assertIs<AdminAvailabilitySaveState.Success>(viewModel.saveState.value)
         assertEquals(2, repository.loadCalls)
     }
+
+    @Test
+    fun clearBlockedSlotIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBlockedSlotMutationResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(clearBlockedSlotResultDeferred = deferred)
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.clearBlockedSlot("block-1")
+        runCurrent()
+        repository.loadResult = AdminAvailabilityResult.Failure(AdminError.Permission("new token denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(
+            AdminBlockedSlotMutationResult.Success(
+                AdminBlockedSlotMutationReceipt(
+                    blockedSlotId = "block-1",
+                    status = "cleared",
+                ),
+            ),
+        )
+        runCurrent()
+
+        assertEquals(1, repository.clearBlockedSlotRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilitySaveState.Idle>(viewModel.saveState.value)
+        assertIs<AdminAvailabilityUiState.NotAdmin>(viewModel.uiState.value)
+    }
 }
 
 private class FakeAvailabilityAdminRepository(
     var loadResult: AdminAvailabilityResult = AdminAvailabilityResult.Success(adminAvailabilityConfig()),
     var updateResult: AdminAvailabilityResult = AdminAvailabilityResult.Success(adminAvailabilityConfig()),
-    private val loadResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
+    loadResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
     private val loadResults: ArrayDeque<AdminAvailabilityResult>? = null,
-    private val updateResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
-    private val upsertCapacityOverrideResultDeferred: CompletableDeferred<AdminCapacityOverrideMutationResult>? = null,
-    private val upsertBlockedSlotResultDeferred: CompletableDeferred<AdminBlockedSlotMutationResult>? = null,
+    updateResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
+    upsertCapacityOverrideResultDeferred: CompletableDeferred<AdminCapacityOverrideMutationResult>? = null,
+    clearCapacityOverrideResultDeferred: CompletableDeferred<AdminCapacityOverrideMutationResult>? = null,
+    upsertBlockedSlotResultDeferred: CompletableDeferred<AdminBlockedSlotMutationResult>? = null,
+    clearBlockedSlotResultDeferred: CompletableDeferred<AdminBlockedSlotMutationResult>? = null,
 ) : AdminRepository {
+    private var pendingLoadResultDeferred = loadResultDeferred
+    private var pendingUpdateResultDeferred = updateResultDeferred
+    private var pendingUpsertCapacityOverrideResultDeferred = upsertCapacityOverrideResultDeferred
+    private var pendingClearCapacityOverrideResultDeferred = clearCapacityOverrideResultDeferred
+    private var pendingUpsertBlockedSlotResultDeferred = upsertBlockedSlotResultDeferred
+    private var pendingClearBlockedSlotResultDeferred = clearBlockedSlotResultDeferred
     var loadCalls = 0
         private set
     val updateRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
@@ -494,7 +714,9 @@ private class FakeAvailabilityAdminRepository(
 
     override suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
+        val deferred = pendingLoadResultDeferred
+        pendingLoadResultDeferred = null
+        return deferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
     }
 
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
@@ -515,14 +737,18 @@ private class FakeAvailabilityAdminRepository(
         request: AdminAvailabilityUpdateRequest,
     ): AdminAvailabilityResult {
         updateRequests += request
-        return updateResultDeferred?.await() ?: updateResult
+        val deferred = pendingUpdateResultDeferred
+        pendingUpdateResultDeferred = null
+        return deferred?.await() ?: updateResult
     }
 
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
     ): AdminCapacityOverrideMutationResult {
         upsertCapacityOverrideRequests += request
-        return upsertCapacityOverrideResultDeferred?.await() ?: AdminCapacityOverrideMutationResult.Success(
+        val deferred = pendingUpsertCapacityOverrideResultDeferred
+        pendingUpsertCapacityOverrideResultDeferred = null
+        return deferred?.await() ?: AdminCapacityOverrideMutationResult.Success(
             AdminCapacityOverrideMutationReceipt(
                 date = request.date,
                 status = "updated",
@@ -535,7 +761,9 @@ private class FakeAvailabilityAdminRepository(
         request: AdminCapacityOverrideClearRequest,
     ): AdminCapacityOverrideMutationResult {
         clearCapacityOverrideRequests += request
-        return AdminCapacityOverrideMutationResult.Success(
+        val deferred = pendingClearCapacityOverrideResultDeferred
+        pendingClearCapacityOverrideResultDeferred = null
+        return deferred?.await() ?: AdminCapacityOverrideMutationResult.Success(
             AdminCapacityOverrideMutationReceipt(
                 date = request.date,
                 status = "cleared",
@@ -547,7 +775,9 @@ private class FakeAvailabilityAdminRepository(
         request: AdminBlockedSlotUpsertRequest,
     ): AdminBlockedSlotMutationResult {
         upsertBlockedSlotRequests += request
-        return upsertBlockedSlotResultDeferred?.await() ?: AdminBlockedSlotMutationResult.Success(
+        val deferred = pendingUpsertBlockedSlotResultDeferred
+        pendingUpsertBlockedSlotResultDeferred = null
+        return deferred?.await() ?: AdminBlockedSlotMutationResult.Success(
             AdminBlockedSlotMutationReceipt(
                 blockedSlotId = request.blockedSlotId.ifBlank { "block-1" },
                 date = request.date,
@@ -560,7 +790,9 @@ private class FakeAvailabilityAdminRepository(
         request: AdminBlockedSlotClearRequest,
     ): AdminBlockedSlotMutationResult {
         clearBlockedSlotRequests += request
-        return AdminBlockedSlotMutationResult.Success(
+        val deferred = pendingClearBlockedSlotResultDeferred
+        pendingClearBlockedSlotResultDeferred = null
+        return deferred?.await() ?: AdminBlockedSlotMutationResult.Success(
             AdminBlockedSlotMutationReceipt(
                 blockedSlotId = request.blockedSlotId,
                 status = "cleared",
@@ -606,19 +838,8 @@ private class FakeAvailabilityAdminRepository(
 }
 
 private class FakeAvailabilityAuthRepository(authenticated: Boolean) : AuthRepository {
-    private val authSession = AuthSession(
-        user = AuthUser(
-            uid = "uid-1",
-            email = "admin@example.com",
-            displayName = "Admin",
-            phoneNumber = "",
-        ),
-        idToken = "id-token-1",
-        refreshToken = "refresh-token-1",
-        expiresInSeconds = 3600,
-    )
     override val sessionState: MutableStateFlow<AuthSessionState> = MutableStateFlow(
-        if (authenticated) AuthSessionState.Authenticated(authSession) else AuthSessionState.Unauthenticated,
+        if (authenticated) AuthSessionState.Authenticated(authSession()) else AuthSessionState.Unauthenticated,
     )
 
     override suspend fun currentSession(): AuthSession? {
@@ -630,9 +851,11 @@ private class FakeAvailabilityAuthRepository(authenticated: Boolean) : AuthRepos
     }
 
     fun switchTo(uid: String) {
-        sessionState.value = AuthSessionState.Authenticated(
-            authSession.copy(user = authSession.user.copy(uid = uid)),
-        )
+        authenticateAs(uid)
+    }
+
+    fun authenticateAs(uid: String, tokenVersion: Int = 1) {
+        sessionState.value = AuthSessionState.Authenticated(authSession(uid, tokenVersion))
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
@@ -652,6 +875,20 @@ private class FakeAvailabilityAuthRepository(authenticated: Boolean) : AuthRepos
         error("unused")
     }
 
+    private fun authSession(uid: String = "uid-1", tokenVersion: Int = 1): AuthSession {
+        return AuthSession(
+            user = AuthUser(
+                uid = uid,
+                email = "admin@example.com",
+                displayName = "Admin",
+                phoneNumber = "",
+            ),
+            idToken = "id-token-$uid-$tokenVersion",
+            refreshToken = "refresh-token-$uid-$tokenVersion",
+            expiresInSeconds = 3600,
+            issuedAtEpochSeconds = tokenVersion.toLong(),
+        )
+    }
 }
 
 private fun adminAvailabilityConfig(

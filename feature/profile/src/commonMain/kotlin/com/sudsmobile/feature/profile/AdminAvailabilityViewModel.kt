@@ -18,6 +18,7 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,6 +80,11 @@ internal sealed interface AdminAvailabilitySaveState {
     data class Error(val message: String, val retryable: Boolean) : AdminAvailabilitySaveState
 }
 
+private data class AdminAvailabilitySessionSnapshot(
+    val uid: String,
+    val marker: String,
+)
+
 internal class AdminAvailabilityViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -89,7 +95,9 @@ internal class AdminAvailabilityViewModel(
     private val _saveState = MutableStateFlow<AdminAvailabilitySaveState>(AdminAvailabilitySaveState.Idle)
     val saveState: StateFlow<AdminAvailabilitySaveState> = _saveState.asStateFlow()
     private var loadedUid: String? = null
+    private var loadedSessionMarker: String? = null
     private var loadingUid: String? = null
+    private var loadingSessionMarker: String? = null
     private var loadSequence: Long = 0
 
     fun refreshForSession(force: Boolean = false) {
@@ -112,12 +120,21 @@ internal class AdminAvailabilityViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val uid = session.session.user.uid
-        if (!force && loadedUid == uid && _uiState.value is AdminAvailabilityUiState.Loaded) return
-        loadConfiguration()
+        val requestedSession = session.session.toAvailabilitySessionSnapshot()
+        val hasReusableState = _uiState.value is AdminAvailabilityUiState.Loaded ||
+            _uiState.value is AdminAvailabilityUiState.NotAdmin
+        if (
+            !force &&
+            loadedUid == requestedSession.uid &&
+            loadedSessionMarker == requestedSession.marker &&
+            hasReusableState
+        ) {
+            return
+        }
+        loadConfiguration(force = force)
     }
 
-    fun loadConfiguration() {
+    fun loadConfiguration(force: Boolean = false) {
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedConfig()
@@ -137,11 +154,18 @@ internal class AdminAvailabilityViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val requestedUid = session.session.user.uid
-        if (loadingUid == requestedUid) return
+        val requestedSession = session.session.toAvailabilitySessionSnapshot()
+        if (
+            !force &&
+            loadingUid == requestedSession.uid &&
+            loadingSessionMarker == requestedSession.marker
+        ) {
+            return
+        }
 
         val requestSequence = ++loadSequence
-        loadingUid = requestedUid
+        loadingUid = requestedSession.uid
+        loadingSessionMarker = requestedSession.marker
         viewModelScope.launch {
             try {
                 _uiState.value = AdminAvailabilityUiState.Loading
@@ -151,9 +175,13 @@ internal class AdminAvailabilityViewModel(
                 }
                 if (requestSequence != loadSequence) return@launch
 
-                val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                if (currentUid == requestedUid) {
-                    loadedUid = requestedUid
+                val currentSession = currentAuthenticatedSessionSnapshot()
+                if (
+                    currentSession?.uid == requestedSession.uid &&
+                    currentSession.marker == requestedSession.marker
+                ) {
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = nextState
                 } else {
                     handleSessionChangedDuringRequest()
@@ -161,6 +189,7 @@ internal class AdminAvailabilityViewModel(
             } finally {
                 if (requestSequence == loadSequence) {
                     loadingUid = null
+                    loadingSessionMarker = null
                 }
             }
         }
@@ -177,8 +206,8 @@ internal class AdminAvailabilityViewModel(
     fun save() {
         if (_saveState.value == AdminAvailabilitySaveState.Saving) return
         val form = (_uiState.value as? AdminAvailabilityUiState.Loaded)?.form ?: return
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminAvailabilityUiState.Unauthenticated
             return
@@ -194,16 +223,14 @@ internal class AdminAvailabilityViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminAvailabilitySaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
             }
 
             val result = adminRepository.updateAvailabilityConfiguration(request)
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -211,7 +238,8 @@ internal class AdminAvailabilityViewModel(
 
             when (result) {
                 is AdminAvailabilityResult.Success -> {
-                    loadedUid = requestedUid
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = AdminAvailabilityUiState.Loaded(result.config.toForm())
                     _saveState.value = AdminAvailabilitySaveState.Success("Disponibilidade guardada.")
                 }
@@ -231,8 +259,8 @@ internal class AdminAvailabilityViewModel(
     fun saveCapacityOverride() {
         if (_saveState.value == AdminAvailabilitySaveState.Saving) return
         val form = (_uiState.value as? AdminAvailabilityUiState.Loaded)?.form ?: return
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminAvailabilityUiState.Unauthenticated
             return
@@ -248,16 +276,14 @@ internal class AdminAvailabilityViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminAvailabilitySaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
             }
 
             val result = adminRepository.upsertCapacityOverride(request)
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -266,8 +292,9 @@ internal class AdminAvailabilityViewModel(
             when (result) {
                 is AdminCapacityOverrideMutationResult.Success -> {
                     loadedUid = null
+                    loadedSessionMarker = null
                     _saveState.value = AdminAvailabilitySaveState.Success("Exceção de capacidade guardada.")
-                    loadConfiguration()
+                    loadConfiguration(force = true)
                 }
                 is AdminCapacityOverrideMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -284,8 +311,8 @@ internal class AdminAvailabilityViewModel(
             )
             return
         }
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminAvailabilityUiState.Unauthenticated
             return
@@ -293,8 +320,7 @@ internal class AdminAvailabilityViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminAvailabilitySaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -303,8 +329,7 @@ internal class AdminAvailabilityViewModel(
             val result = adminRepository.clearCapacityOverride(
                 AdminCapacityOverrideClearRequest(cleanDate),
             )
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -313,8 +338,9 @@ internal class AdminAvailabilityViewModel(
             when (result) {
                 is AdminCapacityOverrideMutationResult.Success -> {
                     loadedUid = null
+                    loadedSessionMarker = null
                     _saveState.value = AdminAvailabilitySaveState.Success("Exceção de capacidade limpa.")
-                    loadConfiguration()
+                    loadConfiguration(force = true)
                 }
                 is AdminCapacityOverrideMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -324,8 +350,8 @@ internal class AdminAvailabilityViewModel(
     fun saveBlockedSlot() {
         if (_saveState.value == AdminAvailabilitySaveState.Saving) return
         val form = (_uiState.value as? AdminAvailabilityUiState.Loaded)?.form ?: return
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminAvailabilityUiState.Unauthenticated
             return
@@ -341,16 +367,14 @@ internal class AdminAvailabilityViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminAvailabilitySaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
             }
 
             val result = adminRepository.upsertBlockedSlot(request)
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -359,8 +383,9 @@ internal class AdminAvailabilityViewModel(
             when (result) {
                 is AdminBlockedSlotMutationResult.Success -> {
                     loadedUid = null
+                    loadedSessionMarker = null
                     _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário guardado.")
-                    loadConfiguration()
+                    loadConfiguration(force = true)
                 }
                 is AdminBlockedSlotMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -377,8 +402,8 @@ internal class AdminAvailabilityViewModel(
             )
             return
         }
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminAvailabilityUiState.Unauthenticated
             return
@@ -386,8 +411,7 @@ internal class AdminAvailabilityViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminAvailabilitySaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -396,8 +420,7 @@ internal class AdminAvailabilityViewModel(
             val result = adminRepository.clearBlockedSlot(
                 AdminBlockedSlotClearRequest(cleanBlockedSlotId),
             )
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminAvailabilitySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -406,8 +429,9 @@ internal class AdminAvailabilityViewModel(
             when (result) {
                 is AdminBlockedSlotMutationResult.Success -> {
                     loadedUid = null
+                    loadedSessionMarker = null
                     _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário limpo.")
-                    loadConfiguration()
+                    loadConfiguration(force = true)
                 }
                 is AdminBlockedSlotMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -430,7 +454,9 @@ internal class AdminAvailabilityViewModel(
 
     private fun clearLoadedConfig() {
         loadedUid = null
+        loadedSessionMarker = null
         loadingUid = null
+        loadingSessionMarker = null
         loadSequence += 1
     }
 
@@ -438,6 +464,30 @@ internal class AdminAvailabilityViewModel(
         clearLoadedConfig()
         refreshForSession(force = true)
     }
+
+    private fun currentAuthenticatedSessionSnapshot(): AdminAvailabilitySessionSnapshot? {
+        return (sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.toAvailabilitySessionSnapshot()
+    }
+
+    private fun isCurrentAuthenticatedSession(requestedSession: AdminAvailabilitySessionSnapshot): Boolean {
+        val currentSession = currentAuthenticatedSessionSnapshot()
+        return currentSession?.uid == requestedSession.uid &&
+            currentSession.marker == requestedSession.marker
+    }
+}
+
+private fun AuthSession.toAvailabilitySessionSnapshot(): AdminAvailabilitySessionSnapshot {
+    return AdminAvailabilitySessionSnapshot(
+        uid = user.uid,
+        marker = listOf(
+            user.uid,
+            idToken,
+            refreshToken,
+            issuedAtEpochSeconds.toString(),
+        ).joinToString(separator = "|"),
+    )
 }
 
 private sealed interface ParsedAvailabilityRequest {
