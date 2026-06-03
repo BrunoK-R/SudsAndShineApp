@@ -516,6 +516,7 @@ private fun AdminNotificationCampaignDraftCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            CampaignDeliveryLockPanel(draft = draft)
             if (
                 draft.createdAuditLabel.isNotBlank() ||
                 draft.updatedAuditLabel.isNotBlank() ||
@@ -523,10 +524,6 @@ private fun AdminNotificationCampaignDraftCard(
             ) {
                 CampaignAuditTrail(draft = draft)
             }
-            CampaignStatusPill(
-                text = if (draft.sendBlocked) "Envio bloqueado" else "Envio indisponível",
-                emphasized = true,
-            )
             OutlinedButton(
                 onClick = onSendTest,
                 enabled = !busy && !archived,
@@ -601,6 +598,39 @@ private fun AdminNotificationCampaignDraftCard(
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CampaignDeliveryLockPanel(draft: AdminNotificationCampaignDraftUi) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Lock,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = if (draft.deliveryLocked) draft.sendStateLabel else "Entrega indisponível",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = draft.sendBlockedReason.ifBlank { "campaign-send-not-implemented" },
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }

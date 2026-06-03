@@ -32,6 +32,9 @@ internal data class AdminNotificationCampaignDraftUi(
     val notes: String,
     val sendBlocked: Boolean,
     val sendBlockedReason: String,
+    val deliveryLocked: Boolean,
+    val sendState: String,
+    val sendStateLabel: String,
     val createdAuditLabel: String,
     val updatedAuditLabel: String,
     val archivedAuditLabel: String,
@@ -410,6 +413,7 @@ private sealed interface ParsedCampaignDraftRequest {
 }
 
 private const val CampaignDraftSendBlockedReason = "campaign-send-not-implemented"
+private const val CampaignDraftSendState = "draft_only"
 
 private fun List<AdminNotificationCampaignDraft>.toCampaignDraftsState(): AdminNotificationCampaignDraftsUiState {
     val drafts = map { it.toUi() }
@@ -422,6 +426,7 @@ private fun List<AdminNotificationCampaignDraft>.toCampaignDraftsState(): AdminN
 
 private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraftUi {
     val normalizedSendBlockedReason = sendBlockedReason.trim().ifBlank { CampaignDraftSendBlockedReason }
+    val normalizedSendState = sendState.trim().ifBlank { CampaignDraftSendState }
     return AdminNotificationCampaignDraftUi(
         campaignId = campaignId,
         title = title.ifBlank { "Campanha sem título" },
@@ -435,6 +440,9 @@ private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraf
         notes = notes,
         sendBlocked = true,
         sendBlockedReason = normalizedSendBlockedReason,
+        deliveryLocked = true,
+        sendState = normalizedSendState,
+        sendStateLabel = normalizedSendState.toCampaignSendStateLabel(),
         createdAuditLabel = campaignAuditLabel("Criado", createdAtIso, createdByUid),
         updatedAuditLabel = campaignAuditLabel("Atualizado", updatedAtIso, updatedByUid),
         archivedAuditLabel = campaignAuditLabel("Arquivado", archivedAtIso, archivedByUid),
@@ -533,6 +541,13 @@ private fun String.toCampaignStatusLabel(): String {
     return when (trim()) {
         "archived" -> "Arquivado"
         else -> "Rascunho"
+    }
+}
+
+private fun String.toCampaignSendStateLabel(): String {
+    return when (trim()) {
+        "draft_only" -> "Rascunho sem envio"
+        else -> "Envio bloqueado"
     }
 }
 

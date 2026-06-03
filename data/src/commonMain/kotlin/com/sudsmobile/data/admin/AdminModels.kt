@@ -276,6 +276,8 @@ data class AdminNotificationCampaignDraft(
     val notes: String,
     val sendBlocked: Boolean,
     val sendBlockedReason: String,
+    val deliveryLocked: Boolean = true,
+    val sendState: String = "draft_only",
     val createdAtIso: String = "",
     val updatedAtIso: String = "",
     val archivedAtIso: String = "",
@@ -310,6 +312,8 @@ data class AdminNotificationCampaignDraftMutationReceipt(
     val targetAudience: String = "",
     val sendBlocked: Boolean = true,
     val sendBlockedReason: String = "",
+    val deliveryLocked: Boolean = true,
+    val sendState: String = "draft_only",
 )
 
 data class AdminCapacityOverrideItem(

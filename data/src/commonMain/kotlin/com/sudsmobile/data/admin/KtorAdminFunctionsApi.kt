@@ -1710,6 +1710,7 @@ private data class NotificationCampaignDraftsPayload(
 }
 
 private const val NotificationCampaignDraftSendBlockedReason = "campaign-send-not-implemented"
+private const val NotificationCampaignDraftSendState = "draft_only"
 
 @Serializable
 private data class NotificationCampaignDraftPayload(
@@ -1724,6 +1725,8 @@ private data class NotificationCampaignDraftPayload(
     val notes: String = "",
     val sendBlocked: Boolean = true,
     val sendBlockedReason: String = "",
+    val deliveryLocked: Boolean = true,
+    val sendState: String = "",
     val createdAtIso: String = "",
     val updatedAtIso: String = "",
     val archivedAtIso: String = "",
@@ -1739,6 +1742,7 @@ private data class NotificationCampaignDraftPayload(
         val normalizedAudience = targetAudience.trim().ifBlank { "test_users" }
         val normalizedSendBlockedReason = sendBlockedReason.trim()
             .ifBlank { NotificationCampaignDraftSendBlockedReason }
+        val normalizedSendState = sendState.trim().ifBlank { NotificationCampaignDraftSendState }
         return AdminNotificationCampaignDraft(
             campaignId = id,
             title = cleanTitle,
@@ -1751,6 +1755,8 @@ private data class NotificationCampaignDraftPayload(
             notes = notes.trim(),
             sendBlocked = true,
             sendBlockedReason = normalizedSendBlockedReason,
+            deliveryLocked = true,
+            sendState = normalizedSendState,
             createdAtIso = createdAtIso.trim(),
             updatedAtIso = updatedAtIso.trim(),
             archivedAtIso = archivedAtIso.trim(),
@@ -1769,10 +1775,13 @@ private data class NotificationCampaignDraftMutationResultPayload(
     val targetAudience: String = "",
     val sendBlocked: Boolean = true,
     val sendBlockedReason: String = "",
+    val deliveryLocked: Boolean = true,
+    val sendState: String = "",
 ) {
     fun toReceipt(): AdminNotificationCampaignDraftMutationReceipt {
         val normalizedSendBlockedReason = sendBlockedReason.trim()
             .ifBlank { NotificationCampaignDraftSendBlockedReason }
+        val normalizedSendState = sendState.trim().ifBlank { NotificationCampaignDraftSendState }
         return AdminNotificationCampaignDraftMutationReceipt(
             campaignId = campaignId.trim(),
             status = status.trim(),
@@ -1780,6 +1789,8 @@ private data class NotificationCampaignDraftMutationResultPayload(
             targetAudience = targetAudience.trim(),
             sendBlocked = true,
             sendBlockedReason = normalizedSendBlockedReason,
+            deliveryLocked = true,
+            sendState = normalizedSendState,
         )
     }
 }

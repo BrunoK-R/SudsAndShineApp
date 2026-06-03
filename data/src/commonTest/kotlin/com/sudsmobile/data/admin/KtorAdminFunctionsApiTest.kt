@@ -707,6 +707,8 @@ class KtorAdminFunctionsApiTest {
                         "notes": "QA",
                         "sendBlocked": true,
                         "sendBlockedReason": "campaign-send-not-implemented",
+                        "deliveryLocked": true,
+                        "sendState": "draft_only",
                         "createdAtIso": "2026-06-01T10:00:00.000Z",
                         "updatedAtIso": "2026-06-01T11:00:00.000Z",
                         "createdByUid": "admin-created",
@@ -732,6 +734,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("push", draft.channels.single())
         assertEquals(true, draft.sendBlocked)
         assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
+        assertEquals(true, draft.deliveryLocked)
+        assertEquals("draft_only", draft.sendState)
         assertEquals("2026-06-01T10:00:00.000Z", draft.createdAtIso)
         assertEquals("2026-06-01T11:00:00.000Z", draft.updatedAtIso)
         assertEquals("admin-created", draft.createdByUid)
@@ -751,7 +755,9 @@ class KtorAdminFunctionsApiTest {
                         "title": "Oferta verão",
                         "body": "Campanha apenas em rascunho",
                         "sendBlocked": false,
-                        "sendBlockedReason": ""
+                        "sendBlockedReason": "",
+                        "deliveryLocked": false,
+                        "sendState": ""
                       }
                     ]
                   }
@@ -767,6 +773,8 @@ class KtorAdminFunctionsApiTest {
         val draft = success.config.campaigns.single()
         assertEquals(true, draft.sendBlocked)
         assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
+        assertEquals(true, draft.deliveryLocked)
+        assertEquals("draft_only", draft.sendState)
     }
 
     @Test
@@ -784,7 +792,9 @@ class KtorAdminFunctionsApiTest {
                     "status": "draft",
                     "targetAudience": "test_users",
                     "sendBlocked": true,
-                    "sendBlockedReason": "campaign-send-not-implemented"
+                    "sendBlockedReason": "campaign-send-not-implemented",
+                    "deliveryLocked": true,
+                    "sendState": "draft_only"
                   }
                 }
                 """.trimIndent(),
@@ -813,6 +823,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("summer-test", success.receipt.campaignId)
         assertEquals(true, success.receipt.created)
         assertEquals(true, success.receipt.sendBlocked)
+        assertEquals(true, success.receipt.deliveryLocked)
+        assertEquals("draft_only", success.receipt.sendState)
     }
 
     @Test
@@ -825,7 +837,9 @@ class KtorAdminFunctionsApiTest {
                     "campaignId": "summer-test",
                     "status": "draft",
                     "sendBlocked": false,
-                    "sendBlockedReason": ""
+                    "sendBlockedReason": "",
+                    "deliveryLocked": false,
+                    "sendState": ""
                   }
                 }
                 """.trimIndent(),
@@ -846,6 +860,8 @@ class KtorAdminFunctionsApiTest {
         val success = assertIs<AdminNotificationCampaignDraftMutationResult.Success>(result)
         assertEquals(true, success.receipt.sendBlocked)
         assertEquals("campaign-send-not-implemented", success.receipt.sendBlockedReason)
+        assertEquals(true, success.receipt.deliveryLocked)
+        assertEquals("draft_only", success.receipt.sendState)
     }
 
     @Test

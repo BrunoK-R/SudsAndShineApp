@@ -133,6 +133,9 @@ class AdminNotificationCampaignDraftsViewModelTest {
         val draft = loaded.drafts.single()
         assertEquals(true, draft.sendBlocked)
         assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
+        assertEquals(true, draft.deliveryLocked)
+        assertEquals("draft_only", draft.sendState)
+        assertEquals("Rascunho sem envio", draft.sendStateLabel)
     }
 
     @Test
