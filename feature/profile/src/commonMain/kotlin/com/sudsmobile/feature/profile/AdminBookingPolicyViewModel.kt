@@ -116,8 +116,7 @@ internal class AdminBookingPolicyViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedConfig()
-                    _uiState.value = AdminBookingPolicyUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -156,24 +155,24 @@ internal class AdminBookingPolicyViewModel(
             _saveState.value = AdminBookingPolicySaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminBookingPolicyUiState.Unauthenticated
                 _saveState.value = AdminBookingPolicySaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.updateBookingPolicyConfiguration(request)) {
+            val result = adminRepository.updateBookingPolicyConfiguration(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminBookingPolicySaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminBookingPolicyResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = requestedUid
-                        _uiState.value = AdminBookingPolicyUiState.Loaded(result.config.toForm())
-                        _saveState.value = AdminBookingPolicySaveState.Success("Política guardada.")
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminBookingPolicyUiState.Unauthenticated
-                        _saveState.value = AdminBookingPolicySaveState.Idle
-                    }
+                    loadedUid = requestedUid
+                    _uiState.value = AdminBookingPolicyUiState.Loaded(result.config.toForm())
+                    _saveState.value = AdminBookingPolicySaveState.Success("Política guardada.")
                 }
                 is AdminBookingPolicyResult.Failure -> {
                     _saveState.value = result.error.toAdminBookingPolicySaveState()
@@ -196,6 +195,11 @@ internal class AdminBookingPolicyViewModel(
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedConfig()
+        refreshForSession(force = true)
     }
 }
 

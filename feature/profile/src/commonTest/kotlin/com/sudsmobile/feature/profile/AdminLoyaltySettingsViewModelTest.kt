@@ -205,12 +205,47 @@ class AdminLoyaltySettingsViewModelTest {
         assertEquals(0, repository.updateRequests.size)
         assertIs<AdminLoyaltySettingsUiState.Unauthenticated>(viewModel.uiState.value)
     }
+
+    @Test
+    fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminLoyaltySettingsResult>()
+        val authRepository = FakeLoyaltySettingsAuthRepository(authenticated = true)
+        val repository = FakeLoyaltySettingsAdminRepository(
+            updateResultDeferred = deferred,
+            loadResults = ArrayDeque(
+                listOf(
+                    AdminLoyaltySettingsResult.Success(adminLoyaltySettingsConfig(stampsRequired = 10)),
+                    AdminLoyaltySettingsResult.Success(adminLoyaltySettingsConfig(stampsRequired = 12)),
+                ),
+            ),
+        )
+        val viewModel = AdminLoyaltySettingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        authRepository.switchTo("uid-2")
+        deferred.complete(AdminLoyaltySettingsResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals(10, repository.updateRequests.single().stampsRequired)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminLoyaltySettingsSaveState.Idle>(viewModel.saveState.value)
+        val loaded = assertIs<AdminLoyaltySettingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("12", loaded.form.stampsRequired)
+    }
 }
 
 private class FakeLoyaltySettingsAdminRepository(
     var loadResult: AdminLoyaltySettingsResult = AdminLoyaltySettingsResult.Success(adminLoyaltySettingsConfig()),
     var updateResult: AdminLoyaltySettingsResult? = null,
     private val loadResultDeferred: CompletableDeferred<AdminLoyaltySettingsResult>? = null,
+    private val loadResults: ArrayDeque<AdminLoyaltySettingsResult>? = null,
+    private val updateResultDeferred: CompletableDeferred<AdminLoyaltySettingsResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
@@ -234,7 +269,7 @@ private class FakeLoyaltySettingsAdminRepository(
 
     override suspend fun getLoyaltySettingsConfiguration(): AdminLoyaltySettingsResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResult
+        return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
     }
 
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult =
@@ -255,7 +290,7 @@ private class FakeLoyaltySettingsAdminRepository(
         request: AdminLoyaltySettingsUpdateRequest,
     ): AdminLoyaltySettingsResult {
         updateRequests += request
-        return updateResult ?: AdminLoyaltySettingsResult.Success(
+        return updateResultDeferred?.await() ?: updateResult ?: AdminLoyaltySettingsResult.Success(
             AdminLoyaltySettingsConfig(
                 stampsRequired = request.stampsRequired,
                 rewardType = request.rewardType,
@@ -344,13 +379,20 @@ private class FakeLoyaltySettingsAuthRepository(authenticated: Boolean) : AuthRe
     override fun signOut() {
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
+
+    fun switchTo(uid: String) {
+        mutableSessionState.value = AuthSessionState.Authenticated(
+            authSession.copy(user = authSession.user.copy(uid = uid)),
+        )
+    }
 }
 
 private fun adminLoyaltySettingsConfig(
+    stampsRequired: Int = 10,
     updatedAtIso: String = "",
     updatedByUid: String = "",
 ): AdminLoyaltySettingsConfig = AdminLoyaltySettingsConfig(
-    stampsRequired = 10,
+    stampsRequired = stampsRequired,
     rewardType = "free_wash",
     rewardValue = 1,
     rewardDescription = "1 lavagem grátis",

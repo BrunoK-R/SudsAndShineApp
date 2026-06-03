@@ -122,8 +122,7 @@ internal class AdminBusinessInfoViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedConfig()
-                    _uiState.value = AdminBusinessInfoUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -162,24 +161,24 @@ internal class AdminBusinessInfoViewModel(
             _saveState.value = AdminBusinessInfoSaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminBusinessInfoUiState.Unauthenticated
                 _saveState.value = AdminBusinessInfoSaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.updateBusinessInfoConfiguration(request)) {
+            val result = adminRepository.updateBusinessInfoConfiguration(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminBusinessInfoSaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminBusinessInfoResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = requestedUid
-                        _uiState.value = AdminBusinessInfoUiState.Loaded(result.config.toForm())
-                        _saveState.value = AdminBusinessInfoSaveState.Success("Configuração guardada.")
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminBusinessInfoUiState.Unauthenticated
-                        _saveState.value = AdminBusinessInfoSaveState.Idle
-                    }
+                    loadedUid = requestedUid
+                    _uiState.value = AdminBusinessInfoUiState.Loaded(result.config.toForm())
+                    _saveState.value = AdminBusinessInfoSaveState.Success("Configuração guardada.")
                 }
                 is AdminBusinessInfoResult.Failure -> {
                     _saveState.value = result.error.toAdminBusinessInfoSaveState()
@@ -202,6 +201,11 @@ internal class AdminBusinessInfoViewModel(
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedConfig()
+        refreshForSession(force = true)
     }
 }
 

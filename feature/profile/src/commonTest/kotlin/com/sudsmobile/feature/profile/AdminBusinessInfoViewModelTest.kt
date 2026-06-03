@@ -210,12 +210,47 @@ class AdminBusinessInfoViewModelTest {
         assertEquals(0, repository.updateRequests.size)
         assertIs<AdminBusinessInfoUiState.Unauthenticated>(viewModel.uiState.value)
     }
+
+    @Test
+    fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBusinessInfoResult>()
+        val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
+        val repository = FakeBusinessInfoAdminRepository(
+            updateResultDeferred = deferred,
+            loadResults = ArrayDeque(
+                listOf(
+                    AdminBusinessInfoResult.Success(adminBusinessInfoConfig(phone = "913 005 855")),
+                    AdminBusinessInfoResult.Success(adminBusinessInfoConfig(phone = "244 222 333")),
+                ),
+            ),
+        )
+        val viewModel = AdminBusinessInfoViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        authRepository.switchTo("uid-2")
+        deferred.complete(AdminBusinessInfoResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals("913 005 855", repository.updateRequests.single().phone)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminBusinessInfoSaveState.Idle>(viewModel.saveState.value)
+        val loaded = assertIs<AdminBusinessInfoUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("244 222 333", loaded.form.phone)
+    }
 }
 
 private class FakeBusinessInfoAdminRepository(
     var loadResult: AdminBusinessInfoResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
     var updateResult: AdminBusinessInfoResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
     private val loadResultDeferred: CompletableDeferred<AdminBusinessInfoResult>? = null,
+    private val loadResults: ArrayDeque<AdminBusinessInfoResult>? = null,
+    private val updateResultDeferred: CompletableDeferred<AdminBusinessInfoResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
@@ -231,7 +266,7 @@ private class FakeBusinessInfoAdminRepository(
 
     override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResult
+        return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
     }
 
     override suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult {
@@ -250,7 +285,7 @@ private class FakeBusinessInfoAdminRepository(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult {
         updateRequests += request
-        return updateResult
+        return updateResultDeferred?.await() ?: updateResult
     }
 
     override suspend fun updateAvailabilityConfiguration(
@@ -324,6 +359,10 @@ private class FakeBusinessInfoAuthRepository(
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
 
+    fun switchTo(uid: String) {
+        mutableSessionState.value = businessInfoAuthenticatedSession(uid)
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
         mutableSessionState.value = businessInfoAuthenticatedSession()
         return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
@@ -344,11 +383,11 @@ private class FakeBusinessInfoAuthRepository(
     }
 }
 
-private fun businessInfoAuthenticatedSession(): AuthSessionState.Authenticated {
+private fun businessInfoAuthenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
     return AuthSessionState.Authenticated(
         AuthSession(
             user = AuthUser(
-                uid = "uid-1",
+                uid = uid,
                 email = "admin@example.com",
                 displayName = "Admin",
                 phoneNumber = "",

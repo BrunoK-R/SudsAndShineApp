@@ -202,12 +202,47 @@ class AdminBookingPolicyViewModelTest {
         assertEquals(0, repository.updateRequests.size)
         assertIs<AdminBookingPolicyUiState.Unauthenticated>(viewModel.uiState.value)
     }
+
+    @Test
+    fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBookingPolicyResult>()
+        val authRepository = FakeBookingPolicyAuthRepository(authenticated = true)
+        val repository = FakeBookingPolicyAdminRepository(
+            updateResultDeferred = deferred,
+            loadResults = ArrayDeque(
+                listOf(
+                    AdminBookingPolicyResult.Success(adminBookingPolicyConfig(pendingHoldMinutes = 1440)),
+                    AdminBookingPolicyResult.Success(adminBookingPolicyConfig(pendingHoldMinutes = 240)),
+                ),
+            ),
+        )
+        val viewModel = AdminBookingPolicyViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        authRepository.switchTo("uid-2")
+        deferred.complete(AdminBookingPolicyResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals(1440, repository.updateRequests.single().pendingHoldMinutes)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminBookingPolicySaveState.Idle>(viewModel.saveState.value)
+        val loaded = assertIs<AdminBookingPolicyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("240", loaded.form.pendingHoldMinutes)
+    }
 }
 
 private class FakeBookingPolicyAdminRepository(
     var loadResult: AdminBookingPolicyResult = AdminBookingPolicyResult.Success(adminBookingPolicyConfig()),
     var updateResult: AdminBookingPolicyResult? = null,
     private val loadResultDeferred: CompletableDeferred<AdminBookingPolicyResult>? = null,
+    private val loadResults: ArrayDeque<AdminBookingPolicyResult>? = null,
+    private val updateResultDeferred: CompletableDeferred<AdminBookingPolicyResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
@@ -231,7 +266,7 @@ private class FakeBookingPolicyAdminRepository(
 
     override suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResult
+        return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
     }
 
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
@@ -252,7 +287,7 @@ private class FakeBookingPolicyAdminRepository(
         request: AdminBookingPolicyUpdateRequest,
     ): AdminBookingPolicyResult {
         updateRequests += request
-        return updateResult ?: AdminBookingPolicyResult.Success(
+        return updateResultDeferred?.await() ?: updateResult ?: AdminBookingPolicyResult.Success(
             AdminBookingPolicyConfig(
                 pendingHoldMinutes = request.pendingHoldMinutes,
                 cancellationWindowMinutes = request.cancellationWindowMinutes,
@@ -341,6 +376,12 @@ private class FakeBookingPolicyAuthRepository(authenticated: Boolean) : AuthRepo
         sessionState.value = AuthSessionState.Unauthenticated
     }
 
+    fun switchTo(uid: String) {
+        sessionState.value = AuthSessionState.Authenticated(
+            authSession.copy(user = authSession.user.copy(uid = uid)),
+        )
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
         error("unused")
     }
@@ -360,10 +401,11 @@ private class FakeBookingPolicyAuthRepository(authenticated: Boolean) : AuthRepo
 }
 
 private fun adminBookingPolicyConfig(
+    pendingHoldMinutes: Int = 1440,
     updatedAtIso: String = "",
     updatedByUid: String = "",
 ): AdminBookingPolicyConfig = AdminBookingPolicyConfig(
-    pendingHoldMinutes = 1440,
+    pendingHoldMinutes = pendingHoldMinutes,
     cancellationWindowMinutes = 0,
     rescheduleWindowMinutes = 0,
     paymentEligibilityCopy = "Pagamento no local",

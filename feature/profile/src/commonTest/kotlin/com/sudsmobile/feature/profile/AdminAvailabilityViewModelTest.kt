@@ -261,6 +261,46 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun saveCapacityOverrideIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminCapacityOverrideMutationResult>()
+        val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
+        val repository = FakeAvailabilityAdminRepository(
+            upsertCapacityOverrideResultDeferred = deferred,
+            loadResults = ArrayDeque(
+                listOf(
+                    AdminAvailabilityResult.Success(adminAvailabilityConfig(defaultMaxBookingsPerSlot = 2)),
+                    AdminAvailabilityResult.Success(adminAvailabilityConfig(defaultMaxBookingsPerSlot = 5)),
+                ),
+            ),
+        )
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(
+            loaded.form.copy(
+                overrideDate = "2026-06-10",
+                overrideMaxBookingsPerSlot = "0",
+            ),
+        )
+        viewModel.saveCapacityOverride()
+        runCurrent()
+        authRepository.switchTo("uid-2")
+        deferred.complete(AdminCapacityOverrideMutationResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals("2026-06-10", repository.upsertCapacityOverrideRequests.single().date)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminAvailabilitySaveState.Idle>(viewModel.saveState.value)
+        val reloaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("5", reloaded.form.defaultMaxBookingsPerSlot)
+    }
+
+    @Test
     fun clearCapacityOverrideSubmitsDateAndReloads() = runTest {
         val repository = FakeAvailabilityAdminRepository()
         val viewModel = AdminAvailabilityViewModel(
@@ -357,6 +397,8 @@ private class FakeAvailabilityAdminRepository(
     var loadResult: AdminAvailabilityResult = AdminAvailabilityResult.Success(adminAvailabilityConfig()),
     var updateResult: AdminAvailabilityResult = AdminAvailabilityResult.Success(adminAvailabilityConfig()),
     private val loadResultDeferred: CompletableDeferred<AdminAvailabilityResult>? = null,
+    private val loadResults: ArrayDeque<AdminAvailabilityResult>? = null,
+    private val upsertCapacityOverrideResultDeferred: CompletableDeferred<AdminCapacityOverrideMutationResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
@@ -380,7 +422,7 @@ private class FakeAvailabilityAdminRepository(
 
     override suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResult
+        return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
     }
 
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
@@ -408,7 +450,7 @@ private class FakeAvailabilityAdminRepository(
         request: AdminCapacityOverrideUpsertRequest,
     ): AdminCapacityOverrideMutationResult {
         upsertCapacityOverrideRequests += request
-        return AdminCapacityOverrideMutationResult.Success(
+        return upsertCapacityOverrideResultDeferred?.await() ?: AdminCapacityOverrideMutationResult.Success(
             AdminCapacityOverrideMutationReceipt(
                 date = request.date,
                 status = "updated",
@@ -513,6 +555,12 @@ private class FakeAvailabilityAuthRepository(authenticated: Boolean) : AuthRepos
 
     override fun signOut() {
         sessionState.value = AuthSessionState.Unauthenticated
+    }
+
+    fun switchTo(uid: String) {
+        sessionState.value = AuthSessionState.Authenticated(
+            authSession.copy(user = authSession.user.copy(uid = uid)),
+        )
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {

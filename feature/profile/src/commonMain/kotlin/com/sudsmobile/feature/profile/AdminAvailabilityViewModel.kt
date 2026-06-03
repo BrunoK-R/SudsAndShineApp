@@ -156,8 +156,7 @@ internal class AdminAvailabilityViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedConfig()
-                    _uiState.value = AdminAvailabilityUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -196,24 +195,24 @@ internal class AdminAvailabilityViewModel(
             _saveState.value = AdminAvailabilitySaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminAvailabilityUiState.Unauthenticated
                 _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.updateAvailabilityConfiguration(request)) {
+            val result = adminRepository.updateAvailabilityConfiguration(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminAvailabilityResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = requestedUid
-                        _uiState.value = AdminAvailabilityUiState.Loaded(result.config.toForm())
-                        _saveState.value = AdminAvailabilitySaveState.Success("Disponibilidade guardada.")
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminAvailabilityUiState.Unauthenticated
-                        _saveState.value = AdminAvailabilitySaveState.Idle
-                    }
+                    loadedUid = requestedUid
+                    _uiState.value = AdminAvailabilityUiState.Loaded(result.config.toForm())
+                    _saveState.value = AdminAvailabilitySaveState.Success("Disponibilidade guardada.")
                 }
                 is AdminAvailabilityResult.Failure -> {
                     _saveState.value = result.error.toAdminAvailabilitySaveState()
@@ -250,24 +249,24 @@ internal class AdminAvailabilityViewModel(
             _saveState.value = AdminAvailabilitySaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminAvailabilityUiState.Unauthenticated
                 _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.upsertCapacityOverride(request)) {
+            val result = adminRepository.upsertCapacityOverride(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminCapacityOverrideMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _saveState.value = AdminAvailabilitySaveState.Success("Exceção de capacidade guardada.")
-                        loadConfiguration()
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminAvailabilityUiState.Unauthenticated
-                        _saveState.value = AdminAvailabilitySaveState.Idle
-                    }
+                    loadedUid = null
+                    _saveState.value = AdminAvailabilitySaveState.Success("Exceção de capacidade guardada.")
+                    loadConfiguration()
                 }
                 is AdminCapacityOverrideMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -295,28 +294,26 @@ internal class AdminAvailabilityViewModel(
             _saveState.value = AdminAvailabilitySaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminAvailabilityUiState.Unauthenticated
                 _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (
-                val result = adminRepository.clearCapacityOverride(
-                    AdminCapacityOverrideClearRequest(cleanDate),
-                )
-            ) {
+            val result = adminRepository.clearCapacityOverride(
+                AdminCapacityOverrideClearRequest(cleanDate),
+            )
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminCapacityOverrideMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _saveState.value = AdminAvailabilitySaveState.Success("Exceção de capacidade limpa.")
-                        loadConfiguration()
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminAvailabilityUiState.Unauthenticated
-                        _saveState.value = AdminAvailabilitySaveState.Idle
-                    }
+                    loadedUid = null
+                    _saveState.value = AdminAvailabilitySaveState.Success("Exceção de capacidade limpa.")
+                    loadConfiguration()
                 }
                 is AdminCapacityOverrideMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -345,24 +342,24 @@ internal class AdminAvailabilityViewModel(
             _saveState.value = AdminAvailabilitySaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminAvailabilityUiState.Unauthenticated
                 _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.upsertBlockedSlot(request)) {
+            val result = adminRepository.upsertBlockedSlot(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminBlockedSlotMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário guardado.")
-                        loadConfiguration()
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminAvailabilityUiState.Unauthenticated
-                        _saveState.value = AdminAvailabilitySaveState.Idle
-                    }
+                    loadedUid = null
+                    _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário guardado.")
+                    loadConfiguration()
                 }
                 is AdminBlockedSlotMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -390,28 +387,26 @@ internal class AdminAvailabilityViewModel(
             _saveState.value = AdminAvailabilitySaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminAvailabilityUiState.Unauthenticated
                 _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (
-                val result = adminRepository.clearBlockedSlot(
-                    AdminBlockedSlotClearRequest(cleanBlockedSlotId),
-                )
-            ) {
+            val result = adminRepository.clearBlockedSlot(
+                AdminBlockedSlotClearRequest(cleanBlockedSlotId),
+            )
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminAvailabilitySaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminBlockedSlotMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário limpo.")
-                        loadConfiguration()
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminAvailabilityUiState.Unauthenticated
-                        _saveState.value = AdminAvailabilitySaveState.Idle
-                    }
+                    loadedUid = null
+                    _saveState.value = AdminAvailabilitySaveState.Success("Bloqueio de horário limpo.")
+                    loadConfiguration()
                 }
                 is AdminBlockedSlotMutationResult.Failure -> handleAvailabilityMutationFailure(result.error)
             }
@@ -436,6 +431,11 @@ internal class AdminAvailabilityViewModel(
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedConfig()
+        refreshForSession(force = true)
     }
 }
 

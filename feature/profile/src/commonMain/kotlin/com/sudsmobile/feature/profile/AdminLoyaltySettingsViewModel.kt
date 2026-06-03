@@ -116,8 +116,7 @@ internal class AdminLoyaltySettingsViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedConfig()
-                    _uiState.value = AdminLoyaltySettingsUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -156,24 +155,24 @@ internal class AdminLoyaltySettingsViewModel(
             _saveState.value = AdminLoyaltySettingsSaveState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedConfig()
-                _uiState.value = AdminLoyaltySettingsUiState.Unauthenticated
                 _saveState.value = AdminLoyaltySettingsSaveState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.updateLoyaltySettingsConfiguration(request)) {
+            val result = adminRepository.updateLoyaltySettingsConfiguration(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _saveState.value = AdminLoyaltySettingsSaveState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminLoyaltySettingsResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = requestedUid
-                        _uiState.value = AdminLoyaltySettingsUiState.Loaded(result.config.toForm())
-                        _saveState.value = AdminLoyaltySettingsSaveState.Success("Fidelização guardada.")
-                    } else {
-                        clearLoadedConfig()
-                        _uiState.value = AdminLoyaltySettingsUiState.Unauthenticated
-                        _saveState.value = AdminLoyaltySettingsSaveState.Idle
-                    }
+                    loadedUid = requestedUid
+                    _uiState.value = AdminLoyaltySettingsUiState.Loaded(result.config.toForm())
+                    _saveState.value = AdminLoyaltySettingsSaveState.Success("Fidelização guardada.")
                 }
                 is AdminLoyaltySettingsResult.Failure -> {
                     _saveState.value = result.error.toAdminLoyaltySettingsSaveState()
@@ -196,6 +195,11 @@ internal class AdminLoyaltySettingsViewModel(
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedConfig()
+        refreshForSession(force = true)
     }
 }
 
