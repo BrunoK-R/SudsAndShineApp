@@ -149,8 +149,7 @@ internal class AdminServiceExtrasViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedExtras()
-                    _uiState.value = AdminServiceExtrasUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -214,24 +213,24 @@ internal class AdminServiceExtrasViewModel(
             _mutationState.value = AdminServiceExtrasMutationState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedExtras()
-                _uiState.value = AdminServiceExtrasUiState.Unauthenticated
                 _mutationState.value = AdminServiceExtrasMutationState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.upsertServiceExtra(request)) {
+            val result = adminRepository.upsertServiceExtra(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _mutationState.value = AdminServiceExtrasMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminServiceExtraMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _mutationState.value = AdminServiceExtrasMutationState.Success("Extra guardado.")
-                        loadExtras(force = true)
-                    } else {
-                        clearLoadedExtras()
-                        _uiState.value = AdminServiceExtrasUiState.Unauthenticated
-                        _mutationState.value = AdminServiceExtrasMutationState.Idle
-                    }
+                    loadedUid = null
+                    _mutationState.value = AdminServiceExtrasMutationState.Success("Extra guardado.")
+                    loadExtras(force = true)
                 }
                 is AdminServiceExtraMutationResult.Failure -> {
                     _mutationState.value = result.error.toAdminServiceExtrasMutationState()
@@ -266,28 +265,26 @@ internal class AdminServiceExtrasViewModel(
             _mutationState.value = AdminServiceExtrasMutationState.Archiving(cleanExtraId)
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedExtras()
-                _uiState.value = AdminServiceExtrasUiState.Unauthenticated
                 _mutationState.value = AdminServiceExtrasMutationState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (
-                val result = adminRepository.archiveServiceExtra(
-                    AdminServiceExtraArchiveRequest(cleanExtraId),
-                )
-            ) {
+            val result = adminRepository.archiveServiceExtra(
+                AdminServiceExtraArchiveRequest(cleanExtraId),
+            )
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _mutationState.value = AdminServiceExtrasMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminServiceExtraMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _mutationState.value = AdminServiceExtrasMutationState.Success("Extra arquivado.")
-                        loadExtras(force = true)
-                    } else {
-                        clearLoadedExtras()
-                        _uiState.value = AdminServiceExtrasUiState.Unauthenticated
-                        _mutationState.value = AdminServiceExtrasMutationState.Idle
-                    }
+                    loadedUid = null
+                    _mutationState.value = AdminServiceExtrasMutationState.Success("Extra arquivado.")
+                    loadExtras(force = true)
                 }
                 is AdminServiceExtraMutationResult.Failure -> {
                     _mutationState.value = result.error.toAdminServiceExtrasMutationState()
@@ -310,6 +307,11 @@ internal class AdminServiceExtrasViewModel(
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedExtras()
+        refreshForSession(force = true)
     }
 }
 

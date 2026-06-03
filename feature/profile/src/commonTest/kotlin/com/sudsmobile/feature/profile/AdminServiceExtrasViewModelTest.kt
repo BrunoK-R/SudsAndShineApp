@@ -227,6 +227,44 @@ class AdminServiceExtrasViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminServiceExtraMutationResult>()
+        val authRepository = FakeServiceExtrasAuthRepository(authenticated = true)
+        val repository = FakeServiceExtrasAdminRepository(
+            upsertResultDeferred = deferred,
+            loadResults = ArrayDeque(
+                listOf(
+                    AdminServiceExtrasResult.Success(adminServiceExtrasConfig()),
+                    AdminServiceExtrasResult.Success(
+                        adminServiceExtrasConfig(
+                            extras = listOf(adminServiceExtraItem(id = "interior", name = "Interior")),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val viewModel = AdminServiceExtrasViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadExtras()
+        runCurrent()
+        viewModel.editExtra("wax")
+        viewModel.save()
+        runCurrent()
+        authRepository.switchTo("uid-2")
+        deferred.complete(AdminServiceExtraMutationResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals("wax", repository.upsertRequests.single().extraId)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminServiceExtrasMutationState.Idle>(viewModel.mutationState.value)
+        val loaded = assertIs<AdminServiceExtrasUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("interior", loaded.extras.single().id)
+    }
+
+    @Test
     fun archiveSendsArchiveRequestAndReloadsExtras() = runTest {
         val repository = FakeServiceExtrasAdminRepository(
             loadResults = ArrayDeque(
@@ -250,6 +288,29 @@ class AdminServiceExtrasViewModelTest {
         assertIs<AdminServiceExtrasMutationState.Success>(viewModel.mutationState.value)
         assertIs<AdminServiceExtrasUiState.Empty>(viewModel.uiState.value)
     }
+
+    @Test
+    fun archiveIgnoresStaleFailureAfterSignOut() = runTest {
+        val deferred = CompletableDeferred<AdminServiceExtraMutationResult>()
+        val authRepository = FakeServiceExtrasAuthRepository(authenticated = true)
+        val repository = FakeServiceExtrasAdminRepository(archiveResultDeferred = deferred)
+        val viewModel = AdminServiceExtrasViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadExtras()
+        runCurrent()
+        viewModel.archive("wax")
+        runCurrent()
+        authRepository.signOut()
+        deferred.complete(AdminServiceExtraMutationResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals("wax", repository.archiveRequests.single().extraId)
+        assertIs<AdminServiceExtrasMutationState.Idle>(viewModel.mutationState.value)
+        assertIs<AdminServiceExtrasUiState.Unauthenticated>(viewModel.uiState.value)
+    }
 }
 
 private class FakeServiceExtrasAdminRepository(
@@ -262,6 +323,8 @@ private class FakeServiceExtrasAdminRepository(
     ),
     private val loadResultDeferred: CompletableDeferred<AdminServiceExtrasResult>? = null,
     private val loadResults: ArrayDeque<AdminServiceExtrasResult>? = null,
+    private val upsertResultDeferred: CompletableDeferred<AdminServiceExtraMutationResult>? = null,
+    private val archiveResultDeferred: CompletableDeferred<AdminServiceExtraMutationResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
@@ -345,14 +408,14 @@ private class FakeServiceExtrasAdminRepository(
         request: AdminServiceExtraMutationRequest,
     ): AdminServiceExtraMutationResult {
         upsertRequests += request
-        return upsertResult
+        return upsertResultDeferred?.await() ?: upsertResult
     }
 
     override suspend fun archiveServiceExtra(
         request: AdminServiceExtraArchiveRequest,
     ): AdminServiceExtraMutationResult {
         archiveRequests += request
-        return archiveResult
+        return archiveResultDeferred?.await() ?: archiveResult
     }
 }
 
@@ -370,6 +433,10 @@ private class FakeServiceExtrasAuthRepository(
 
     override fun signOut() {
         mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+
+    fun switchTo(uid: String) {
+        mutableSessionState.value = serviceExtrasAuthenticatedSession(uid)
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
@@ -392,17 +459,17 @@ private class FakeServiceExtrasAuthRepository(
     }
 }
 
-private fun serviceExtrasAuthenticatedSession(): AuthSessionState.Authenticated {
+private fun serviceExtrasAuthenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
     return AuthSessionState.Authenticated(
         AuthSession(
             user = AuthUser(
-                uid = "uid-1",
+                uid = uid,
                 email = "admin@example.com",
                 displayName = "Admin",
                 phoneNumber = "",
             ),
-            idToken = "id-token-uid-1",
-            refreshToken = "refresh-token-uid-1",
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
             expiresInSeconds = 3600,
         ),
     )

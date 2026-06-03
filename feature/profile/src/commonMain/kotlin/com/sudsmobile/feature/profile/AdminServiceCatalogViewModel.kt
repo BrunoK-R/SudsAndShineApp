@@ -153,8 +153,7 @@ internal class AdminServiceCatalogViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedCatalog()
-                    _uiState.value = AdminServiceCatalogUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -218,24 +217,24 @@ internal class AdminServiceCatalogViewModel(
             _mutationState.value = AdminServiceCatalogMutationState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedCatalog()
-                _uiState.value = AdminServiceCatalogUiState.Unauthenticated
                 _mutationState.value = AdminServiceCatalogMutationState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.upsertServiceCatalogItem(request)) {
+            val result = adminRepository.upsertServiceCatalogItem(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _mutationState.value = AdminServiceCatalogMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminServiceCatalogMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _mutationState.value = AdminServiceCatalogMutationState.Success("Serviço guardado.")
-                        loadCatalog(force = true)
-                    } else {
-                        clearLoadedCatalog()
-                        _uiState.value = AdminServiceCatalogUiState.Unauthenticated
-                        _mutationState.value = AdminServiceCatalogMutationState.Idle
-                    }
+                    loadedUid = null
+                    _mutationState.value = AdminServiceCatalogMutationState.Success("Serviço guardado.")
+                    loadCatalog(force = true)
                 }
                 is AdminServiceCatalogMutationResult.Failure -> {
                     _mutationState.value = result.error.toAdminServiceCatalogMutationState()
@@ -270,28 +269,26 @@ internal class AdminServiceCatalogViewModel(
             _mutationState.value = AdminServiceCatalogMutationState.Archiving(cleanServiceId)
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedCatalog()
-                _uiState.value = AdminServiceCatalogUiState.Unauthenticated
                 _mutationState.value = AdminServiceCatalogMutationState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (
-                val result = adminRepository.archiveServiceCatalogItem(
-                    AdminServiceCatalogArchiveRequest(cleanServiceId),
-                )
-            ) {
+            val result = adminRepository.archiveServiceCatalogItem(
+                AdminServiceCatalogArchiveRequest(cleanServiceId),
+            )
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _mutationState.value = AdminServiceCatalogMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminServiceCatalogMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _mutationState.value = AdminServiceCatalogMutationState.Success("Serviço arquivado.")
-                        loadCatalog(force = true)
-                    } else {
-                        clearLoadedCatalog()
-                        _uiState.value = AdminServiceCatalogUiState.Unauthenticated
-                        _mutationState.value = AdminServiceCatalogMutationState.Idle
-                    }
+                    loadedUid = null
+                    _mutationState.value = AdminServiceCatalogMutationState.Success("Serviço arquivado.")
+                    loadCatalog(force = true)
                 }
                 is AdminServiceCatalogMutationResult.Failure -> {
                     _mutationState.value = result.error.toAdminServiceCatalogMutationState()
@@ -314,6 +311,11 @@ internal class AdminServiceCatalogViewModel(
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedCatalog()
+        refreshForSession(force = true)
     }
 }
 

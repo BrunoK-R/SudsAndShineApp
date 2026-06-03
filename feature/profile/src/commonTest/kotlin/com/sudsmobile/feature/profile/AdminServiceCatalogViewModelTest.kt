@@ -236,6 +236,44 @@ class AdminServiceCatalogViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminServiceCatalogMutationResult>()
+        val authRepository = FakeServiceCatalogAuthRepository(authenticated = true)
+        val repository = FakeServiceCatalogAdminRepository(
+            upsertResultDeferred = deferred,
+            loadResults = ArrayDeque(
+                listOf(
+                    AdminServiceCatalogResult.Success(adminServiceCatalogConfig()),
+                    AdminServiceCatalogResult.Success(
+                        adminServiceCatalogConfig(
+                            services = listOf(adminServiceCatalogItem(id = "standard", name = "Lavagem Standard")),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val viewModel = AdminServiceCatalogViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadCatalog()
+        runCurrent()
+        viewModel.editService("premium")
+        viewModel.save()
+        runCurrent()
+        authRepository.switchTo("uid-2")
+        deferred.complete(AdminServiceCatalogMutationResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals("premium", repository.upsertRequests.single().serviceId)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminServiceCatalogMutationState.Idle>(viewModel.mutationState.value)
+        val loaded = assertIs<AdminServiceCatalogUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("standard", loaded.services.single().id)
+    }
+
+    @Test
     fun archiveSendsArchiveRequestAndReloadsCatalog() = runTest {
         val repository = FakeServiceCatalogAdminRepository(
             loadResults = ArrayDeque(
@@ -262,6 +300,29 @@ class AdminServiceCatalogViewModelTest {
         assertIs<AdminServiceCatalogMutationState.Success>(viewModel.mutationState.value)
         assertIs<AdminServiceCatalogUiState.Empty>(viewModel.uiState.value)
     }
+
+    @Test
+    fun archiveIgnoresStaleFailureAfterSignOut() = runTest {
+        val deferred = CompletableDeferred<AdminServiceCatalogMutationResult>()
+        val authRepository = FakeServiceCatalogAuthRepository(authenticated = true)
+        val repository = FakeServiceCatalogAdminRepository(archiveResultDeferred = deferred)
+        val viewModel = AdminServiceCatalogViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadCatalog()
+        runCurrent()
+        viewModel.archive("premium")
+        runCurrent()
+        authRepository.signOut()
+        deferred.complete(AdminServiceCatalogMutationResult.Failure(AdminError.Permission("old admin denied")))
+        runCurrent()
+
+        assertEquals("premium", repository.archiveRequests.single().serviceId)
+        assertIs<AdminServiceCatalogMutationState.Idle>(viewModel.mutationState.value)
+        assertIs<AdminServiceCatalogUiState.Unauthenticated>(viewModel.uiState.value)
+    }
 }
 
 private class FakeServiceCatalogAdminRepository(
@@ -274,6 +335,8 @@ private class FakeServiceCatalogAdminRepository(
     ),
     private val loadResultDeferred: CompletableDeferred<AdminServiceCatalogResult>? = null,
     private val loadResults: ArrayDeque<AdminServiceCatalogResult>? = null,
+    private val upsertResultDeferred: CompletableDeferred<AdminServiceCatalogMutationResult>? = null,
+    private val archiveResultDeferred: CompletableDeferred<AdminServiceCatalogMutationResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
         private set
@@ -345,14 +408,14 @@ private class FakeServiceCatalogAdminRepository(
         request: AdminServiceCatalogMutationRequest,
     ): AdminServiceCatalogMutationResult {
         upsertRequests += request
-        return upsertResult
+        return upsertResultDeferred?.await() ?: upsertResult
     }
 
     override suspend fun archiveServiceCatalogItem(
         request: AdminServiceCatalogArchiveRequest,
     ): AdminServiceCatalogMutationResult {
         archiveRequests += request
-        return archiveResult
+        return archiveResultDeferred?.await() ?: archiveResult
     }
 
     override suspend fun upsertServiceExtra(
@@ -384,6 +447,10 @@ private class FakeServiceCatalogAuthRepository(
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
 
+    fun switchTo(uid: String) {
+        mutableSessionState.value = serviceCatalogAuthenticatedSession(uid)
+    }
+
     override suspend fun signIn(email: String, password: String): AuthResult {
         mutableSessionState.value = serviceCatalogAuthenticatedSession()
         return AuthResult.Success((mutableSessionState.value as AuthSessionState.Authenticated).session)
@@ -404,17 +471,17 @@ private class FakeServiceCatalogAuthRepository(
     }
 }
 
-private fun serviceCatalogAuthenticatedSession(): AuthSessionState.Authenticated {
+private fun serviceCatalogAuthenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
     return AuthSessionState.Authenticated(
         AuthSession(
             user = AuthUser(
-                uid = "uid-1",
+                uid = uid,
                 email = "admin@example.com",
                 displayName = "Admin",
                 phoneNumber = "",
             ),
-            idToken = "id-token-uid-1",
-            refreshToken = "refresh-token-uid-1",
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
             expiresInSeconds = 3600,
         ),
     )
