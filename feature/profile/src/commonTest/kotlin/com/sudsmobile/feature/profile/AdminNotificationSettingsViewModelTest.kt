@@ -117,6 +117,54 @@ class AdminNotificationSettingsViewModelTest {
     }
 
     @Test
+    fun deliverySummaryFormatsReminderQuietHoursAndDisabledTemplates() = runTest {
+        val form = adminNotificationSettingsConfig().toTestForm(
+            reminderLeadMinutes = "90",
+            quietHoursStart = "22:00",
+            quietHoursEnd = "07:00",
+            templates = adminNotificationTemplates().map {
+                if (it.key == "booking_rejected") it.copy(enabled = false) else it
+            },
+        )
+
+        val summary = form.toDeliverySummary()
+
+        assertEquals("4 canais ativos", summary.channelSummaryLabel)
+        assertEquals("9 modelos ativos", summary.templateSummaryLabel)
+        assertEquals("1 h 30 min antes", summary.reminderLeadLabel)
+        assertEquals("22:00 - 07:00", summary.quietHoursLabel)
+        assertEquals("Até ao dia seguinte em Europe/Lisbon", summary.quietHoursDetailLabel)
+        assertEquals("1 modelo desligado: Marcação rejeitada", summary.disabledTemplatesLabel)
+    }
+
+    @Test
+    fun deliverySummarySurfacesInvalidAndAllDisabledEditingStates() = runTest {
+        val form = adminNotificationSettingsConfig().toTestForm(
+            bookingStatusEnabled = false,
+            appointmentReminderEnabled = false,
+            loyaltyEnabled = false,
+            adminPendingAlertEnabled = false,
+            marketingEnabled = false,
+            reminderLeadMinutes = "5",
+            quietHoursStart = "bad",
+            quietHoursTimeZone = "../Europe/Lisbon",
+            templates = adminNotificationTemplates().map { it.copy(enabled = false) },
+        )
+
+        val summary = form.toDeliverySummary()
+
+        assertEquals("Todos os canais desligados", summary.channelSummaryLabel)
+        assertEquals("Todos os modelos desligados", summary.templateSummaryLabel)
+        assertEquals("Antecedência inválida", summary.reminderLeadLabel)
+        assertEquals("Silêncio inválido", summary.quietHoursLabel)
+        assertEquals("Corrija horas ou fuso horário", summary.quietHoursDetailLabel)
+        assertEquals(
+            "10 modelos desligados: Pedido recebido, Marcação aceite, Marcação rejeitada +7",
+            summary.disabledTemplatesLabel,
+        )
+    }
+
+    @Test
     fun loadConfigurationIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<AdminNotificationSettingsResult>()
         val authRepository = FakeNotificationSettingsAuthRepository(authenticated = true)

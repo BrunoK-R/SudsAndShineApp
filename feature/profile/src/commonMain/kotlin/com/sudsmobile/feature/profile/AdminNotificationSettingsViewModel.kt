@@ -40,6 +40,15 @@ internal data class AdminNotificationTemplateForm(
     val body: String,
 )
 
+internal data class AdminNotificationDeliverySummary(
+    val channelSummaryLabel: String,
+    val templateSummaryLabel: String,
+    val reminderLeadLabel: String,
+    val quietHoursLabel: String,
+    val quietHoursDetailLabel: String,
+    val disabledTemplatesLabel: String,
+)
+
 internal sealed interface AdminNotificationSettingsUiState {
     data object Idle : AdminNotificationSettingsUiState
     data object Loading : AdminNotificationSettingsUiState
@@ -411,6 +420,108 @@ private fun AdminNotificationSettingsForm.toUpdateRequest(): ParsedNotificationS
             ),
         )
     }
+}
+
+internal fun AdminNotificationSettingsForm.toDeliverySummary(): AdminNotificationDeliverySummary {
+    val enabledChannels = listOf(
+        bookingStatusEnabled,
+        appointmentReminderEnabled,
+        loyaltyEnabled,
+        adminPendingAlertEnabled,
+        marketingEnabled,
+    ).count { it }
+    val enabledTemplates = templates.count { it.enabled }
+    val disabledTemplates = templates.filterNot { it.enabled }
+
+    return AdminNotificationDeliverySummary(
+        channelSummaryLabel = countLabel(
+            count = enabledChannels,
+            singular = "canal ativo",
+            plural = "canais ativos",
+            empty = "Todos os canais desligados",
+        ),
+        templateSummaryLabel = countLabel(
+            count = enabledTemplates,
+            singular = "modelo ativo",
+            plural = "modelos ativos",
+            empty = "Todos os modelos desligados",
+        ),
+        reminderLeadLabel = reminderLeadMinutes.toReminderLeadSummaryLabel(),
+        quietHoursLabel = quietHoursSummaryLabel(),
+        quietHoursDetailLabel = quietHoursDetailLabel(),
+        disabledTemplatesLabel = disabledTemplates.toDisabledTemplatesLabel(),
+    )
+}
+
+private fun countLabel(
+    count: Int,
+    singular: String,
+    plural: String,
+    empty: String,
+): String {
+    return when (count) {
+        0 -> empty
+        1 -> "1 $singular"
+        else -> "$count $plural"
+    }
+}
+
+private fun String.toReminderLeadSummaryLabel(): String {
+    val minutes = trim().toIntOrNull()
+    if (minutes == null || minutes !in 15..10080) return "Antecedência inválida"
+    return "${minutes.toDurationSummaryLabel()} antes"
+}
+
+private fun Int.toDurationSummaryLabel(): String {
+    val days = this / 1440
+    val hours = (this % 1440) / 60
+    val minutes = this % 60
+    val parts = buildList {
+        if (days > 0) add(if (days == 1) "1 dia" else "$days dias")
+        if (hours > 0) add("${hours} h")
+        if (minutes > 0) add("${minutes} min")
+    }
+    return parts.joinToString(" ").ifBlank { "0 min" }
+}
+
+private fun AdminNotificationSettingsForm.quietHoursSummaryLabel(): String {
+    val start = quietHoursStart.trim()
+    val end = quietHoursEnd.trim()
+    val timeZone = quietHoursTimeZone.trim().ifBlank { "Europe/Lisbon" }
+    if (!start.isAdminNotificationTime() || !end.isAdminNotificationTime() || !timeZone.isAdminNotificationTimeZone()) {
+        return "Silêncio inválido"
+    }
+    if (start == end) return "Sem silêncio"
+    return "$start - $end"
+}
+
+private fun AdminNotificationSettingsForm.quietHoursDetailLabel(): String {
+    val start = quietHoursStart.trim()
+    val end = quietHoursEnd.trim()
+    val timeZone = quietHoursTimeZone.trim().ifBlank { "Europe/Lisbon" }
+    if (!start.isAdminNotificationTime() || !end.isAdminNotificationTime() || !timeZone.isAdminNotificationTimeZone()) {
+        return "Corrija horas ou fuso horário"
+    }
+    if (start == end) return timeZone
+    return if (start > end) {
+        "Até ao dia seguinte em $timeZone"
+    } else {
+        "No mesmo dia em $timeZone"
+    }
+}
+
+private fun List<AdminNotificationTemplateForm>.toDisabledTemplatesLabel(): String {
+    if (isEmpty()) return ""
+    val visibleLabels = take(3).joinToString(", ") { it.label }
+    val remainingCount = size - 3
+    val countLabel = countLabel(
+        count = size,
+        singular = "modelo desligado",
+        plural = "modelos desligados",
+        empty = "",
+    )
+    val suffix = if (remainingCount > 0) " +$remainingCount" else ""
+    return "$countLabel: $visibleLabels$suffix"
 }
 
 private fun AdminError.toAdminNotificationSettingsState(): AdminNotificationSettingsUiState {

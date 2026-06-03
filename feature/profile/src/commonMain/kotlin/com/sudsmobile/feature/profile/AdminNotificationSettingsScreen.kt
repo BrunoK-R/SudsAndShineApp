@@ -362,6 +362,7 @@ private fun AdminNotificationSettingsFormCard(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 AdminNotificationAuditLabel(label = form.updatedAuditLabel)
+                AdminNotificationDeliverySummaryPanel(summary = form.toDeliverySummary())
                 AdminNotificationSwitchRow(
                     title = "Estados da marcação",
                     body = "Pedidos, aceitações, rejeições e expiração",
@@ -561,6 +562,89 @@ private fun AdminNotificationTemplateCard(
                     fontWeight = FontWeight.Bold,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AdminNotificationDeliverySummaryPanel(summary: AdminNotificationDeliverySummary) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AdminNotificationSummaryMetric(
+                label = "Canais",
+                value = summary.channelSummaryLabel,
+                modifier = Modifier.weight(1f),
+            )
+            AdminNotificationSummaryMetric(
+                label = "Modelos",
+                value = summary.templateSummaryLabel,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AdminNotificationSummaryMetric(
+                label = "Lembrete",
+                value = summary.reminderLeadLabel,
+                modifier = Modifier.weight(1f),
+            )
+            AdminNotificationSummaryMetric(
+                label = "Silêncio",
+                value = summary.quietHoursLabel,
+                supportingValue = summary.quietHoursDetailLabel,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (summary.disabledTemplatesLabel.isNotBlank()) {
+            Text(
+                text = summary.disabledTemplatesLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminNotificationSummaryMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    supportingValue: String = "",
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        if (supportingValue.isNotBlank()) {
+            Text(
+                text = supportingValue,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
