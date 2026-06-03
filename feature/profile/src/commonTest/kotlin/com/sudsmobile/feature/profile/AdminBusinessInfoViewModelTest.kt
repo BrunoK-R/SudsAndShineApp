@@ -134,6 +134,48 @@ class AdminBusinessInfoViewModelTest {
     }
 
     @Test
+    fun loadConfigurationIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBusinessInfoResult>()
+        val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
+        val repository = FakeBusinessInfoAdminRepository(loadResultDeferred = deferred)
+        val viewModel = AdminBusinessInfoViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        repository.loadResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig(phone = "244 222 333"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminBusinessInfoResult.Failure(AdminError.Permission("old token denied")))
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        val loaded = assertIs<AdminBusinessInfoUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("244 222 333", loaded.form.phone)
+    }
+
+    @Test
+    fun refreshReloadsWhenSameUserSessionTokenChanges() = runTest {
+        val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
+        val repository = FakeBusinessInfoAdminRepository()
+        val viewModel = AdminBusinessInfoViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        repository.loadResult = AdminBusinessInfoResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminBusinessInfoUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun saveSendsBusinessInfoUpdateAndShowsSuccess() = runTest {
         val repository = FakeBusinessInfoAdminRepository(
             loadResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
@@ -212,6 +254,31 @@ class AdminBusinessInfoViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBusinessInfoResult>()
+        val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
+        val repository = FakeBusinessInfoAdminRepository(updateResultDeferred = deferred)
+        val viewModel = AdminBusinessInfoViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        repository.loadResult = AdminBusinessInfoResult.Failure(AdminError.Permission("new token denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminBusinessInfoResult.Success(adminBusinessInfoConfig(phone = "244 000 222")))
+        runCurrent()
+
+        assertEquals(1, repository.updateRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminBusinessInfoSaveState.Idle>(viewModel.saveState.value)
+        assertIs<AdminBusinessInfoUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
         val deferred = CompletableDeferred<AdminBusinessInfoResult>()
         val authRepository = FakeBusinessInfoAuthRepository(authenticated = true)
@@ -248,10 +315,12 @@ class AdminBusinessInfoViewModelTest {
 private class FakeBusinessInfoAdminRepository(
     var loadResult: AdminBusinessInfoResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
     var updateResult: AdminBusinessInfoResult = AdminBusinessInfoResult.Success(adminBusinessInfoConfig()),
-    private val loadResultDeferred: CompletableDeferred<AdminBusinessInfoResult>? = null,
+    loadResultDeferred: CompletableDeferred<AdminBusinessInfoResult>? = null,
     private val loadResults: ArrayDeque<AdminBusinessInfoResult>? = null,
-    private val updateResultDeferred: CompletableDeferred<AdminBusinessInfoResult>? = null,
+    updateResultDeferred: CompletableDeferred<AdminBusinessInfoResult>? = null,
 ) : AdminRepository {
+    private var pendingLoadResultDeferred = loadResultDeferred
+    private var pendingUpdateResultDeferred = updateResultDeferred
     var loadCalls = 0
         private set
     val updateRequests = mutableListOf<AdminBusinessInfoUpdateRequest>()
@@ -266,7 +335,9 @@ private class FakeBusinessInfoAdminRepository(
 
     override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
+        val deferred = pendingLoadResultDeferred
+        pendingLoadResultDeferred = null
+        return deferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
     }
 
     override suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult {
@@ -285,7 +356,9 @@ private class FakeBusinessInfoAdminRepository(
         request: AdminBusinessInfoUpdateRequest,
     ): AdminBusinessInfoResult {
         updateRequests += request
-        return updateResultDeferred?.await() ?: updateResult
+        val deferred = pendingUpdateResultDeferred
+        pendingUpdateResultDeferred = null
+        return deferred?.await() ?: updateResult
     }
 
     override suspend fun updateAvailabilityConfiguration(
@@ -360,7 +433,11 @@ private class FakeBusinessInfoAuthRepository(
     }
 
     fun switchTo(uid: String) {
-        mutableSessionState.value = businessInfoAuthenticatedSession(uid)
+        authenticateAs(uid)
+    }
+
+    fun authenticateAs(uid: String, tokenVersion: Int = 1) {
+        mutableSessionState.value = businessInfoAuthenticatedSession(uid, tokenVersion)
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
@@ -383,7 +460,10 @@ private class FakeBusinessInfoAuthRepository(
     }
 }
 
-private fun businessInfoAuthenticatedSession(uid: String = "uid-1"): AuthSessionState.Authenticated {
+private fun businessInfoAuthenticatedSession(
+    uid: String = "uid-1",
+    tokenVersion: Int = 1,
+): AuthSessionState.Authenticated {
     return AuthSessionState.Authenticated(
         AuthSession(
             user = AuthUser(
@@ -392,9 +472,10 @@ private fun businessInfoAuthenticatedSession(uid: String = "uid-1"): AuthSession
                 displayName = "Admin",
                 phoneNumber = "",
             ),
-            idToken = "id-token-uid-1",
-            refreshToken = "refresh-token-uid-1",
+            idToken = "id-token-$uid-$tokenVersion",
+            refreshToken = "refresh-token-$uid-$tokenVersion",
             expiresInSeconds = 3600,
+            issuedAtEpochSeconds = tokenVersion.toLong(),
         ),
     )
 }

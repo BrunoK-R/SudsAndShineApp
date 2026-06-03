@@ -11,6 +11,7 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,6 +46,11 @@ internal sealed interface AdminBusinessInfoSaveState {
     data class Error(val message: String, val retryable: Boolean) : AdminBusinessInfoSaveState
 }
 
+private data class AdminBusinessInfoSessionSnapshot(
+    val uid: String,
+    val marker: String,
+)
+
 internal class AdminBusinessInfoViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -55,7 +61,9 @@ internal class AdminBusinessInfoViewModel(
     private val _saveState = MutableStateFlow<AdminBusinessInfoSaveState>(AdminBusinessInfoSaveState.Idle)
     val saveState: StateFlow<AdminBusinessInfoSaveState> = _saveState.asStateFlow()
     private var loadedUid: String? = null
+    private var loadedSessionMarker: String? = null
     private var loadingUid: String? = null
+    private var loadingSessionMarker: String? = null
     private var loadSequence: Long = 0
 
     fun refreshForSession(force: Boolean = false) {
@@ -78,12 +86,21 @@ internal class AdminBusinessInfoViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val uid = session.session.user.uid
-        if (!force && loadedUid == uid && _uiState.value is AdminBusinessInfoUiState.Loaded) return
-        loadConfiguration()
+        val requestedSession = session.session.toBusinessInfoSessionSnapshot()
+        val hasReusableState = _uiState.value is AdminBusinessInfoUiState.Loaded ||
+            _uiState.value is AdminBusinessInfoUiState.NotAdmin
+        if (
+            !force &&
+            loadedUid == requestedSession.uid &&
+            loadedSessionMarker == requestedSession.marker &&
+            hasReusableState
+        ) {
+            return
+        }
+        loadConfiguration(force = force)
     }
 
-    fun loadConfiguration() {
+    fun loadConfiguration(force: Boolean = false) {
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedConfig()
@@ -103,11 +120,18 @@ internal class AdminBusinessInfoViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val requestedUid = session.session.user.uid
-        if (loadingUid == requestedUid) return
+        val requestedSession = session.session.toBusinessInfoSessionSnapshot()
+        if (
+            !force &&
+            loadingUid == requestedSession.uid &&
+            loadingSessionMarker == requestedSession.marker
+        ) {
+            return
+        }
 
         val requestSequence = ++loadSequence
-        loadingUid = requestedUid
+        loadingUid = requestedSession.uid
+        loadingSessionMarker = requestedSession.marker
         viewModelScope.launch {
             try {
                 _uiState.value = AdminBusinessInfoUiState.Loading
@@ -117,9 +141,13 @@ internal class AdminBusinessInfoViewModel(
                 }
                 if (requestSequence != loadSequence) return@launch
 
-                val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                if (currentUid == requestedUid) {
-                    loadedUid = requestedUid
+                val currentSession = currentAuthenticatedSessionSnapshot()
+                if (
+                    currentSession?.uid == requestedSession.uid &&
+                    currentSession.marker == requestedSession.marker
+                ) {
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = nextState
                 } else {
                     handleSessionChangedDuringRequest()
@@ -127,6 +155,7 @@ internal class AdminBusinessInfoViewModel(
             } finally {
                 if (requestSequence == loadSequence) {
                     loadingUid = null
+                    loadingSessionMarker = null
                 }
             }
         }
@@ -142,8 +171,8 @@ internal class AdminBusinessInfoViewModel(
     fun save() {
         if (_saveState.value == AdminBusinessInfoSaveState.Saving) return
         val form = (_uiState.value as? AdminBusinessInfoUiState.Loaded)?.form ?: return
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminBusinessInfoUiState.Unauthenticated
             return
@@ -159,16 +188,14 @@ internal class AdminBusinessInfoViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminBusinessInfoSaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminBusinessInfoSaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
             }
 
             val result = adminRepository.updateBusinessInfoConfiguration(request)
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminBusinessInfoSaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -176,7 +203,8 @@ internal class AdminBusinessInfoViewModel(
 
             when (result) {
                 is AdminBusinessInfoResult.Success -> {
-                    loadedUid = requestedUid
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = AdminBusinessInfoUiState.Loaded(result.config.toForm())
                     _saveState.value = AdminBusinessInfoSaveState.Success("Configuração guardada.")
                 }
@@ -199,7 +227,9 @@ internal class AdminBusinessInfoViewModel(
 
     private fun clearLoadedConfig() {
         loadedUid = null
+        loadedSessionMarker = null
         loadingUid = null
+        loadingSessionMarker = null
         loadSequence += 1
     }
 
@@ -207,6 +237,30 @@ internal class AdminBusinessInfoViewModel(
         clearLoadedConfig()
         refreshForSession(force = true)
     }
+
+    private fun currentAuthenticatedSessionSnapshot(): AdminBusinessInfoSessionSnapshot? {
+        return (sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.toBusinessInfoSessionSnapshot()
+    }
+
+    private fun isCurrentAuthenticatedSession(requestedSession: AdminBusinessInfoSessionSnapshot): Boolean {
+        val currentSession = currentAuthenticatedSessionSnapshot()
+        return currentSession?.uid == requestedSession.uid &&
+            currentSession.marker == requestedSession.marker
+    }
+}
+
+private fun AuthSession.toBusinessInfoSessionSnapshot(): AdminBusinessInfoSessionSnapshot {
+    return AdminBusinessInfoSessionSnapshot(
+        uid = user.uid,
+        marker = listOf(
+            user.uid,
+            idToken,
+            refreshToken,
+            issuedAtEpochSeconds.toString(),
+        ).joinToString(separator = "|"),
+    )
 }
 
 private sealed interface ParsedBusinessInfoRequest {
