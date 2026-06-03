@@ -262,6 +262,12 @@ data class AdminNotificationTestReceipt(
     val campaignId: String = "",
     val targetScope: String = "",
     val testOnly: Boolean = false,
+    val targetAudience: String = "",
+    val marketingConsentRequired: Boolean = false,
+    val sendBlocked: Boolean = false,
+    val sendBlockedReason: String = "",
+    val deliveryLocked: Boolean = false,
+    val sendState: String = "",
 )
 
 data class AdminNotificationCampaignDraft(

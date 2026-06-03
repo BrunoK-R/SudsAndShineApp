@@ -329,7 +329,11 @@ class AdminNotificationCampaignDraftsViewModelTest {
         runCurrent()
 
         val success = assertIs<AdminNotificationCampaignDraftMutationState.Success>(viewModel.mutationState.value)
-        assertEquals("Teste de campanha em fila apenas para o administrador atual.", success.message)
+        assertEquals(
+            "Teste de campanha em fila apenas para o administrador atual. " +
+                "Envio real bloqueado (draft_only): campaign-send-not-implemented.",
+            success.message,
+        )
         assertEquals("summer-test", repository.testRequests.single().campaignId)
     }
 
@@ -630,6 +634,11 @@ private fun notificationTestSuccess(campaignId: String): AdminNotificationTestRe
             message = "queued",
             targetScope = "self",
             testOnly = true,
+            targetAudience = "test_users",
+            sendBlocked = true,
+            sendBlockedReason = "campaign-send-not-implemented",
+            deliveryLocked = true,
+            sendState = "draft_only",
         ),
     )
 

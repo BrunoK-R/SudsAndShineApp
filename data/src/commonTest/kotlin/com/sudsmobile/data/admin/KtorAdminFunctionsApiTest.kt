@@ -686,6 +686,87 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsNotificationCampaignTestReceiptSafetyMetadata() = runTest {
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "notificationId": "test-notification-1",
+                    "templateKey": "campaign_draft",
+                    "campaignId": "summer-test",
+                    "deliveryState": "queued",
+                    "recipientUid": "admin-1",
+                    "targetScope": "self",
+                    "testOnly": true,
+                    "targetAudience": "marketing_opt_in_users",
+                    "marketingConsentRequired": true,
+                    "sendBlocked": true,
+                    "sendBlockedReason": "campaign-send-not-implemented",
+                    "deliveryLocked": true,
+                    "sendState": "draft_only",
+                    "message": "queued"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.sendNotificationTestToSelf(
+            AdminNotificationTestRequest(campaignId = "summer-test"),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminNotificationTestResult.Success>(result)
+        assertEquals("summer-test", success.receipt.campaignId)
+        assertEquals("marketing_opt_in_users", success.receipt.targetAudience)
+        assertEquals(true, success.receipt.marketingConsentRequired)
+        assertEquals(true, success.receipt.sendBlocked)
+        assertEquals("campaign-send-not-implemented", success.receipt.sendBlockedReason)
+        assertEquals(true, success.receipt.deliveryLocked)
+        assertEquals("draft_only", success.receipt.sendState)
+    }
+
+    @Test
+    fun mapsNotificationCampaignTestReceiptAsBlockedWhenCallableOmitsSendMetadata() = runTest {
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "notificationId": "test-notification-1",
+                    "templateKey": "campaign_draft",
+                    "campaignId": "summer-test",
+                    "deliveryState": "queued",
+                    "recipientUid": "admin-1",
+                    "targetScope": "self",
+                    "testOnly": true,
+                    "sendBlocked": false,
+                    "sendBlockedReason": "",
+                    "deliveryLocked": false,
+                    "sendState": "",
+                    "message": "queued"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.sendNotificationTestToSelf(
+            AdminNotificationTestRequest(campaignId = "summer-test"),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminNotificationTestResult.Success>(result)
+        assertEquals(true, success.receipt.sendBlocked)
+        assertEquals("campaign-send-not-implemented", success.receipt.sendBlockedReason)
+        assertEquals(true, success.receipt.deliveryLocked)
+        assertEquals("draft_only", success.receipt.sendState)
+    }
+
+    @Test
     fun mapsAdminNotificationCampaignDrafts() = runTest {
         var requestedPath: String? = null
         val api = KtorAdminFunctionsApi(

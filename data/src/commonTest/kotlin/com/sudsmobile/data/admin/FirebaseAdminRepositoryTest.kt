@@ -639,6 +639,9 @@ class FirebaseAdminRepositoryTest {
 
         val success = assertIs<AdminNotificationTestResult.Success>(result)
         assertEquals("test-notification-1", success.receipt.notificationId)
+        assertEquals("summer-test", success.receipt.campaignId)
+        assertEquals(true, success.receipt.deliveryLocked)
+        assertEquals("draft_only", success.receipt.sendState)
         assertEquals("id-token-1", api.notificationTestIdTokens.single())
         assertEquals("summer-test", api.notificationTestRequests.single().campaignId)
     }
@@ -1175,11 +1178,17 @@ private class FakeAdminFunctionsApi(
             AdminNotificationTestReceipt(
                 notificationId = "test-notification-1",
                 templateKey = request.templateKey,
+                campaignId = request.campaignId,
                 deliveryState = "queued",
                 recipientUid = "admin-1",
                 message = "queued",
                 targetScope = "self",
                 testOnly = true,
+                targetAudience = if (request.campaignId.isBlank()) "" else "test_users",
+                sendBlocked = request.campaignId.isNotBlank(),
+                sendBlockedReason = if (request.campaignId.isBlank()) "" else "campaign-send-not-implemented",
+                deliveryLocked = request.campaignId.isNotBlank(),
+                sendState = if (request.campaignId.isBlank()) "" else "draft_only",
             ),
         )
     }

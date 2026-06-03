@@ -1682,18 +1682,45 @@ private data class NotificationTestResultPayload(
     val recipientUid: String = "",
     val targetScope: String = "",
     val testOnly: Boolean = false,
+    val targetAudience: String = "",
+    val marketingConsentRequired: Boolean = false,
+    val sendBlocked: Boolean = false,
+    val sendBlockedReason: String = "",
+    val deliveryLocked: Boolean = false,
+    val sendState: String = "",
     val message: String = "",
 ) {
-    fun toAdminNotificationTestReceipt(): AdminNotificationTestReceipt = AdminNotificationTestReceipt(
-        notificationId = notificationId.trim(),
-        templateKey = templateKey.trim(),
-        campaignId = campaignId.trim(),
-        deliveryState = deliveryState.trim(),
-        recipientUid = recipientUid.trim(),
-        targetScope = targetScope.trim(),
-        testOnly = testOnly,
-        message = message.trim(),
-    )
+    fun toAdminNotificationTestReceipt(): AdminNotificationTestReceipt {
+        val normalizedCampaignId = campaignId.trim()
+        val normalizedAudience = targetAudience.trim()
+        val isCampaignReceipt = normalizedCampaignId.isNotBlank()
+        val normalizedSendBlockedReason = if (isCampaignReceipt) {
+            sendBlockedReason.trim().ifBlank { NotificationCampaignDraftSendBlockedReason }
+        } else {
+            sendBlockedReason.trim()
+        }
+        val normalizedSendState = if (isCampaignReceipt) {
+            sendState.trim().ifBlank { NotificationCampaignDraftSendState }
+        } else {
+            sendState.trim()
+        }
+        return AdminNotificationTestReceipt(
+            notificationId = notificationId.trim(),
+            templateKey = templateKey.trim(),
+            campaignId = normalizedCampaignId,
+            deliveryState = deliveryState.trim(),
+            recipientUid = recipientUid.trim(),
+            targetScope = targetScope.trim(),
+            testOnly = testOnly,
+            message = message.trim(),
+            targetAudience = normalizedAudience,
+            marketingConsentRequired = marketingConsentRequired || normalizedAudience == "marketing_opt_in_users",
+            sendBlocked = if (isCampaignReceipt) true else sendBlocked,
+            sendBlockedReason = normalizedSendBlockedReason,
+            deliveryLocked = if (isCampaignReceipt) true else deliveryLocked,
+            sendState = normalizedSendState,
+        )
+    }
 }
 
 @Serializable
