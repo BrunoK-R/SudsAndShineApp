@@ -13,6 +13,7 @@ import com.sudsmobile.data.admin.AdminNotificationTestResult
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,6 +78,11 @@ internal sealed interface AdminNotificationCampaignDraftMutationState {
     data class Error(val message: String, val retryable: Boolean) : AdminNotificationCampaignDraftMutationState
 }
 
+private data class AdminNotificationCampaignDraftSessionSnapshot(
+    val uid: String,
+    val marker: String,
+)
+
 internal class AdminNotificationCampaignDraftsViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -92,7 +98,9 @@ internal class AdminNotificationCampaignDraftsViewModel(
     val mutationState: StateFlow<AdminNotificationCampaignDraftMutationState> = _mutationState.asStateFlow()
 
     private var loadedUid: String? = null
+    private var loadedSessionMarker: String? = null
     private var loadingUid: String? = null
+    private var loadingSessionMarker: String? = null
     private var loadSequence: Long = 0
 
     fun refreshForSession(force: Boolean = false) {
@@ -115,11 +123,18 @@ internal class AdminNotificationCampaignDraftsViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val uid = session.session.user.uid
+        val requestedSession = session.session.toCampaignDraftSessionSnapshot()
         val hasReusableState = _uiState.value is AdminNotificationCampaignDraftsUiState.Loaded ||
             _uiState.value is AdminNotificationCampaignDraftsUiState.Empty ||
             _uiState.value is AdminNotificationCampaignDraftsUiState.NotAdmin
-        if (!force && loadedUid == uid && hasReusableState) return
+        if (
+            !force &&
+            loadedUid == requestedSession.uid &&
+            loadedSessionMarker == requestedSession.marker &&
+            hasReusableState
+        ) {
+            return
+        }
         loadDrafts(force = force)
     }
 
@@ -143,11 +158,18 @@ internal class AdminNotificationCampaignDraftsViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val requestedUid = session.session.user.uid
-        if (!force && loadingUid == requestedUid) return
+        val requestedSession = session.session.toCampaignDraftSessionSnapshot()
+        if (
+            !force &&
+            loadingUid == requestedSession.uid &&
+            loadingSessionMarker == requestedSession.marker
+        ) {
+            return
+        }
 
         val requestSequence = ++loadSequence
-        loadingUid = requestedUid
+        loadingUid = requestedSession.uid
+        loadingSessionMarker = requestedSession.marker
         viewModelScope.launch {
             try {
                 _uiState.value = AdminNotificationCampaignDraftsUiState.Loading
@@ -157,9 +179,13 @@ internal class AdminNotificationCampaignDraftsViewModel(
                 }
                 if (requestSequence != loadSequence) return@launch
 
-                val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                if (currentUid == requestedUid) {
-                    loadedUid = requestedUid
+                val currentSession = currentAuthenticatedSessionSnapshot()
+                if (
+                    currentSession?.uid == requestedSession.uid &&
+                    currentSession.marker == requestedSession.marker
+                ) {
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = nextState
                 } else {
                     handleSessionChangedDuringRequest()
@@ -167,6 +193,7 @@ internal class AdminNotificationCampaignDraftsViewModel(
             } finally {
                 if (requestSequence == loadSequence) {
                     loadingUid = null
+                    loadingSessionMarker = null
                 }
             }
         }
@@ -207,8 +234,8 @@ internal class AdminNotificationCampaignDraftsViewModel(
     fun save() {
         if (_mutationState.value == AdminNotificationCampaignDraftMutationState.Saving) return
         val form = (_uiState.value as? AdminNotificationCampaignDraftsUiState.Loaded)?.form ?: return
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedDrafts()
             _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
             return
@@ -227,16 +254,22 @@ internal class AdminNotificationCampaignDraftsViewModel(
 
         viewModelScope.launch {
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            val currentSession = currentAuthenticatedSessionSnapshot()
+            if (
+                currentSession?.uid != requestedSession.uid ||
+                currentSession.marker != requestedSession.marker
+            ) {
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
             }
 
             val result = adminRepository.upsertNotificationCampaignDraft(request)
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            val latestSession = currentAuthenticatedSessionSnapshot()
+            if (
+                latestSession?.uid != requestedSession.uid ||
+                latestSession.marker != requestedSession.marker
+            ) {
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -245,6 +278,7 @@ internal class AdminNotificationCampaignDraftsViewModel(
             when (result) {
                 is AdminNotificationCampaignDraftMutationResult.Success -> {
                     loadedUid = null
+                    loadedSessionMarker = null
                     _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
                         "Rascunho guardado sem envio.",
                     )
@@ -272,8 +306,8 @@ internal class AdminNotificationCampaignDraftsViewModel(
             )
             return
         }
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedDrafts()
             _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
             return
@@ -281,8 +315,11 @@ internal class AdminNotificationCampaignDraftsViewModel(
 
         viewModelScope.launch {
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Archiving(cleanCampaignId)
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            val currentSession = currentAuthenticatedSessionSnapshot()
+            if (
+                currentSession?.uid != requestedSession.uid ||
+                currentSession.marker != requestedSession.marker
+            ) {
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -291,8 +328,11 @@ internal class AdminNotificationCampaignDraftsViewModel(
             val result = adminRepository.archiveNotificationCampaignDraft(
                 AdminNotificationCampaignDraftArchiveRequest(cleanCampaignId),
             )
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            val latestSession = currentAuthenticatedSessionSnapshot()
+            if (
+                latestSession?.uid != requestedSession.uid ||
+                latestSession.marker != requestedSession.marker
+            ) {
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -301,6 +341,7 @@ internal class AdminNotificationCampaignDraftsViewModel(
             when (result) {
                 is AdminNotificationCampaignDraftMutationResult.Success -> {
                     loadedUid = null
+                    loadedSessionMarker = null
                     _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
                         "Rascunho arquivado.",
                     )
@@ -339,8 +380,8 @@ internal class AdminNotificationCampaignDraftsViewModel(
         }
         if (_mutationState.value is AdminNotificationCampaignDraftMutationState.Testing) return
 
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedDrafts()
             _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
             return
@@ -348,8 +389,11 @@ internal class AdminNotificationCampaignDraftsViewModel(
 
         viewModelScope.launch {
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Testing(cleanCampaignId)
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            val currentSession = currentAuthenticatedSessionSnapshot()
+            if (
+                currentSession?.uid != requestedSession.uid ||
+                currentSession.marker != requestedSession.marker
+            ) {
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -358,8 +402,11 @@ internal class AdminNotificationCampaignDraftsViewModel(
             val result = adminRepository.sendNotificationTestToSelf(
                 AdminNotificationTestRequest(campaignId = cleanCampaignId),
             )
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            val latestSession = currentAuthenticatedSessionSnapshot()
+            if (
+                latestSession?.uid != requestedSession.uid ||
+                latestSession.marker != requestedSession.marker
+            ) {
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -367,7 +414,7 @@ internal class AdminNotificationCampaignDraftsViewModel(
 
             when (result) {
                 is AdminNotificationTestResult.Success -> {
-                    _mutationState.value = if (result.receipt.isCurrentAdminSelfTest(requestedUid)) {
+                    _mutationState.value = if (result.receipt.isCurrentAdminSelfTest(requestedSession.uid)) {
                         AdminNotificationCampaignDraftMutationState.Success(
                             result.receipt.toSelfTestQueuedMessage("Teste de campanha"),
                         )
@@ -397,7 +444,9 @@ internal class AdminNotificationCampaignDraftsViewModel(
 
     private fun clearLoadedDrafts() {
         loadedUid = null
+        loadedSessionMarker = null
         loadingUid = null
+        loadingSessionMarker = null
         loadSequence += 1
     }
 
@@ -405,6 +454,24 @@ internal class AdminNotificationCampaignDraftsViewModel(
         clearLoadedDrafts()
         refreshForSession(force = true)
     }
+
+    private fun currentAuthenticatedSessionSnapshot(): AdminNotificationCampaignDraftSessionSnapshot? {
+        return (sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.toCampaignDraftSessionSnapshot()
+    }
+}
+
+private fun AuthSession.toCampaignDraftSessionSnapshot(): AdminNotificationCampaignDraftSessionSnapshot {
+    return AdminNotificationCampaignDraftSessionSnapshot(
+        uid = user.uid,
+        marker = listOf(
+            user.uid,
+            idToken,
+            refreshToken,
+            issuedAtEpochSeconds.toString(),
+        ).joinToString(separator = "|"),
+    )
 }
 
 private sealed interface ParsedCampaignDraftRequest {

@@ -177,6 +177,46 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
+    fun loadDraftsIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationCampaignDraftsResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(loadResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminNotificationCampaignDraftsResult.Failure(AdminError.Permission("denied")))
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun refreshReloadsWhenSameUserSessionTokenChanges() = runTest {
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository()
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        repository.loadResult = AdminNotificationCampaignDraftsResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun saveValidatesBeforeRepositoryCall() = runTest {
         val repository = FakeCampaignDraftsAdminRepository()
         val viewModel = AdminNotificationCampaignDraftsViewModel(
@@ -274,6 +314,33 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationCampaignDraftMutationResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(upsertResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateForm(campaignForm())
+        viewModel.save()
+        runCurrent()
+        repository.loadResult = AdminNotificationCampaignDraftsResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminNotificationCampaignDraftMutationResult.Success(campaignDraftMutationReceipt()))
+        runCurrent()
+
+        assertEquals(1, repository.upsertRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
+    }
+
+    @Test
     fun archiveMapsPermissionFailureToNotAdmin() = runTest {
         val viewModel = AdminNotificationCampaignDraftsViewModel(
             authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
@@ -312,6 +379,31 @@ class AdminNotificationCampaignDraftsViewModelTest {
         assertEquals(1, repository.archiveRequests.size)
         assertEquals(2, repository.loadCalls)
         assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
+    }
+
+    @Test
+    fun archiveIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationCampaignDraftMutationResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(archiveResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.archive("summer-test")
+        runCurrent()
+        repository.loadResult = AdminNotificationCampaignDraftsResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(campaignDraftMutationResultSuccess(status = "archived"))
+        runCurrent()
+
+        assertEquals(1, repository.archiveRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
         assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
     }
 
@@ -427,6 +519,31 @@ class AdminNotificationCampaignDraftsViewModelTest {
         assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
         assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
     }
+
+    @Test
+    fun sendTestIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationTestResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(testResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.sendTest("summer-test")
+        runCurrent()
+        repository.loadResult = AdminNotificationCampaignDraftsResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(notificationTestSuccess(campaignId = "summer-test"))
+        runCurrent()
+
+        assertEquals(1, repository.testRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
+    }
 }
 
 private class FakeCampaignDraftsAdminRepository(
@@ -468,15 +585,10 @@ private class FakeCampaignDraftsAdminRepository(
         val deferred = pendingUpsertResultDeferred
         pendingUpsertResultDeferred = null
         if (deferred != null) return deferred.await()
-        return upsertResult ?: AdminNotificationCampaignDraftMutationResult.Success(
-            AdminNotificationCampaignDraftMutationReceipt(
-                campaignId = request.campaignId.ifBlank { "generated-campaign" },
-                status = "draft",
-                created = request.campaignId.isBlank(),
-                targetAudience = request.targetAudience,
-                sendBlocked = true,
-                sendBlockedReason = "campaign-send-not-implemented",
-            ),
+        return upsertResult ?: campaignDraftMutationResultSuccess(
+            campaignId = request.campaignId.ifBlank { "generated-campaign" },
+            created = request.campaignId.isBlank(),
+            targetAudience = request.targetAudience,
         )
     }
 
@@ -487,9 +599,7 @@ private class FakeCampaignDraftsAdminRepository(
         val deferred = pendingArchiveResultDeferred
         pendingArchiveResultDeferred = null
         if (deferred != null) return deferred.await()
-        return archiveResult ?: AdminNotificationCampaignDraftMutationResult.Success(
-            AdminNotificationCampaignDraftMutationReceipt(campaignId = request.campaignId, status = "archived"),
-        )
+        return archiveResult ?: campaignDraftMutationResultSuccess(campaignId = request.campaignId, status = "archived")
     }
 
     override suspend fun sendNotificationTestToSelf(
@@ -590,11 +700,11 @@ private class FakeCampaignDraftsAuthRepository(authenticated: Boolean) : AuthRep
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
 
-    fun authenticateAs(uid: String) {
-        mutableSessionState.value = AuthSessionState.Authenticated(authSession(uid))
+    fun authenticateAs(uid: String, tokenVersion: Int = 1) {
+        mutableSessionState.value = AuthSessionState.Authenticated(authSession(uid, tokenVersion))
     }
 
-    private fun authSession(uid: String = "uid-1"): AuthSession {
+    private fun authSession(uid: String = "uid-1", tokenVersion: Int = 1): AuthSession {
         return AuthSession(
             user = AuthUser(
                 uid = uid,
@@ -602,9 +712,10 @@ private class FakeCampaignDraftsAuthRepository(authenticated: Boolean) : AuthRep
                 displayName = "Admin",
                 phoneNumber = "",
             ),
-            idToken = "id-token-$uid",
-            refreshToken = "refresh-token-$uid",
+            idToken = "id-token-$uid-$tokenVersion",
+            refreshToken = "refresh-token-$uid-$tokenVersion",
             expiresInSeconds = 3600,
+            issuedAtEpochSeconds = tokenVersion.toLong(),
         )
     }
 }
@@ -640,6 +751,36 @@ private fun notificationTestSuccess(campaignId: String): AdminNotificationTestRe
             deliveryLocked = true,
             sendState = "draft_only",
         ),
+    )
+
+private fun campaignDraftMutationResultSuccess(
+    campaignId: String = "summer-test",
+    status: String = "draft",
+    created: Boolean = false,
+    targetAudience: String = "test_users",
+): AdminNotificationCampaignDraftMutationResult.Success =
+    AdminNotificationCampaignDraftMutationResult.Success(
+        campaignDraftMutationReceipt(
+            campaignId = campaignId,
+            status = status,
+            created = created,
+            targetAudience = targetAudience,
+        ),
+    )
+
+private fun campaignDraftMutationReceipt(
+    campaignId: String = "summer-test",
+    status: String = "draft",
+    created: Boolean = false,
+    targetAudience: String = "test_users",
+): AdminNotificationCampaignDraftMutationReceipt =
+    AdminNotificationCampaignDraftMutationReceipt(
+        campaignId = campaignId,
+        status = status,
+        created = created,
+        targetAudience = targetAudience,
+        sendBlocked = true,
+        sendBlockedReason = "campaign-send-not-implemented",
     )
 
 private fun campaignDraftsConfig(
