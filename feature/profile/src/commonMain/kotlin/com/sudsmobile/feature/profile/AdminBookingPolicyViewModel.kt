@@ -9,6 +9,7 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,11 @@ internal sealed interface AdminBookingPolicySaveState {
     data class Error(val message: String, val retryable: Boolean) : AdminBookingPolicySaveState
 }
 
+private data class AdminBookingPolicySessionSnapshot(
+    val uid: String,
+    val marker: String,
+)
+
 internal class AdminBookingPolicyViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -49,7 +55,9 @@ internal class AdminBookingPolicyViewModel(
     private val _saveState = MutableStateFlow<AdminBookingPolicySaveState>(AdminBookingPolicySaveState.Idle)
     val saveState: StateFlow<AdminBookingPolicySaveState> = _saveState.asStateFlow()
     private var loadedUid: String? = null
+    private var loadedSessionMarker: String? = null
     private var loadingUid: String? = null
+    private var loadingSessionMarker: String? = null
     private var loadSequence: Long = 0
 
     fun refreshForSession(force: Boolean = false) {
@@ -72,12 +80,21 @@ internal class AdminBookingPolicyViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val uid = session.session.user.uid
-        if (!force && loadedUid == uid && _uiState.value is AdminBookingPolicyUiState.Loaded) return
-        loadConfiguration()
+        val requestedSession = session.session.toBookingPolicySessionSnapshot()
+        val hasReusableState = _uiState.value is AdminBookingPolicyUiState.Loaded ||
+            _uiState.value is AdminBookingPolicyUiState.NotAdmin
+        if (
+            !force &&
+            loadedUid == requestedSession.uid &&
+            loadedSessionMarker == requestedSession.marker &&
+            hasReusableState
+        ) {
+            return
+        }
+        loadConfiguration(force = force)
     }
 
-    fun loadConfiguration() {
+    fun loadConfiguration(force: Boolean = false) {
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {
                 clearLoadedConfig()
@@ -97,11 +114,18 @@ internal class AdminBookingPolicyViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val requestedUid = session.session.user.uid
-        if (loadingUid == requestedUid) return
+        val requestedSession = session.session.toBookingPolicySessionSnapshot()
+        if (
+            !force &&
+            loadingUid == requestedSession.uid &&
+            loadingSessionMarker == requestedSession.marker
+        ) {
+            return
+        }
 
         val requestSequence = ++loadSequence
-        loadingUid = requestedUid
+        loadingUid = requestedSession.uid
+        loadingSessionMarker = requestedSession.marker
         viewModelScope.launch {
             try {
                 _uiState.value = AdminBookingPolicyUiState.Loading
@@ -111,9 +135,13 @@ internal class AdminBookingPolicyViewModel(
                 }
                 if (requestSequence != loadSequence) return@launch
 
-                val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                if (currentUid == requestedUid) {
-                    loadedUid = requestedUid
+                val currentSession = currentAuthenticatedSessionSnapshot()
+                if (
+                    currentSession?.uid == requestedSession.uid &&
+                    currentSession.marker == requestedSession.marker
+                ) {
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = nextState
                 } else {
                     handleSessionChangedDuringRequest()
@@ -121,6 +149,7 @@ internal class AdminBookingPolicyViewModel(
             } finally {
                 if (requestSequence == loadSequence) {
                     loadingUid = null
+                    loadingSessionMarker = null
                 }
             }
         }
@@ -136,8 +165,8 @@ internal class AdminBookingPolicyViewModel(
     fun save() {
         if (_saveState.value == AdminBookingPolicySaveState.Saving) return
         val form = (_uiState.value as? AdminBookingPolicyUiState.Loaded)?.form ?: return
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminBookingPolicyUiState.Unauthenticated
             return
@@ -153,16 +182,14 @@ internal class AdminBookingPolicyViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminBookingPolicySaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminBookingPolicySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
             }
 
             val result = adminRepository.updateBookingPolicyConfiguration(request)
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            if (!isCurrentAuthenticatedSession(requestedSession)) {
                 _saveState.value = AdminBookingPolicySaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -170,7 +197,8 @@ internal class AdminBookingPolicyViewModel(
 
             when (result) {
                 is AdminBookingPolicyResult.Success -> {
-                    loadedUid = requestedUid
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = AdminBookingPolicyUiState.Loaded(result.config.toForm())
                     _saveState.value = AdminBookingPolicySaveState.Success("Política guardada.")
                 }
@@ -193,7 +221,9 @@ internal class AdminBookingPolicyViewModel(
 
     private fun clearLoadedConfig() {
         loadedUid = null
+        loadedSessionMarker = null
         loadingUid = null
+        loadingSessionMarker = null
         loadSequence += 1
     }
 
@@ -201,6 +231,30 @@ internal class AdminBookingPolicyViewModel(
         clearLoadedConfig()
         refreshForSession(force = true)
     }
+
+    private fun currentAuthenticatedSessionSnapshot(): AdminBookingPolicySessionSnapshot? {
+        return (sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.toBookingPolicySessionSnapshot()
+    }
+
+    private fun isCurrentAuthenticatedSession(requestedSession: AdminBookingPolicySessionSnapshot): Boolean {
+        val currentSession = currentAuthenticatedSessionSnapshot()
+        return currentSession?.uid == requestedSession.uid &&
+            currentSession.marker == requestedSession.marker
+    }
+}
+
+private fun AuthSession.toBookingPolicySessionSnapshot(): AdminBookingPolicySessionSnapshot {
+    return AdminBookingPolicySessionSnapshot(
+        uid = user.uid,
+        marker = listOf(
+            user.uid,
+            idToken,
+            refreshToken,
+            issuedAtEpochSeconds.toString(),
+        ).joinToString(separator = "|"),
+    )
 }
 
 private sealed interface ParsedBookingPolicyRequest {

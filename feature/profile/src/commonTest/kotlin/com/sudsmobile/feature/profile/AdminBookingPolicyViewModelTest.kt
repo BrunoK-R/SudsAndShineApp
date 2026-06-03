@@ -131,6 +131,48 @@ class AdminBookingPolicyViewModelTest {
     }
 
     @Test
+    fun loadConfigurationIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBookingPolicyResult>()
+        val authRepository = FakeBookingPolicyAuthRepository(authenticated = true)
+        val repository = FakeBookingPolicyAdminRepository(loadResultDeferred = deferred)
+        val viewModel = AdminBookingPolicyViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        repository.loadResult = AdminBookingPolicyResult.Success(adminBookingPolicyConfig(pendingHoldMinutes = 240))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminBookingPolicyResult.Failure(AdminError.Permission("old token denied")))
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        val reloaded = assertIs<AdminBookingPolicyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("240", reloaded.form.pendingHoldMinutes)
+    }
+
+    @Test
+    fun refreshReloadsWhenSameUserSessionTokenChanges() = runTest {
+        val authRepository = FakeBookingPolicyAuthRepository(authenticated = true)
+        val repository = FakeBookingPolicyAdminRepository()
+        val viewModel = AdminBookingPolicyViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        repository.loadResult = AdminBookingPolicyResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminBookingPolicyUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun saveValidatesBeforeRepositoryCall() = runTest {
         val repository = FakeBookingPolicyAdminRepository()
         val viewModel = AdminBookingPolicyViewModel(
@@ -204,6 +246,31 @@ class AdminBookingPolicyViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminBookingPolicyResult>()
+        val authRepository = FakeBookingPolicyAuthRepository(authenticated = true)
+        val repository = FakeBookingPolicyAdminRepository(updateResultDeferred = deferred)
+        val viewModel = AdminBookingPolicyViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        repository.loadResult = AdminBookingPolicyResult.Failure(AdminError.Permission("new token denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminBookingPolicyResult.Success(adminBookingPolicyConfig(pendingHoldMinutes = 240)))
+        runCurrent()
+
+        assertEquals(1, repository.updateRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminBookingPolicySaveState.Idle>(viewModel.saveState.value)
+        assertIs<AdminBookingPolicyUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
         val deferred = CompletableDeferred<AdminBookingPolicyResult>()
         val authRepository = FakeBookingPolicyAuthRepository(authenticated = true)
@@ -240,10 +307,12 @@ class AdminBookingPolicyViewModelTest {
 private class FakeBookingPolicyAdminRepository(
     var loadResult: AdminBookingPolicyResult = AdminBookingPolicyResult.Success(adminBookingPolicyConfig()),
     var updateResult: AdminBookingPolicyResult? = null,
-    private val loadResultDeferred: CompletableDeferred<AdminBookingPolicyResult>? = null,
+    loadResultDeferred: CompletableDeferred<AdminBookingPolicyResult>? = null,
     private val loadResults: ArrayDeque<AdminBookingPolicyResult>? = null,
-    private val updateResultDeferred: CompletableDeferred<AdminBookingPolicyResult>? = null,
+    updateResultDeferred: CompletableDeferred<AdminBookingPolicyResult>? = null,
 ) : AdminRepository {
+    private var pendingLoadResultDeferred = loadResultDeferred
+    private var pendingUpdateResultDeferred = updateResultDeferred
     var loadCalls = 0
         private set
     val updateRequests = mutableListOf<AdminBookingPolicyUpdateRequest>()
@@ -266,7 +335,9 @@ private class FakeBookingPolicyAdminRepository(
 
     override suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
+        val deferred = pendingLoadResultDeferred
+        pendingLoadResultDeferred = null
+        return deferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
     }
 
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
@@ -287,7 +358,9 @@ private class FakeBookingPolicyAdminRepository(
         request: AdminBookingPolicyUpdateRequest,
     ): AdminBookingPolicyResult {
         updateRequests += request
-        return updateResultDeferred?.await() ?: updateResult ?: AdminBookingPolicyResult.Success(
+        val deferred = pendingUpdateResultDeferred
+        pendingUpdateResultDeferred = null
+        return deferred?.await() ?: updateResult ?: AdminBookingPolicyResult.Success(
             AdminBookingPolicyConfig(
                 pendingHoldMinutes = request.pendingHoldMinutes,
                 cancellationWindowMinutes = request.cancellationWindowMinutes,
@@ -353,19 +426,8 @@ private class FakeBookingPolicyAdminRepository(
 }
 
 private class FakeBookingPolicyAuthRepository(authenticated: Boolean) : AuthRepository {
-    private val authSession = AuthSession(
-        user = AuthUser(
-            uid = "uid-1",
-            email = "admin@example.com",
-            displayName = "Admin",
-            phoneNumber = "",
-        ),
-        idToken = "id-token-1",
-        refreshToken = "refresh-token-1",
-        expiresInSeconds = 3600,
-    )
     override val sessionState: MutableStateFlow<AuthSessionState> = MutableStateFlow(
-        if (authenticated) AuthSessionState.Authenticated(authSession) else AuthSessionState.Unauthenticated,
+        if (authenticated) AuthSessionState.Authenticated(authSession()) else AuthSessionState.Unauthenticated,
     )
 
     override suspend fun currentSession(): AuthSession? {
@@ -377,9 +439,11 @@ private class FakeBookingPolicyAuthRepository(authenticated: Boolean) : AuthRepo
     }
 
     fun switchTo(uid: String) {
-        sessionState.value = AuthSessionState.Authenticated(
-            authSession.copy(user = authSession.user.copy(uid = uid)),
-        )
+        authenticateAs(uid)
+    }
+
+    fun authenticateAs(uid: String, tokenVersion: Int = 1) {
+        sessionState.value = AuthSessionState.Authenticated(authSession(uid, tokenVersion))
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
@@ -397,6 +461,21 @@ private class FakeBookingPolicyAuthRepository(authenticated: Boolean) : AuthRepo
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
         error("unused")
+    }
+
+    private fun authSession(uid: String = "uid-1", tokenVersion: Int = 1): AuthSession {
+        return AuthSession(
+            user = AuthUser(
+                uid = uid,
+                email = "admin@example.com",
+                displayName = "Admin",
+                phoneNumber = "",
+            ),
+            idToken = "id-token-$uid-$tokenVersion",
+            refreshToken = "refresh-token-$uid-$tokenVersion",
+            expiresInSeconds = 3600,
+            issuedAtEpochSeconds = tokenVersion.toLong(),
+        )
     }
 }
 
