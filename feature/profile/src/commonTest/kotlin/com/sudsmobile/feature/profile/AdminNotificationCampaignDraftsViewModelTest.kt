@@ -154,6 +154,26 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
+    fun loadDraftsIgnoresStaleResponseAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationCampaignDraftsResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(loadResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        authRepository.authenticateAs("uid-2")
+        deferred.complete(AdminNotificationCampaignDraftsResult.Failure(AdminError.Permission("denied")))
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+    }
+
+    @Test
     fun saveValidatesBeforeRepositoryCall() = runTest {
         val repository = FakeCampaignDraftsAdminRepository()
         val viewModel = AdminNotificationCampaignDraftsViewModel(
@@ -225,6 +245,32 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationCampaignDraftMutationResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(upsertResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateForm(campaignForm())
+        viewModel.save()
+        runCurrent()
+        authRepository.authenticateAs("uid-2")
+        deferred.complete(AdminNotificationCampaignDraftMutationResult.Failure(AdminError.Permission("denied")))
+        runCurrent()
+
+        assertEquals(1, repository.upsertRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
+    }
+
+    @Test
     fun archiveMapsPermissionFailureToNotAdmin() = runTest {
         val viewModel = AdminNotificationCampaignDraftsViewModel(
             authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
@@ -240,6 +286,30 @@ class AdminNotificationCampaignDraftsViewModelTest {
 
         assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
         assertIs<AdminNotificationCampaignDraftMutationState.Error>(viewModel.mutationState.value)
+    }
+
+    @Test
+    fun archiveIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationCampaignDraftMutationResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(archiveResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.archive("summer-test")
+        runCurrent()
+        authRepository.authenticateAs("uid-2")
+        deferred.complete(AdminNotificationCampaignDraftMutationResult.Failure(AdminError.Permission("denied")))
+        runCurrent()
+
+        assertEquals(1, repository.archiveRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
     }
 
     @Test
@@ -326,6 +396,30 @@ class AdminNotificationCampaignDraftsViewModelTest {
         assertIs<AdminNotificationCampaignDraftsUiState.Unauthenticated>(viewModel.uiState.value)
         assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
     }
+
+    @Test
+    fun sendTestIgnoresStaleFailureAfterUserSwitchAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationTestResult>()
+        val authRepository = FakeCampaignDraftsAuthRepository(authenticated = true)
+        val repository = FakeCampaignDraftsAdminRepository(testResultDeferred = deferred)
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.sendTest("summer-test")
+        runCurrent()
+        authRepository.authenticateAs("uid-2")
+        deferred.complete(AdminNotificationTestResult.Failure(AdminError.Permission("denied")))
+        runCurrent()
+
+        assertEquals(1, repository.testRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
+    }
 }
 
 private class FakeCampaignDraftsAdminRepository(
@@ -334,9 +428,15 @@ private class FakeCampaignDraftsAdminRepository(
     var upsertResult: AdminNotificationCampaignDraftMutationResult? = null,
     var archiveResult: AdminNotificationCampaignDraftMutationResult? = null,
     var testResult: AdminNotificationTestResult? = null,
-    private val loadResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftsResult>? = null,
-    private val testResultDeferred: CompletableDeferred<AdminNotificationTestResult>? = null,
+    loadResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftsResult>? = null,
+    upsertResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftMutationResult>? = null,
+    archiveResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftMutationResult>? = null,
+    testResultDeferred: CompletableDeferred<AdminNotificationTestResult>? = null,
 ) : AdminRepository {
+    private var pendingLoadResultDeferred = loadResultDeferred
+    private var pendingUpsertResultDeferred = upsertResultDeferred
+    private var pendingArchiveResultDeferred = archiveResultDeferred
+    private var pendingTestResultDeferred = testResultDeferred
     var loadCalls = 0
         private set
     val upsertRequests = mutableListOf<AdminNotificationCampaignDraftMutationRequest>()
@@ -349,13 +449,18 @@ private class FakeCampaignDraftsAdminRepository(
 
     override suspend fun getNotificationCampaignDrafts(): AdminNotificationCampaignDraftsResult {
         loadCalls += 1
-        return loadResultDeferred?.await() ?: loadResult
+        val deferred = pendingLoadResultDeferred
+        pendingLoadResultDeferred = null
+        return deferred?.await() ?: loadResult
     }
 
     override suspend fun upsertNotificationCampaignDraft(
         request: AdminNotificationCampaignDraftMutationRequest,
     ): AdminNotificationCampaignDraftMutationResult {
         upsertRequests += request
+        val deferred = pendingUpsertResultDeferred
+        pendingUpsertResultDeferred = null
+        if (deferred != null) return deferred.await()
         return upsertResult ?: AdminNotificationCampaignDraftMutationResult.Success(
             AdminNotificationCampaignDraftMutationReceipt(
                 campaignId = request.campaignId.ifBlank { "generated-campaign" },
@@ -372,6 +477,9 @@ private class FakeCampaignDraftsAdminRepository(
         request: AdminNotificationCampaignDraftArchiveRequest,
     ): AdminNotificationCampaignDraftMutationResult {
         archiveRequests += request
+        val deferred = pendingArchiveResultDeferred
+        pendingArchiveResultDeferred = null
+        if (deferred != null) return deferred.await()
         return archiveResult ?: AdminNotificationCampaignDraftMutationResult.Success(
             AdminNotificationCampaignDraftMutationReceipt(campaignId = request.campaignId, status = "archived"),
         )
@@ -381,7 +489,9 @@ private class FakeCampaignDraftsAdminRepository(
         request: AdminNotificationTestRequest,
     ): AdminNotificationTestResult {
         testRequests += request
-        return testResultDeferred?.await() ?: testResult ?: notificationTestSuccess(campaignId = request.campaignId)
+        val deferred = pendingTestResultDeferred
+        pendingTestResultDeferred = null
+        return deferred?.await() ?: testResult ?: notificationTestSuccess(campaignId = request.campaignId)
     }
 
     override suspend fun getPendingBookingRequests(): AdminBookingRequestsResult =
@@ -439,19 +549,8 @@ private class FakeCampaignDraftsAdminRepository(
 }
 
 private class FakeCampaignDraftsAuthRepository(authenticated: Boolean) : AuthRepository {
-    private val authSession = AuthSession(
-        user = AuthUser(
-            uid = "uid-1",
-            email = "admin@example.com",
-            displayName = "Admin",
-            phoneNumber = "",
-        ),
-        idToken = "id-token-1",
-        refreshToken = "refresh-token-1",
-        expiresInSeconds = 3600,
-    )
     private val mutableSessionState = MutableStateFlow(
-        if (authenticated) AuthSessionState.Authenticated(authSession) else AuthSessionState.Unauthenticated,
+        if (authenticated) AuthSessionState.Authenticated(authSession()) else AuthSessionState.Unauthenticated,
     )
     override val sessionState = mutableSessionState
 
@@ -460,8 +559,9 @@ private class FakeCampaignDraftsAuthRepository(authenticated: Boolean) : AuthRep
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
-        mutableSessionState.value = AuthSessionState.Authenticated(authSession)
-        return AuthResult.Success(authSession)
+        val session = authSession()
+        mutableSessionState.value = AuthSessionState.Authenticated(session)
+        return AuthResult.Success(session)
     }
 
     override suspend fun register(
@@ -470,8 +570,9 @@ private class FakeCampaignDraftsAuthRepository(authenticated: Boolean) : AuthRep
         phoneNumber: String,
         password: String,
     ): AuthResult {
-        mutableSessionState.value = AuthSessionState.Authenticated(authSession)
-        return AuthResult.Success(authSession)
+        val session = authSession()
+        mutableSessionState.value = AuthSessionState.Authenticated(session)
+        return AuthResult.Success(session)
     }
 
     override suspend fun sendPasswordReset(email: String): AuthActionResult {
@@ -480,6 +581,24 @@ private class FakeCampaignDraftsAuthRepository(authenticated: Boolean) : AuthRep
 
     override fun signOut() {
         mutableSessionState.value = AuthSessionState.Unauthenticated
+    }
+
+    fun authenticateAs(uid: String) {
+        mutableSessionState.value = AuthSessionState.Authenticated(authSession(uid))
+    }
+
+    private fun authSession(uid: String = "uid-1"): AuthSession {
+        return AuthSession(
+            user = AuthUser(
+                uid = uid,
+                email = "admin@example.com",
+                displayName = "Admin",
+                phoneNumber = "",
+            ),
+            idToken = "id-token-$uid",
+            refreshToken = "refresh-token-$uid",
+            expiresInSeconds = 3600,
+        )
     }
 }
 

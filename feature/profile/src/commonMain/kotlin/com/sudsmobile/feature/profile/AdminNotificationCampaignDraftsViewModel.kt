@@ -159,8 +159,7 @@ internal class AdminNotificationCampaignDraftsViewModel(
                     loadedUid = requestedUid
                     _uiState.value = nextState
                 } else {
-                    clearLoadedDrafts()
-                    _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
+                    handleSessionChangedDuringRequest()
                 }
             } finally {
                 if (requestSequence == loadSequence) {
@@ -227,26 +226,26 @@ internal class AdminNotificationCampaignDraftsViewModel(
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Saving
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedDrafts()
-                _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (val result = adminRepository.upsertNotificationCampaignDraft(request)) {
+            val result = adminRepository.upsertNotificationCampaignDraft(request)
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminNotificationCampaignDraftMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
-                            "Rascunho guardado sem envio.",
-                        )
-                        loadDrafts(force = true)
-                    } else {
-                        clearLoadedDrafts()
-                        _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
-                        _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
-                    }
+                    loadedUid = null
+                    _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
+                        "Rascunho guardado sem envio.",
+                    )
+                    loadDrafts(force = true)
                 }
                 is AdminNotificationCampaignDraftMutationResult.Failure -> {
                     _mutationState.value = result.error.toCampaignDraftMutationState()
@@ -281,30 +280,28 @@ internal class AdminNotificationCampaignDraftsViewModel(
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Archiving(cleanCampaignId)
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedDrafts()
-                _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (
-                val result = adminRepository.archiveNotificationCampaignDraft(
-                    AdminNotificationCampaignDraftArchiveRequest(cleanCampaignId),
-                )
-            ) {
+            val result = adminRepository.archiveNotificationCampaignDraft(
+                AdminNotificationCampaignDraftArchiveRequest(cleanCampaignId),
+            )
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminNotificationCampaignDraftMutationResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        loadedUid = null
-                        _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
-                            "Rascunho arquivado.",
-                        )
-                        loadDrafts(force = true)
-                    } else {
-                        clearLoadedDrafts()
-                        _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
-                        _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
-                    }
+                    loadedUid = null
+                    _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
+                        "Rascunho arquivado.",
+                    )
+                    loadDrafts(force = true)
                 }
                 is AdminNotificationCampaignDraftMutationResult.Failure -> {
                     _mutationState.value = result.error.toCampaignDraftMutationState()
@@ -350,34 +347,32 @@ internal class AdminNotificationCampaignDraftsViewModel(
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Testing(cleanCampaignId)
             val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
             if (currentUid != requestedUid) {
-                clearLoadedDrafts()
-                _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
                 _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
                 return@launch
             }
 
-            when (
-                val result = adminRepository.sendNotificationTestToSelf(
-                    AdminNotificationTestRequest(campaignId = cleanCampaignId),
-                )
-            ) {
+            val result = adminRepository.sendNotificationTestToSelf(
+                AdminNotificationTestRequest(campaignId = cleanCampaignId),
+            )
+            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (latestUid != requestedUid) {
+                _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
                 is AdminNotificationTestResult.Success -> {
-                    val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                    if (latestUid == requestedUid) {
-                        _mutationState.value = if (result.receipt.isCurrentAdminSelfTest(requestedUid)) {
-                            AdminNotificationCampaignDraftMutationState.Success(
-                                result.receipt.toSelfTestQueuedMessage("Teste de campanha"),
-                            )
-                        } else {
-                            AdminNotificationCampaignDraftMutationState.Error(
-                                message = UnsafeAdminNotificationTestReceiptMessage,
-                                retryable = false,
-                            )
-                        }
+                    _mutationState.value = if (result.receipt.isCurrentAdminSelfTest(requestedUid)) {
+                        AdminNotificationCampaignDraftMutationState.Success(
+                            result.receipt.toSelfTestQueuedMessage("Teste de campanha"),
+                        )
                     } else {
-                        clearLoadedDrafts()
-                        _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
-                        _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                        AdminNotificationCampaignDraftMutationState.Error(
+                            message = UnsafeAdminNotificationTestReceiptMessage,
+                            retryable = false,
+                        )
                     }
                 }
                 is AdminNotificationTestResult.Failure -> {
@@ -401,6 +396,11 @@ internal class AdminNotificationCampaignDraftsViewModel(
         loadedUid = null
         loadingUid = null
         loadSequence += 1
+    }
+
+    private fun handleSessionChangedDuringRequest() {
+        clearLoadedDrafts()
+        refreshForSession(force = true)
     }
 }
 
