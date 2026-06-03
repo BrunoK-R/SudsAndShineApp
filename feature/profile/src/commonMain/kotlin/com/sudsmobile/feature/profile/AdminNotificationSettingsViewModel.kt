@@ -12,6 +12,7 @@ import com.sudsmobile.data.admin.AdminNotificationTemplateConfig
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +73,11 @@ internal sealed interface AdminNotificationTestState {
     data class Error(val templateLabel: String, val message: String, val retryable: Boolean) : AdminNotificationTestState
 }
 
+private data class AdminNotificationSettingsSessionSnapshot(
+    val uid: String,
+    val marker: String,
+)
+
 internal class AdminNotificationSettingsViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -86,7 +92,9 @@ internal class AdminNotificationSettingsViewModel(
     private val _testState = MutableStateFlow<AdminNotificationTestState>(AdminNotificationTestState.Idle)
     val testState: StateFlow<AdminNotificationTestState> = _testState.asStateFlow()
     private var loadedUid: String? = null
+    private var loadedSessionMarker: String? = null
     private var loadingUid: String? = null
+    private var loadingSessionMarker: String? = null
     private var loadSequence: Long = 0
     private var testSequence: Long = 0
 
@@ -110,8 +118,15 @@ internal class AdminNotificationSettingsViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val uid = session.session.user.uid
-        if (!force && loadedUid == uid && _uiState.value is AdminNotificationSettingsUiState.Loaded) return
+        val requestedSession = session.session.toAdminNotificationSettingsSessionSnapshot()
+        if (
+            !force &&
+            loadedUid == requestedSession.uid &&
+            loadedSessionMarker == requestedSession.marker &&
+            _uiState.value is AdminNotificationSettingsUiState.Loaded
+        ) {
+            return
+        }
         loadConfiguration()
     }
 
@@ -135,11 +150,12 @@ internal class AdminNotificationSettingsViewModel(
             is AuthSessionState.Authenticated -> currentSessionState
         }
 
-        val requestedUid = session.session.user.uid
-        if (loadingUid == requestedUid) return
+        val requestedSession = session.session.toAdminNotificationSettingsSessionSnapshot()
+        if (loadingUid == requestedSession.uid && loadingSessionMarker == requestedSession.marker) return
 
         val requestSequence = ++loadSequence
-        loadingUid = requestedUid
+        loadingUid = requestedSession.uid
+        loadingSessionMarker = requestedSession.marker
         viewModelScope.launch {
             try {
                 _uiState.value = AdminNotificationSettingsUiState.Loading
@@ -150,9 +166,10 @@ internal class AdminNotificationSettingsViewModel(
                 }
                 if (requestSequence != loadSequence) return@launch
 
-                val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-                if (currentUid == requestedUid) {
-                    loadedUid = requestedUid
+                val currentSession = currentAuthenticatedSessionSnapshot()
+                if (currentSession?.uid == requestedSession.uid && currentSession.marker == requestedSession.marker) {
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = nextState
                 } else {
                     handleSessionChangedDuringRequest()
@@ -160,6 +177,7 @@ internal class AdminNotificationSettingsViewModel(
             } finally {
                 if (requestSequence == loadSequence) {
                     loadingUid = null
+                    loadingSessionMarker = null
                 }
             }
         }
@@ -187,8 +205,8 @@ internal class AdminNotificationSettingsViewModel(
     fun save() {
         if (_saveState.value == AdminNotificationSettingsSaveState.Saving) return
         val form = (_uiState.value as? AdminNotificationSettingsUiState.Loaded)?.form ?: return
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
             return
@@ -204,16 +222,16 @@ internal class AdminNotificationSettingsViewModel(
 
         viewModelScope.launch {
             _saveState.value = AdminNotificationSettingsSaveState.Saving
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            val currentSession = currentAuthenticatedSessionSnapshot()
+            if (currentSession?.uid != requestedSession.uid || currentSession.marker != requestedSession.marker) {
                 _saveState.value = AdminNotificationSettingsSaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
             }
 
             val result = adminRepository.updateNotificationSettingsConfiguration(request)
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            val latestSession = currentAuthenticatedSessionSnapshot()
+            if (latestSession?.uid != requestedSession.uid || latestSession.marker != requestedSession.marker) {
                 _saveState.value = AdminNotificationSettingsSaveState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -221,7 +239,8 @@ internal class AdminNotificationSettingsViewModel(
 
             when (result) {
                 is AdminNotificationSettingsResult.Success -> {
-                    loadedUid = requestedUid
+                    loadedUid = requestedSession.uid
+                    loadedSessionMarker = requestedSession.marker
                     _uiState.value = AdminNotificationSettingsUiState.Loaded(result.config.toForm())
                     _saveState.value = AdminNotificationSettingsSaveState.Success("Notificações guardadas.")
                 }
@@ -250,8 +269,8 @@ internal class AdminNotificationSettingsViewModel(
             )
             return
         }
-        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-        if (requestedUid == null) {
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
             clearLoadedConfig()
             _uiState.value = AdminNotificationSettingsUiState.Unauthenticated
             return
@@ -260,8 +279,8 @@ internal class AdminNotificationSettingsViewModel(
         val requestSequence = ++testSequence
         viewModelScope.launch {
             _testState.value = AdminNotificationTestState.Sending(template.key)
-            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (currentUid != requestedUid) {
+            val currentSession = currentAuthenticatedSessionSnapshot()
+            if (currentSession?.uid != requestedSession.uid || currentSession.marker != requestedSession.marker) {
                 _testState.value = AdminNotificationTestState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -270,8 +289,8 @@ internal class AdminNotificationSettingsViewModel(
             val result = adminRepository.sendNotificationTestToSelf(AdminNotificationTestRequest(template.key))
             if (requestSequence != testSequence) return@launch
 
-            val latestUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
-            if (latestUid != requestedUid) {
+            val latestSession = currentAuthenticatedSessionSnapshot()
+            if (latestSession?.uid != requestedSession.uid || latestSession.marker != requestedSession.marker) {
                 _testState.value = AdminNotificationTestState.Idle
                 handleSessionChangedDuringRequest()
                 return@launch
@@ -279,7 +298,7 @@ internal class AdminNotificationSettingsViewModel(
 
             when (result) {
                 is AdminNotificationTestResult.Success -> {
-                    if (result.receipt.isCurrentAdminSelfTest(requestedUid)) {
+                    if (result.receipt.isCurrentAdminSelfTest(requestedSession.uid)) {
                         _testState.value = AdminNotificationTestState.Success(
                             templateLabel = template.label,
                             message = result.receipt.toSelfTestQueuedMessage("Teste de notificação"),
@@ -316,8 +335,11 @@ internal class AdminNotificationSettingsViewModel(
 
     private fun clearLoadedConfig() {
         loadedUid = null
+        loadedSessionMarker = null
         loadingUid = null
+        loadingSessionMarker = null
         loadSequence += 1
+        _saveState.value = AdminNotificationSettingsSaveState.Idle
         clearTestState()
     }
 
@@ -331,6 +353,24 @@ internal class AdminNotificationSettingsViewModel(
         clearLoadedConfig()
         refreshForSession(force = true)
     }
+
+    private fun currentAuthenticatedSessionSnapshot(): AdminNotificationSettingsSessionSnapshot? {
+        return (sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.toAdminNotificationSettingsSessionSnapshot()
+    }
+}
+
+private fun AuthSession.toAdminNotificationSettingsSessionSnapshot(): AdminNotificationSettingsSessionSnapshot {
+    return AdminNotificationSettingsSessionSnapshot(
+        uid = user.uid,
+        marker = listOf(
+            user.uid,
+            idToken,
+            refreshToken,
+            issuedAtEpochSeconds.toString(),
+        ).joinToString(separator = "|"),
+    )
 }
 
 private sealed interface ParsedNotificationSettingsRequest {

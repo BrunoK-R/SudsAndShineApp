@@ -183,6 +183,26 @@ class AdminNotificationSettingsViewModelTest {
     }
 
     @Test
+    fun refreshReloadsWhenSameUserSessionTokenChanges() = runTest {
+        val authRepository = FakeNotificationSettingsAuthRepository(authenticated = true)
+        val repository = FakeNotificationSettingsAdminRepository()
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        repository.loadResult = AdminNotificationSettingsResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationSettingsUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun saveValidatesBeforeRepositoryCall() = runTest {
         val repository = FakeNotificationSettingsAdminRepository()
         val viewModel = AdminNotificationSettingsViewModel(
@@ -281,6 +301,31 @@ class AdminNotificationSettingsViewModelTest {
     }
 
     @Test
+    fun saveIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationSettingsResult>()
+        val authRepository = FakeNotificationSettingsAuthRepository(authenticated = true)
+        val repository = FakeNotificationSettingsAdminRepository(updateResultDeferred = deferred)
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.save()
+        runCurrent()
+        repository.loadResult = AdminNotificationSettingsResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(AdminNotificationSettingsResult.Success(adminNotificationSettingsConfig()))
+        runCurrent()
+
+        assertEquals(1, repository.updateRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationSettingsUiState.NotAdmin>(viewModel.uiState.value)
+        assertIs<AdminNotificationSettingsSaveState.Idle>(viewModel.saveState.value)
+    }
+
+    @Test
     fun sendTestSubmitsSelectedTemplate() = runTest {
         val repository = FakeNotificationSettingsAdminRepository()
         val viewModel = AdminNotificationSettingsViewModel(
@@ -363,6 +408,31 @@ class AdminNotificationSettingsViewModelTest {
         runCurrent()
 
         assertIs<AdminNotificationSettingsUiState.Unauthenticated>(viewModel.uiState.value)
+        assertIs<AdminNotificationTestState.Idle>(viewModel.testState.value)
+    }
+
+    @Test
+    fun sendTestIgnoresStaleResponseAfterSameUserTokenRefreshAndReloadsCurrentSession() = runTest {
+        val deferred = CompletableDeferred<AdminNotificationTestResult>()
+        val authRepository = FakeNotificationSettingsAuthRepository(authenticated = true)
+        val repository = FakeNotificationSettingsAdminRepository(testResultDeferred = deferred)
+        val viewModel = AdminNotificationSettingsViewModel(
+            authRepository = authRepository,
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        viewModel.sendTest("booking_request")
+        runCurrent()
+        repository.loadResult = AdminNotificationSettingsResult.Failure(AdminError.Permission("denied"))
+        authRepository.authenticateAs("uid-1", tokenVersion = 2)
+        deferred.complete(notificationTestSuccess("booking_request"))
+        runCurrent()
+
+        assertEquals(1, repository.testRequests.size)
+        assertEquals(2, repository.loadCalls)
+        assertIs<AdminNotificationSettingsUiState.NotAdmin>(viewModel.uiState.value)
         assertIs<AdminNotificationTestState.Idle>(viewModel.testState.value)
     }
 }
@@ -509,11 +579,11 @@ private class FakeNotificationSettingsAuthRepository(authenticated: Boolean) : A
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
 
-    fun authenticateAs(uid: String) {
-        mutableSessionState.value = AuthSessionState.Authenticated(authSession(uid))
+    fun authenticateAs(uid: String, tokenVersion: Int = 1) {
+        mutableSessionState.value = AuthSessionState.Authenticated(authSession(uid, tokenVersion))
     }
 
-    private fun authSession(uid: String = "uid-1"): AuthSession {
+    private fun authSession(uid: String = "uid-1", tokenVersion: Int = 1): AuthSession {
         return AuthSession(
             user = AuthUser(
                 uid = uid,
@@ -521,9 +591,10 @@ private class FakeNotificationSettingsAuthRepository(authenticated: Boolean) : A
                 displayName = "Admin",
                 phoneNumber = "",
             ),
-            idToken = "id-token-$uid",
-            refreshToken = "refresh-token-$uid",
+            idToken = "id-token-$uid-$tokenVersion",
+            refreshToken = "refresh-token-$uid-$tokenVersion",
             expiresInSeconds = 3600,
+            issuedAtEpochSeconds = tokenVersion.toLong(),
         )
     }
 }
