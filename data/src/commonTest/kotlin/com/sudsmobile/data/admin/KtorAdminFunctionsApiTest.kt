@@ -29,9 +29,9 @@ class KtorAdminFunctionsApiTest {
                 {
                   "result": {
                     "ok": true,
-                    "uid": "uid-1",
-                    "email": "admin@example.com",
-                    "role": "admin"
+                    "uid": " uid-1 ",
+                    "email": " admin@example.com ",
+                    "role": " admin "
                   }
                 }
                 """.trimIndent(),
@@ -46,6 +46,7 @@ class KtorAdminFunctionsApiTest {
         val success = assertIs<AdminRoleResult.Success>(result)
         assertEquals("/test-project/europe-west1/syncMyRole", requestedPath)
         assertEquals("uid-1", success.role.uid)
+        assertEquals("admin@example.com", success.role.email)
         assertTrue(success.role.isAdmin)
     }
 

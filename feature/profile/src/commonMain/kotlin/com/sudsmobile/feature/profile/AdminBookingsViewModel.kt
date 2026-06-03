@@ -147,7 +147,11 @@ internal class AdminAccessViewModel(
                 _uiState.value = AdminAccessUiState.Loading
                 val nextState = when (val result = adminRepository.syncMyRole()) {
                     is AdminRoleResult.Success -> {
-                        if (result.role.isAdmin) AdminAccessUiState.Admin else AdminAccessUiState.NotAdmin
+                        if (result.role.uid == requestedSession.uid && result.role.isAdmin) {
+                            AdminAccessUiState.Admin
+                        } else {
+                            AdminAccessUiState.NotAdmin
+                        }
                     }
                     is AdminRoleResult.Failure -> result.error.toAdminAccessState()
                 }

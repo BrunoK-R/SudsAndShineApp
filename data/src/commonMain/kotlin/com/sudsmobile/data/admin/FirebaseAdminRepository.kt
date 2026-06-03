@@ -2,6 +2,7 @@ package com.sudsmobile.data.admin
 
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthResult
+import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 
 class FirebaseAdminRepository(
@@ -10,14 +11,23 @@ class FirebaseAdminRepository(
     private val bookingChangeNotifier: MutableBookingChangeNotifier = MutableBookingChangeNotifier(),
 ) : AdminRepository {
     override suspend fun syncMyRole(): AdminRoleResult {
-        val idToken = currentIdTokenOrNull()
+        val session = authRepository.currentSession()
             ?: return AdminRoleResult.Failure(unauthenticatedError())
 
-        return when (val result = api.syncMyRole(idToken)) {
+        return when (val result = api.syncMyRole(session.idToken)) {
             is AdminRoleResult.Failure -> result
             is AdminRoleResult.Success -> {
+                if (!result.role.belongsTo(session)) {
+                    return AdminRoleResult.Failure(roleMismatchError())
+                }
                 when (val refreshResult = authRepository.refreshCurrentSession()) {
-                    is AuthResult.Success -> result
+                    is AuthResult.Success -> {
+                        if (refreshResult.session.user.uid != session.user.uid) {
+                            AdminRoleResult.Failure(roleMismatchError())
+                        } else {
+                            result
+                        }
+                    }
                     is AuthResult.Failure -> AdminRoleResult.Failure(refreshResult.error.toAdminError())
                 }
             }
@@ -835,6 +845,14 @@ private val NotificationCampaignTargetAudiences = setOf("test_users", "marketing
 
 private fun unauthenticatedError(): AdminError.Unauthenticated {
     return AdminError.Unauthenticated("Inicie sessão para gerir a área administrativa.")
+}
+
+private fun roleMismatchError(): AdminError.Permission {
+    return AdminError.Permission("A validação administrativa não corresponde à sessão atual.")
+}
+
+private fun AdminRole.belongsTo(session: AuthSession): Boolean {
+    return uid == session.user.uid
 }
 
 private fun String.isValidCatalogId(): Boolean {

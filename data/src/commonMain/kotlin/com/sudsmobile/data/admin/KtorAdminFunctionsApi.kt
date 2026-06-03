@@ -1309,9 +1309,9 @@ private data class RolePayload(
     val role: String,
 ) {
     fun toAdminRole(): AdminRole = AdminRole(
-        uid = uid,
-        email = email,
-        role = role,
+        uid = uid.trim(),
+        email = email.trim(),
+        role = role.trim(),
     )
 }
 

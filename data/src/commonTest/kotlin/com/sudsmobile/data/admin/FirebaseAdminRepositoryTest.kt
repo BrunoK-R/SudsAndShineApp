@@ -55,6 +55,48 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun syncMyRoleRejectsRoleForDifferentUserBeforeClaimRefresh() = runTest {
+        val api = FakeAdminFunctionsApi(
+            roleResult = AdminRoleResult.Success(
+                AdminRole(uid = "uid-2", email = "other-admin@example.com", role = "admin"),
+            ),
+        )
+        val authRepository = FakeAuthRepository(authenticated = true)
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = authRepository,
+        )
+
+        val result = repository.syncMyRole()
+
+        val failure = assertIs<AdminRoleResult.Failure>(result)
+        assertIs<AdminError.Permission>(failure.error)
+        assertEquals("id-token-1", api.syncRoleIdTokens.single())
+        assertEquals(0, authRepository.refreshCurrentSessionCalls)
+    }
+
+    @Test
+    fun syncMyRoleRejectsRoleWhenClaimRefreshSwitchesUser() = runTest {
+        val api = FakeAdminFunctionsApi(
+            roleResult = AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin")),
+        )
+        val authRepository = FakeAuthRepository(
+            authenticated = true,
+            refreshResult = AuthResult.Success(authSession(uid = "uid-2")),
+        )
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = authRepository,
+        )
+
+        val result = repository.syncMyRole()
+
+        val failure = assertIs<AdminRoleResult.Failure>(result)
+        assertIs<AdminError.Permission>(failure.error)
+        assertEquals(1, authRepository.refreshCurrentSessionCalls)
+    }
+
+    @Test
     fun upsertServiceCatalogItemNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -1374,17 +1416,7 @@ private class FakeAuthRepository(
     authenticated: Boolean,
     private val refreshResult: AuthResult? = null,
 ) : AuthRepository {
-    private val authSession = AuthSession(
-        user = AuthUser(
-            uid = "uid-1",
-            email = "admin@example.com",
-            displayName = "Admin",
-            phoneNumber = "",
-        ),
-        idToken = "id-token-1",
-        refreshToken = "refresh-token-1",
-        expiresInSeconds = 3600,
-    )
+    private val authSession = authSession()
     private val mutableSessionState = MutableStateFlow(
         if (authenticated) AuthSessionState.Authenticated(authSession) else AuthSessionState.Unauthenticated,
     )
@@ -1426,6 +1458,18 @@ private class FakeAuthRepository(
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
 }
+
+private fun authSession(uid: String = "uid-1"): AuthSession = AuthSession(
+    user = AuthUser(
+        uid = uid,
+        email = "admin@example.com",
+        displayName = "Admin",
+        phoneNumber = "",
+    ),
+    idToken = "id-token-1",
+    refreshToken = "refresh-token-1",
+    expiresInSeconds = 3600,
+)
 
 private fun adminNotificationSettingsConfig(): AdminNotificationSettingsConfig = AdminNotificationSettingsConfig(
     bookingStatusEnabled = true,

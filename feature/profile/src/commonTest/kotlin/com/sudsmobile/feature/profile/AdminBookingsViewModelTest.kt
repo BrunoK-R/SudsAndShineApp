@@ -96,6 +96,22 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
+    fun adminAccessSyncHidesMismatchedRolePayloads() = runTest {
+        val repository = FakeAdminRepository(
+            roleResult = AdminRoleResult.Success(adminRole(uid = "uid-2", role = "admin")),
+        )
+        val viewModel = AdminAccessViewModel(
+            authRepository = FakeAdminAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        assertIs<AdminAccessUiState.NotAdmin>(viewModel.uiState.value)
+    }
+
+    @Test
     fun adminAccessRetryResyncsAfterBackendError() = runTest {
         val repository = FakeAdminRepository(
             roleResult = AdminRoleResult.Failure(AdminError.Unavailable("Rede indisponível.")),
@@ -717,8 +733,8 @@ private fun adminAuthenticatedSession(
     )
 }
 
-private fun adminRole(role: String): AdminRole = AdminRole(
-    uid = "uid-1",
+private fun adminRole(uid: String = "uid-1", role: String): AdminRole = AdminRole(
+    uid = uid,
     email = "admin@example.com",
     role = role,
 )
