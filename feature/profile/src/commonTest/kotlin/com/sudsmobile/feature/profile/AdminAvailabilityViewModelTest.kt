@@ -257,6 +257,45 @@ class AdminAvailabilityViewModelTest {
     }
 
     @Test
+    fun saveSubmitsStructuredWeeklyAvailabilityConfiguration() = runTest {
+        val repository = FakeAvailabilityAdminRepository()
+        val viewModel = AdminAvailabilityViewModel(
+            authRepository = FakeAvailabilityAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+        val loaded = assertIs<AdminAvailabilityUiState.Loaded>(viewModel.uiState.value)
+        val updatedWeeklyHours = loaded.form.weeklyHours.map { day ->
+            when (day.dayLabel) {
+                "Sábado" -> day.copy(enabled = false)
+                "Domingo" -> day.copy(enabled = true, startTime = "10:00", endTime = "14:00")
+                else -> day.copy(startTime = "08:00", endTime = "18:00")
+            }
+        }
+        viewModel.updateForm(
+            loaded.form.withWeeklyHours(updatedWeeklyHours).copy(
+                defaultMaxBookingsPerSlot = "3",
+                defaultSlotIntervalMinutes = "15",
+            ),
+        )
+
+        viewModel.save()
+        runCurrent()
+
+        val request = repository.updateRequests.single()
+        assertEquals(3, request.defaultMaxBookingsPerSlot)
+        assertEquals(15, request.defaultSlotIntervalMinutes)
+        assertEquals(7, request.openingHours.size)
+        assertEquals("Segunda", request.openingHours.first().dayLabel)
+        assertEquals("08:00 - 18:00", request.openingHours.first().hoursLabel)
+        assertEquals(true, request.openingHours.first { it.dayLabel == "Sábado" }.closed)
+        assertEquals(false, request.openingHours.first { it.dayLabel == "Domingo" }.closed)
+        assertEquals("10:00 - 14:00", request.openingHours.first { it.dayLabel == "Domingo" }.hoursLabel)
+    }
+
+    @Test
     fun saveStopsWhenSessionChangesBeforeRepositoryCall() = runTest {
         val authRepository = FakeAvailabilityAuthRepository(authenticated = true)
         val repository = FakeAvailabilityAdminRepository()

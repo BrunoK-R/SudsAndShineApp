@@ -28,7 +28,8 @@ import kotlinx.coroutines.launch
 internal data class AdminAvailabilityForm(
     val defaultMaxBookingsPerSlot: String = "",
     val defaultSlotIntervalMinutes: String = "",
-    val openingHoursText: String = "",
+    val weeklyHours: List<AdminOpeningHoursDayForm> = defaultWeeklyOpeningHours(),
+    val openingHoursText: String = defaultWeeklyOpeningHours().toOpeningHoursText(),
     val capacityOverrides: List<AdminCapacityOverrideUi> = emptyList(),
     val blockedSlots: List<AdminBlockedSlotUi> = emptyList(),
     val overrideDate: String = "",
@@ -38,6 +39,16 @@ internal data class AdminAvailabilityForm(
     val blockedEndTime: String = "10:00",
     val blockedReason: String = "",
 )
+
+internal data class AdminOpeningHoursDayForm(
+    val dayLabel: String,
+    val enabled: Boolean,
+    val startTime: String,
+    val endTime: String,
+) {
+    val hoursLabel: String
+        get() = if (enabled) "$startTime - $endTime" else "Encerrado"
+}
 
 internal data class AdminCapacityOverrideUi(
     val date: String,
@@ -508,15 +519,11 @@ private sealed interface ParsedBlockedSlotRequest {
 private fun AdminAvailabilityConfig.toForm(): AdminAvailabilityForm = AdminAvailabilityForm(
     defaultMaxBookingsPerSlot = defaultMaxBookingsPerSlot.toString(),
     defaultSlotIntervalMinutes = defaultSlotIntervalMinutes.toString(),
-    openingHoursText = openingHours.joinToString("\n") { hours ->
-        listOf(
-            hours.dayLabel,
-            hours.hoursLabel,
-            if (hours.closed) "fechado" else "",
-        ).filter { it.isNotBlank() }.joinToString(" | ")
-    },
+    weeklyHours = openingHours.toWeeklyOpeningHoursForm(),
+    openingHoursText = openingHours.toWeeklyOpeningHoursForm().toOpeningHoursText(),
     capacityOverrides = capacityOverrides.map { it.toUi() },
     blockedSlots = blockedSlots.map { it.toUi() },
+    overrideMaxBookingsPerSlot = defaultMaxBookingsPerSlot.toString(),
 )
 
 private fun AdminCapacityOverrideItem.toUi(): AdminCapacityOverrideUi = AdminCapacityOverrideUi(
@@ -542,8 +549,14 @@ private fun AdminAvailabilityForm.toUpdateRequest(): ParsedAvailabilityRequest {
     if (slotInterval !in 5..240) {
         return ParsedAvailabilityRequest.Invalid("O intervalo entre horários deve estar entre 5 e 240 minutos.")
     }
-    val openingHours = openingHoursText.parseAvailabilityOpeningHours()
-        ?: return ParsedAvailabilityRequest.Invalid("Revise os horários.")
+    val structuredOpeningHoursText = weeklyHours.toOpeningHoursText()
+    val openingHours = if (openingHoursText.trim() != structuredOpeningHoursText.trim()) {
+        openingHoursText.parseAvailabilityOpeningHours()
+            ?: return ParsedAvailabilityRequest.Invalid("Revise os horários.")
+    } else {
+        weeklyHours.toAdminOpeningHours()
+            ?: return ParsedAvailabilityRequest.Invalid("Revise os horários de abertura e fecho.")
+    }
 
     return ParsedAvailabilityRequest.Valid(
         AdminAvailabilityUpdateRequest(
@@ -552,6 +565,119 @@ private fun AdminAvailabilityForm.toUpdateRequest(): ParsedAvailabilityRequest {
             openingHours = openingHours,
         ),
     )
+}
+
+internal fun AdminAvailabilityForm.withWeeklyHours(
+    weeklyHours: List<AdminOpeningHoursDayForm>,
+): AdminAvailabilityForm = copy(
+    weeklyHours = weeklyHours,
+    openingHoursText = weeklyHours.toOpeningHoursText(),
+)
+
+private fun defaultWeeklyOpeningHours(): List<AdminOpeningHoursDayForm> = listOf(
+    AdminOpeningHoursDayForm(dayLabel = "Segunda", enabled = true, startTime = "09:00", endTime = "19:00"),
+    AdminOpeningHoursDayForm(dayLabel = "Terça", enabled = true, startTime = "09:00", endTime = "19:00"),
+    AdminOpeningHoursDayForm(dayLabel = "Quarta", enabled = true, startTime = "09:00", endTime = "19:00"),
+    AdminOpeningHoursDayForm(dayLabel = "Quinta", enabled = true, startTime = "09:00", endTime = "19:00"),
+    AdminOpeningHoursDayForm(dayLabel = "Sexta", enabled = true, startTime = "09:00", endTime = "19:00"),
+    AdminOpeningHoursDayForm(dayLabel = "Sábado", enabled = true, startTime = "09:00", endTime = "13:00"),
+    AdminOpeningHoursDayForm(dayLabel = "Domingo", enabled = false, startTime = "09:00", endTime = "13:00"),
+)
+
+private fun List<AdminBusinessOpeningHours>.toWeeklyOpeningHoursForm(): List<AdminOpeningHoursDayForm> {
+    if (isEmpty()) return defaultWeeklyOpeningHours()
+    val days = defaultWeeklyOpeningHours().toMutableList()
+    for (hours in this) {
+        val dayIndexes = hours.dayLabel.matchAvailabilityDayIndexes()
+        if (dayIndexes.isEmpty()) continue
+        val range = hours.hoursLabel.extractAvailabilityTimeRange()
+        dayIndexes.forEach { index ->
+            days[index] = days[index].copy(
+                enabled = !hours.closed,
+                startTime = range?.first ?: days[index].startTime,
+                endTime = range?.second ?: days[index].endTime,
+            )
+        }
+    }
+    return days
+}
+
+private fun List<AdminOpeningHoursDayForm>.toAdminOpeningHours(): List<AdminBusinessOpeningHours>? {
+    if (isEmpty() || size > 10) return null
+    return map { day ->
+        if (!day.enabled) {
+            AdminBusinessOpeningHours(
+                dayLabel = day.dayLabel,
+                hoursLabel = "Encerrado",
+                closed = true,
+            )
+        } else {
+            val startTime = day.startTime.trim()
+            val endTime = day.endTime.trim()
+            val startMinutes = startTime.minutesSinceMidnightOrNull() ?: return null
+            val endMinutes = endTime.minutesSinceMidnightOrNull() ?: return null
+            if (endMinutes <= startMinutes) return null
+            AdminBusinessOpeningHours(
+                dayLabel = day.dayLabel,
+                hoursLabel = "$startTime - $endTime",
+                closed = false,
+            )
+        }
+    }
+}
+
+private fun List<AdminOpeningHoursDayForm>.toOpeningHoursText(): String {
+    return joinToString("\n") { day ->
+        listOf(
+            day.dayLabel,
+            day.hoursLabel,
+            if (day.enabled) "" else "fechado",
+        ).filter { it.isNotBlank() }.joinToString(" | ")
+    }
+}
+
+private fun String.matchAvailabilityDayIndexes(): List<Int> {
+    val normalized = normalizeAvailabilityDayLabel()
+    if (
+        ("segunda" in normalized && "sexta" in normalized) ||
+        "dias uteis" in normalized ||
+        "weekdays" in normalized
+    ) {
+        return listOf(0, 1, 2, 3, 4)
+    }
+    return buildList {
+        if ("segunda" in normalized || "monday" in normalized) add(0)
+        if ("terca" in normalized || "tuesday" in normalized) add(1)
+        if ("quarta" in normalized || "wednesday" in normalized) add(2)
+        if ("quinta" in normalized || "thursday" in normalized) add(3)
+        if ("sexta" in normalized || "friday" in normalized) add(4)
+        if ("sabado" in normalized || "saturday" in normalized) add(5)
+        if ("domingo" in normalized || "sunday" in normalized) add(6)
+    }
+}
+
+private fun String.normalizeAvailabilityDayLabel(): String {
+    return lowercase()
+        .replace("á", "a")
+        .replace("à", "a")
+        .replace("â", "a")
+        .replace("ã", "a")
+        .replace("é", "e")
+        .replace("ê", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ô", "o")
+        .replace("õ", "o")
+        .replace("ú", "u")
+        .replace("ç", "c")
+}
+
+private fun String.extractAvailabilityTimeRange(): Pair<String, String>? {
+    val times = Regex("\\b\\d{2}:\\d{2}\\b")
+        .findAll(this)
+        .map { it.value }
+        .toList()
+    return if (times.size >= 2) times.first() to times.last() else null
 }
 
 private fun AdminAvailabilityForm.toBlockedSlotRequest(): ParsedBlockedSlotRequest {

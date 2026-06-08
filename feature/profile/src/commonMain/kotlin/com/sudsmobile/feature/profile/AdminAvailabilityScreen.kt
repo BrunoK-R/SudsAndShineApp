@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,15 +21,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
@@ -36,11 +42,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +60,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.viewmodel.koinViewModel
@@ -355,35 +366,42 @@ private fun AdminAvailabilityFormCard(
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Text(
-                text = "Regras de marcação",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
+            AdminAvailabilitySectionHeader(
+                icon = Icons.Filled.Build,
+                title = "Regras de marcação",
+                body = "Capacidade, intervalo e dias abertos.",
             )
 
-            AdminAvailabilityTextField(
-                value = form.defaultMaxBookingsPerSlot,
-                onValueChange = { onFormChange(form.copy(defaultMaxBookingsPerSlot = it)) },
+            AdminAvailabilityStepper(
                 label = "Capacidade por horário",
+                value = form.defaultCapacityValue(),
+                range = 1..20,
                 enabled = !saving,
-                singleLine = true,
+                valueText = { value -> "$value por horário" },
+                onValueChange = { value ->
+                    onFormChange(form.copy(defaultMaxBookingsPerSlot = value.toString()))
+                },
             )
-            AdminAvailabilityTextField(
-                value = form.defaultSlotIntervalMinutes,
-                onValueChange = { onFormChange(form.copy(defaultSlotIntervalMinutes = it)) },
-                label = "Intervalo entre horários (min)",
+
+            AdminIntervalSelector(
+                selectedInterval = form.defaultIntervalValue(),
                 enabled = !saving,
-                singleLine = true,
+                onIntervalSelected = { interval ->
+                    onFormChange(form.copy(defaultSlotIntervalMinutes = interval.toString()))
+                },
             )
-            AdminAvailabilityTextField(
-                value = form.openingHoursText,
-                onValueChange = { onFormChange(form.copy(openingHoursText = it)) },
-                label = "Horários",
+
+            AdminWeeklyAvailabilityEditor(
+                days = form.weeklyHours,
                 enabled = !saving,
-                minLines = 5,
+                onDayChange = { updatedDay ->
+                    val updatedDays = form.weeklyHours.map { day ->
+                        if (day.dayLabel == updatedDay.dayLabel) updatedDay else day
+                    }
+                    onFormChange(form.withWeeklyHours(updatedDays))
+                },
             )
 
             Button(
@@ -418,50 +436,13 @@ private fun AdminAvailabilityFormCard(
                 )
             }
 
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Exceções por data",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
+            AdminDateExceptionEditor(
+                form = form,
+                saving = saving,
+                configuredDates = form.configuredAvailabilityDates(),
+                onFormChange = onFormChange,
+                onSaveCapacityOverride = onSaveCapacityOverride,
             )
-            AdminAvailabilityTextField(
-                value = form.overrideDate,
-                onValueChange = { onFormChange(form.copy(overrideDate = it)) },
-                label = "Data da exceção (AAAA-MM-DD)",
-                enabled = !saving,
-                singleLine = true,
-            )
-            AdminAvailabilityTextField(
-                value = form.overrideMaxBookingsPerSlot,
-                onValueChange = { onFormChange(form.copy(overrideMaxBookingsPerSlot = it)) },
-                label = "Capacidade nessa data",
-                enabled = !saving,
-                singleLine = true,
-            )
-
-            Button(
-                onClick = onSaveCapacityOverride,
-                enabled = !saving,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                ),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Guardar exceção",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
 
             if (form.capacityOverrides.isEmpty()) {
                 Text(
@@ -481,68 +462,13 @@ private fun AdminAvailabilityFormCard(
                 }
             }
 
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Bloqueios de horário",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
+            AdminBlockedSlotEditor(
+                form = form,
+                saving = saving,
+                configuredDates = form.configuredAvailabilityDates(),
+                onFormChange = onFormChange,
+                onSaveBlockedSlot = onSaveBlockedSlot,
             )
-            AdminAvailabilityTextField(
-                value = form.blockedDate,
-                onValueChange = { onFormChange(form.copy(blockedDate = it)) },
-                label = "Data do bloqueio (AAAA-MM-DD)",
-                enabled = !saving,
-                singleLine = true,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AdminAvailabilityTextField(
-                    value = form.blockedStartTime,
-                    onValueChange = { onFormChange(form.copy(blockedStartTime = it)) },
-                    label = "Início",
-                    enabled = !saving,
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                )
-                AdminAvailabilityTextField(
-                    value = form.blockedEndTime,
-                    onValueChange = { onFormChange(form.copy(blockedEndTime = it)) },
-                    label = "Fim",
-                    enabled = !saving,
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                )
-            }
-            AdminAvailabilityTextField(
-                value = form.blockedReason,
-                onValueChange = { onFormChange(form.copy(blockedReason = it)) },
-                label = "Motivo",
-                enabled = !saving,
-                singleLine = true,
-            )
-
-            Button(
-                onClick = onSaveBlockedSlot,
-                enabled = !saving,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                ),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Guardar bloqueio",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
 
             if (form.blockedSlots.isEmpty()) {
                 Text(
@@ -561,6 +487,570 @@ private fun AdminAvailabilityFormCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AdminAvailabilitySectionHeader(
+    icon: ImageVector,
+    title: String,
+    body: String? = null,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Surface(
+            modifier = Modifier.size(40.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f),
+            contentColor = MaterialTheme.colorScheme.tertiary,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            if (body != null) {
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminAvailabilityStepper(
+    label: String,
+    value: Int,
+    range: IntRange,
+    enabled: Boolean,
+    valueText: (Int) -> String,
+    onValueChange: (Int) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = valueText(value),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { onValueChange((value - 1).coerceIn(range)) },
+                        enabled = enabled && value > range.first,
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Remove,
+                            contentDescription = "Diminuir",
+                            tint = if (enabled && value > range.first) {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                            },
+                        )
+                    }
+                    Text(
+                        text = value.toString(),
+                        modifier = Modifier.width(34.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    IconButton(
+                        onClick = { onValueChange((value + 1).coerceIn(range)) },
+                        enabled = enabled && value < range.last,
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Aumentar",
+                            tint = if (enabled && value < range.last) {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdminIntervalSelector(
+    selectedInterval: Int,
+    enabled: Boolean,
+    onIntervalSelected: (Int) -> Unit,
+) {
+    val intervals = (listOf(15, 20, 30, 45, 60) + selectedInterval)
+        .filter { it in 5..240 }
+        .distinct()
+        .sorted()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Intervalo entre horários",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            intervals.forEach { interval ->
+                AdminChoiceChip(
+                    label = "${interval} min",
+                    selected = selectedInterval == interval,
+                    enabled = enabled,
+                    onClick = { onIntervalSelected(interval) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminWeeklyAvailabilityEditor(
+    days: List<AdminOpeningHoursDayForm>,
+    enabled: Boolean,
+    onDayChange: (AdminOpeningHoursDayForm) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Disponibilidade semanal",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        days.forEach { day ->
+            AdminWeeklyAvailabilityRow(
+                day = day,
+                enabled = enabled,
+                onDayChange = onDayChange,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdminWeeklyAvailabilityRow(
+    day: AdminOpeningHoursDayForm,
+    enabled: Boolean,
+    onDayChange: (AdminOpeningHoursDayForm) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = day.dayLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (day.enabled) day.hoursLabel else "Encerrado",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = day.enabled,
+                    enabled = enabled,
+                    onCheckedChange = { checked -> onDayChange(day.copy(enabled = checked)) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onTertiary,
+                        checkedTrackColor = MaterialTheme.colorScheme.tertiary,
+                    ),
+                )
+            }
+
+            if (day.enabled) {
+                AdminTimeChoiceRow(
+                    label = "Abre",
+                    options = adminWeeklyStartTimeChoices.withSelectedTime(day.startTime),
+                    selectedTime = day.startTime,
+                    enabled = enabled,
+                    onTimeSelected = { selectedStart ->
+                        val selectedStartMinutes = selectedStart.adminMinutesSinceMidnightOrNull()
+                        val currentEndMinutes = day.endTime.adminMinutesSinceMidnightOrNull()
+                        val adjustedEnd = if (
+                            selectedStartMinutes != null &&
+                            currentEndMinutes != null &&
+                            currentEndMinutes <= selectedStartMinutes
+                        ) {
+                            adminWeeklyEndTimeChoices
+                                .withSelectedTime(day.endTime)
+                                .firstOrNull { endTime ->
+                                    (endTime.adminMinutesSinceMidnightOrNull() ?: 0) > selectedStartMinutes
+                                } ?: day.endTime
+                        } else {
+                            day.endTime
+                        }
+                        onDayChange(day.copy(startTime = selectedStart, endTime = adjustedEnd))
+                    },
+                )
+                AdminTimeChoiceRow(
+                    label = "Fecha",
+                    options = adminWeeklyEndTimeChoices
+                        .withSelectedTime(day.endTime)
+                        .filter { endTime ->
+                            val endMinutes = endTime.adminMinutesSinceMidnightOrNull()
+                            val startMinutes = day.startTime.adminMinutesSinceMidnightOrNull()
+                            endMinutes != null && startMinutes != null && endMinutes > startMinutes
+                        }
+                        .ifEmpty { adminWeeklyEndTimeChoices.withSelectedTime(day.endTime) },
+                    selectedTime = day.endTime,
+                    enabled = enabled,
+                    onTimeSelected = { selectedEnd -> onDayChange(day.copy(endTime = selectedEnd)) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdminTimeChoiceRow(
+    label: String,
+    options: List<String>,
+    selectedTime: String,
+    enabled: Boolean,
+    onTimeSelected: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            options.forEach { option ->
+                AdminChoiceChip(
+                    label = option,
+                    selected = selectedTime == option,
+                    enabled = enabled,
+                    onClick = { onTimeSelected(option) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdminDateExceptionEditor(
+    form: AdminAvailabilityForm,
+    saving: Boolean,
+    configuredDates: List<String>,
+    onFormChange: (AdminAvailabilityForm) -> Unit,
+    onSaveCapacityOverride: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AdminAvailabilitySectionHeader(
+            icon = Icons.Filled.CalendarMonth,
+            title = "Exceções por data",
+            body = "Capacidade especial por dia.",
+        )
+        AdminAvailabilityTextField(
+            value = form.overrideDate,
+            onValueChange = { onFormChange(form.copy(overrideDate = it)) },
+            label = "Data da exceção (AAAA-MM-DD)",
+            enabled = !saving,
+            singleLine = true,
+            keyboardType = KeyboardType.Number,
+        )
+        if (configuredDates.isNotEmpty()) {
+            AdminDateShortcutChips(
+                dates = configuredDates,
+                selectedDate = form.overrideDate,
+                enabled = !saving,
+                onDateSelected = { date -> onFormChange(form.copy(overrideDate = date)) },
+            )
+        }
+        AdminAvailabilityStepper(
+            label = "Capacidade nessa data",
+            value = form.overrideCapacityValue(),
+            range = 0..20,
+            enabled = !saving,
+            valueText = { value -> if (value == 0) "Fechado" else "$value por horário" },
+            onValueChange = { value ->
+                onFormChange(form.copy(overrideMaxBookingsPerSlot = value.toString()))
+            },
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AdminChoiceChip(
+                label = "Fechado",
+                selected = form.overrideCapacityValue() == 0,
+                enabled = !saving,
+                onClick = { onFormChange(form.copy(overrideMaxBookingsPerSlot = "0")) },
+            )
+            AdminChoiceChip(
+                label = "Capacidade normal",
+                selected = form.overrideCapacityValue() == form.defaultCapacityValue(),
+                enabled = !saving,
+                onClick = {
+                    onFormChange(
+                        form.copy(overrideMaxBookingsPerSlot = form.defaultCapacityValue().toString()),
+                    )
+                },
+            )
+        }
+        Button(
+            onClick = onSaveCapacityOverride,
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Guardar exceção",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminBlockedSlotEditor(
+    form: AdminAvailabilityForm,
+    saving: Boolean,
+    configuredDates: List<String>,
+    onFormChange: (AdminAvailabilityForm) -> Unit,
+    onSaveBlockedSlot: () -> Unit,
+) {
+    val startOptions = form.blockStartTimeOptions()
+    val endOptions = form.blockEndTimeOptions()
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AdminAvailabilitySectionHeader(
+            icon = Icons.Filled.AccessTime,
+            title = "Bloqueios de horário",
+            body = "Janelas indisponíveis para marcação.",
+        )
+        AdminAvailabilityTextField(
+            value = form.blockedDate,
+            onValueChange = { onFormChange(form.copy(blockedDate = it)) },
+            label = "Data do bloqueio (AAAA-MM-DD)",
+            enabled = !saving,
+            singleLine = true,
+            keyboardType = KeyboardType.Number,
+        )
+        if (configuredDates.isNotEmpty()) {
+            AdminDateShortcutChips(
+                dates = configuredDates,
+                selectedDate = form.blockedDate,
+                enabled = !saving,
+                onDateSelected = { date -> onFormChange(form.copy(blockedDate = date)) },
+            )
+        }
+        AdminTimeChoiceRow(
+            label = "Início",
+            options = startOptions,
+            selectedTime = form.blockedStartTime,
+            enabled = !saving,
+            onTimeSelected = { selectedStart ->
+                val nextEnd = form.nextBlockEndTime(selectedStart)
+                onFormChange(
+                    form.copy(
+                        blockedStartTime = selectedStart,
+                        blockedEndTime = nextEnd,
+                    ),
+                )
+            },
+        )
+        AdminTimeChoiceRow(
+            label = "Fim",
+            options = endOptions,
+            selectedTime = form.blockedEndTime,
+            enabled = !saving,
+            onTimeSelected = { selectedEnd -> onFormChange(form.copy(blockedEndTime = selectedEnd)) },
+        )
+        AdminAvailabilityTextField(
+            value = form.blockedReason,
+            onValueChange = { onFormChange(form.copy(blockedReason = it)) },
+            label = "Motivo",
+            enabled = !saving,
+            singleLine = true,
+        )
+        Button(
+            onClick = onSaveBlockedSlot,
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "Guardar bloqueio",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdminDateShortcutChips(
+    dates: List<String>,
+    selectedDate: String,
+    enabled: Boolean,
+    onDateSelected: (String) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        dates.forEach { date ->
+            AdminChoiceChip(
+                label = date,
+                selected = selectedDate == date,
+                enabled = enabled,
+                onClick = { onDateSelected(date) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminChoiceChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .height(42.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.tertiary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onTertiary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) {
+                MaterialTheme.colorScheme.tertiary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (enabled) {
+                    if (selected) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
+                },
+            )
         }
     }
 }
@@ -711,6 +1201,7 @@ private fun AdminAvailabilityTextField(
     modifier: Modifier = Modifier,
     singleLine: Boolean = false,
     minLines: Int = 1,
+    keyboardType: KeyboardType = KeyboardType.Text,
 ) {
     OutlinedTextField(
         value = value,
@@ -721,6 +1212,7 @@ private fun AdminAvailabilityTextField(
         minLines = minLines,
         label = { Text(label) },
         textStyle = MaterialTheme.typography.bodyMedium,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.tertiary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
@@ -730,4 +1222,120 @@ private fun AdminAvailabilityTextField(
             unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
         ),
     )
+}
+
+private val adminWeeklyStartTimeChoices = listOf(
+    "07:00",
+    "08:00",
+    "09:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+)
+
+private val adminWeeklyEndTimeChoices = listOf(
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+    "19:00",
+    "20:00",
+    "21:00",
+)
+
+private fun AdminAvailabilityForm.defaultCapacityValue(): Int {
+    return defaultMaxBookingsPerSlot.trim().toIntOrNull()?.coerceIn(1, 20) ?: 1
+}
+
+private fun AdminAvailabilityForm.defaultIntervalValue(): Int {
+    return defaultSlotIntervalMinutes.trim().toIntOrNull()?.coerceIn(5, 240) ?: 30
+}
+
+private fun AdminAvailabilityForm.overrideCapacityValue(): Int {
+    return overrideMaxBookingsPerSlot.trim().toIntOrNull()?.coerceIn(0, 20) ?: defaultCapacityValue()
+}
+
+private fun AdminAvailabilityForm.configuredAvailabilityDates(): List<String> {
+    return (capacityOverrides.map { it.date } + blockedSlots.map { it.date })
+        .filter { it.isNotBlank() }
+        .distinct()
+        .take(8)
+}
+
+private fun AdminAvailabilityForm.blockStartTimeOptions(): List<String> {
+    return blockTimeOptions().dropLast(1).withSelectedTime(blockedStartTime)
+}
+
+private fun AdminAvailabilityForm.blockEndTimeOptions(): List<String> {
+    val startMinutes = blockedStartTime.adminMinutesSinceMidnightOrNull()
+    val options = blockTimeOptions()
+        .filter { option ->
+            val optionMinutes = option.adminMinutesSinceMidnightOrNull()
+            startMinutes == null || optionMinutes != null && optionMinutes > startMinutes
+        }
+        .withSelectedTime(blockedEndTime)
+    return options.ifEmpty {
+        listOf(blockedEndTime.ifBlank { "10:00" }).withSelectedTime("10:00")
+    }
+}
+
+private fun AdminAvailabilityForm.nextBlockEndTime(startTime: String): String {
+    val startMinutes = startTime.adminMinutesSinceMidnightOrNull()
+    val currentEndMinutes = blockedEndTime.adminMinutesSinceMidnightOrNull()
+    if (startMinutes == null || currentEndMinutes == null || currentEndMinutes > startMinutes) {
+        return blockedEndTime
+    }
+    return copy(blockedStartTime = startTime)
+        .blockEndTimeOptions()
+        .firstOrNull { option ->
+            val optionMinutes = option.adminMinutesSinceMidnightOrNull()
+            optionMinutes != null && optionMinutes > startMinutes
+        }
+        ?: blockedEndTime
+}
+
+private fun AdminAvailabilityForm.blockTimeOptions(): List<String> {
+    val interval = defaultIntervalValue()
+    val openDays = weeklyHours.filter { it.enabled }
+    val earliestStart = openDays.mapNotNull { it.startTime.adminMinutesSinceMidnightOrNull() }.minOrNull() ?: 9 * 60
+    val latestEnd = openDays.mapNotNull { it.endTime.adminMinutesSinceMidnightOrNull() }.maxOrNull() ?: 19 * 60
+    if (latestEnd <= earliestStart) return listOf("09:00", "10:00")
+
+    val options = mutableListOf<String>()
+    var minutes = earliestStart
+    while (minutes <= latestEnd) {
+        options += minutes.toAdminTimeLabel()
+        minutes += interval
+    }
+    if (options.lastOrNull() != latestEnd.toAdminTimeLabel()) {
+        options += latestEnd.toAdminTimeLabel()
+    }
+    return options.distinct()
+}
+
+private fun List<String>.withSelectedTime(time: String): List<String> {
+    return (this + time)
+        .filter { it.adminMinutesSinceMidnightOrNull() != null }
+        .distinct()
+        .sortedBy { it.adminMinutesSinceMidnightOrNull() ?: Int.MAX_VALUE }
+}
+
+private fun String.adminMinutesSinceMidnightOrNull(): Int? {
+    val value = trim()
+    if (!Regex("^\\d{2}:\\d{2}$").matches(value)) return null
+    val hour = value.substring(0, 2).toIntOrNull() ?: return null
+    val minute = value.substring(3, 5).toIntOrNull() ?: return null
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return hour * 60 + minute
+}
+
+private fun Int.toAdminTimeLabel(): String {
+    val hour = this / 60
+    val minute = this % 60
+    return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 }
