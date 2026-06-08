@@ -41,11 +41,15 @@ class FirebaseAdminRepository(
         return api.getPendingBookingRequests(idToken)
     }
 
-    override suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult {
+    override suspend fun getAcceptedBookingRequests(): AdminBookingRequestsResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminBookingRequestsResult.Failure(unauthenticatedError())
 
-        return api.getCompletableBookingRequests(idToken)
+        return api.getAcceptedBookingRequests(idToken)
+    }
+
+    override suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult {
+        return getAcceptedBookingRequests()
     }
 
     override suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult {

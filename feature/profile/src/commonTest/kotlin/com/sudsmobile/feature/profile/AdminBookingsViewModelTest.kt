@@ -318,14 +318,15 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
-    fun loadRequestsBuildsCompletableRequestCards() = runTest {
+    fun loadRequestsBuildsAcceptedRequestCards() = runTest {
         val repository = FakeAdminRepository(
             requestsResult = AdminBookingRequestsResult.Success(emptyList()),
-            completableRequestsResult = AdminBookingRequestsResult.Success(
+            acceptedRequestsResult = AdminBookingRequestsResult.Success(
                 listOf(
                     adminBookingRequest(
                         id = "reservation-2",
                         status = "confirmed",
+                        canComplete = true,
                         acceptedAtIso = "2026-05-29T10:15:00.000Z",
                         acceptedByUid = "admin-uid",
                     ),
@@ -342,13 +343,42 @@ class AdminBookingsViewModelTest {
 
         val loaded = assertIs<AdminBookingsUiState.Loaded>(viewModel.uiState.value)
         assertEquals(emptyList(), loaded.pendingRequests)
-        assertEquals("reservation-2", loaded.completableRequests.single().id)
-        assertEquals("Confirmada", loaded.completableRequests.single().statusLabel)
-        assertEquals("Pronta a concluir", loaded.completableRequests.single().statusDetail)
+        assertEquals("reservation-2", loaded.acceptedRequests.single().id)
+        assertEquals("Confirmada", loaded.acceptedRequests.single().statusLabel)
+        assertEquals("Pronta a concluir", loaded.acceptedRequests.single().statusDetail)
+        assertEquals(true, loaded.acceptedRequests.single().canComplete)
         assertEquals(
             "Aceite em 29 de maio, 2026 às 10:15 por admin-uid",
-            loaded.completableRequests.single().auditLabels.single(),
+            loaded.acceptedRequests.single().auditLabels.single(),
         )
+    }
+
+    @Test
+    fun loadRequestsKeepsFutureAcceptedRequestsNotCompletable() = runTest {
+        val repository = FakeAdminRepository(
+            requestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            acceptedRequestsResult = AdminBookingRequestsResult.Success(
+                listOf(
+                    adminBookingRequest(
+                        id = "reservation-3",
+                        status = "confirmed",
+                        canComplete = false,
+                    ),
+                ),
+            ),
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = FakeAdminAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadRequests()
+        runCurrent()
+
+        val loaded = assertIs<AdminBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("reservation-3", loaded.acceptedRequests.single().id)
+        assertEquals("Aceite", loaded.acceptedRequests.single().statusDetail)
+        assertEquals(false, loaded.acceptedRequests.single().canComplete)
     }
 
     @Test
@@ -382,7 +412,7 @@ class AdminBookingsViewModelTest {
         val authRepository = FakeAdminAuthRepository(authenticated = true)
         val repository = FakeAdminRepository(
             requestsResult = AdminBookingRequestsResult.Success(emptyList()),
-            completableRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            acceptedRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
             requestsResultDeferred = pendingResult,
         )
         val viewModel = AdminBookingsViewModel(
@@ -448,7 +478,7 @@ class AdminBookingsViewModelTest {
     fun completeRequestSendsDecisionAndReloadsRequests() = runTest {
         val repository = FakeAdminRepository(
             requestsResult = AdminBookingRequestsResult.Success(emptyList()),
-            completableRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            acceptedRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
             completeResult = AdminBookingDecisionResult.Success(decisionReceipt(status = "completed")),
         )
         val viewModel = AdminBookingsViewModel(
@@ -496,7 +526,7 @@ class AdminBookingsViewModelTest {
         val authRepository = FakeAdminAuthRepository(authenticated = true)
         val repository = FakeAdminRepository(
             requestsResult = AdminBookingRequestsResult.Success(emptyList()),
-            completableRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+            acceptedRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
             completeResultDeferred = completionResult,
         )
         val viewModel = AdminBookingsViewModel(
@@ -564,7 +594,7 @@ class AdminBookingsViewModelTest {
 private class FakeAdminRepository(
     var roleResult: AdminRoleResult = AdminRoleResult.Success(adminRole(role = "admin")),
     var requestsResult: AdminBookingRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
-    var completableRequestsResult: AdminBookingRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
+    var acceptedRequestsResult: AdminBookingRequestsResult = AdminBookingRequestsResult.Success(emptyList()),
     var acceptResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
         decisionReceipt(status = "confirmed"),
     ),
@@ -608,8 +638,8 @@ private class FakeAdminRepository(
         return requestsResult
     }
 
-    override suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult {
-        return completableRequestsResult
+    override suspend fun getAcceptedBookingRequests(): AdminBookingRequestsResult {
+        return acceptedRequestsResult
     }
 
     override suspend fun acceptBookingRequest(
@@ -776,6 +806,7 @@ private fun adminBookingRequest(
     customerName: String = "Bruno Ribeiro",
     status: String = "pending",
     extras: List<BookingReservationExtra> = emptyList(),
+    canComplete: Boolean = false,
     acceptedAtIso: String? = null,
     acceptedByUid: String = "",
 ): AdminBookingRequest = AdminBookingRequest(
@@ -798,6 +829,7 @@ private fun adminBookingRequest(
     createdAtIso = "2026-05-29T08:00:00.000Z",
     pendingExpiresAtIso = "2026-05-30T08:00:00.000Z",
     loyaltyRewardApplied = false,
+    canComplete = canComplete,
     acceptedAtIso = acceptedAtIso,
     acceptedByUid = acceptedByUid,
 )

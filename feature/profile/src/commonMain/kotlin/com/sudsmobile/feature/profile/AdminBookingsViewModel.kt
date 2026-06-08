@@ -48,6 +48,7 @@ internal data class AdminBookingRequestUi(
     val createdAt: String,
     val expiresAt: String,
     val loyaltyRewardApplied: Boolean,
+    val canComplete: Boolean,
     val auditLabels: List<String>,
 )
 
@@ -64,7 +65,7 @@ internal sealed interface AdminBookingsUiState {
     data object Empty : AdminBookingsUiState
     data class Loaded(
         val pendingRequests: List<AdminBookingRequestUi>,
-        val completableRequests: List<AdminBookingRequestUi>,
+        val acceptedRequests: List<AdminBookingRequestUi>,
     ) : AdminBookingsUiState
     data class Error(val message: String, val retryable: Boolean) : AdminBookingsUiState
 }
@@ -307,12 +308,12 @@ internal class AdminBookingsViewModel(
                 val nextState = when (pendingResult) {
                     is AdminBookingRequestsResult.Failure -> pendingResult.error.toAdminBookingsState()
                     is AdminBookingRequestsResult.Success -> {
-                        when (val completableResult = adminRepository.getCompletableBookingRequests()) {
+                        when (val acceptedResult = adminRepository.getAcceptedBookingRequests()) {
                             is AdminBookingRequestsResult.Success -> toAdminBookingsState(
                                 pendingRequests = pendingResult.requests,
-                                completableRequests = completableResult.requests,
+                                acceptedRequests = acceptedResult.requests,
                             )
-                            is AdminBookingRequestsResult.Failure -> completableResult.error.toAdminBookingsState()
+                            is AdminBookingRequestsResult.Failure -> acceptedResult.error.toAdminBookingsState()
                         }
                     }
                 }
@@ -470,16 +471,16 @@ private fun com.sudsmobile.data.auth.AuthSession.toAdminSessionSnapshot(): Admin
 
 private fun toAdminBookingsState(
     pendingRequests: List<AdminBookingRequest>,
-    completableRequests: List<AdminBookingRequest>,
+    acceptedRequests: List<AdminBookingRequest>,
 ): AdminBookingsUiState {
     val pending = pendingRequests.map { it.toUi() }
-    val completable = completableRequests.map { it.toUi() }
-    return if (pending.isEmpty() && completable.isEmpty()) {
+    val accepted = acceptedRequests.map { it.toUi() }
+    return if (pending.isEmpty() && accepted.isEmpty()) {
         AdminBookingsUiState.Empty
     } else {
         AdminBookingsUiState.Loaded(
             pendingRequests = pending,
-            completableRequests = completable,
+            acceptedRequests = accepted,
         )
     }
 }
@@ -497,12 +498,16 @@ private fun AdminBookingRequest.toUi(): AdminBookingRequestUi = AdminBookingRequ
     price = priceCents?.toEuroLabel() ?: "A confirmar",
     paymentStatus = paymentStatus.toPaymentLabel(),
     statusLabel = status.toReservationStatusLabel(),
-    statusDetail = status.toReservationStatusDetail(pendingExpiresAtIso),
+    statusDetail = status.toReservationStatusDetail(
+        pendingExpiresAtIso = pendingExpiresAtIso,
+        canComplete = canComplete,
+    ),
     extras = extras.toAdminExtraUi(),
     notes = notes,
     createdAt = createdAtIso.toDateTimeLabel() ?: "Data a confirmar",
     expiresAt = pendingExpiresAtIso?.toDateTimeLabel() ?: "Sem expiração automática",
     loyaltyRewardApplied = loyaltyRewardApplied,
+    canComplete = canComplete,
     auditLabels = decisionAuditLabels(),
 )
 
@@ -615,7 +620,10 @@ private fun String.toReservationStatusLabel(): String {
     }
 }
 
-private fun String.toReservationStatusDetail(pendingExpiresAtIso: String?): String {
+private fun String.toReservationStatusDetail(
+    pendingExpiresAtIso: String?,
+    canComplete: Boolean,
+): String {
     val normalized = trim()
         .lowercase()
         .replace("-", "_")
@@ -623,7 +631,8 @@ private fun String.toReservationStatusDetail(pendingExpiresAtIso: String?): Stri
     return when (normalized) {
         "pending", "novo" -> pendingExpiresAtIso?.toDateTimeLabel()?.let { "Expira $it" }
             ?: "Sem expiração automática"
-        "confirmed", "confirmado", "in_progress", "em_execucao", "em_execução" -> "Pronta a concluir"
+        "confirmed", "confirmado" -> if (canComplete) "Pronta a concluir" else "Aceite"
+        "in_progress", "em_execucao", "em_execução" -> if (canComplete) "Pronta a concluir" else "Em execução"
         else -> ""
     }
 }

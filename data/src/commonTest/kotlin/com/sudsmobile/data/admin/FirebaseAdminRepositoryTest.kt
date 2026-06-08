@@ -880,18 +880,18 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
-    fun getCompletableBookingRequestsUsesCurrentToken() = runTest {
+    fun getAcceptedBookingRequestsUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
             api = api,
             authRepository = FakeAuthRepository(authenticated = true),
         )
 
-        val result = repository.getCompletableBookingRequests()
+        val result = repository.getAcceptedBookingRequests()
 
         val success = assertIs<AdminBookingRequestsResult.Success>(result)
         assertEquals("reservation-2", success.requests.single().id)
-        assertEquals("id-token-1", api.completableBookingsIdTokens.single())
+        assertEquals("id-token-1", api.acceptedBookingsIdTokens.single())
     }
 
     @Test
@@ -971,7 +971,7 @@ private class FakeAdminFunctionsApi(
     val upsertBlockedSlotIdTokens = mutableListOf<String>()
     val clearBlockedSlotRequests = mutableListOf<AdminBlockedSlotClearRequest>()
     val clearBlockedSlotIdTokens = mutableListOf<String>()
-    val completableBookingsIdTokens = mutableListOf<String>()
+    val acceptedBookingsIdTokens = mutableListOf<String>()
     val completeBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
     val completeBookingIdTokens = mutableListOf<String>()
 
@@ -984,8 +984,8 @@ private class FakeAdminFunctionsApi(
         return AdminBookingRequestsResult.Failure(AdminError.Backend("unused"))
     }
 
-    override suspend fun getCompletableBookingRequests(idToken: String): AdminBookingRequestsResult {
-        completableBookingsIdTokens += idToken
+    override suspend fun getAcceptedBookingRequests(idToken: String): AdminBookingRequestsResult {
+        acceptedBookingsIdTokens += idToken
         return AdminBookingRequestsResult.Success(
             listOf(
                 AdminBookingRequest(

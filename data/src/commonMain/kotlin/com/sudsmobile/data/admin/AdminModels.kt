@@ -31,6 +31,7 @@ data class AdminBookingRequest(
     val createdAtIso: String,
     val pendingExpiresAtIso: String?,
     val loyaltyRewardApplied: Boolean,
+    val canComplete: Boolean = false,
     val acceptedAtIso: String? = null,
     val acceptedByUid: String = "",
     val rejectedAtIso: String? = null,
@@ -486,8 +487,10 @@ sealed interface AdminError {
 interface AdminRepository {
     suspend fun syncMyRole(): AdminRoleResult
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
+    suspend fun getAcceptedBookingRequests(): AdminBookingRequestsResult =
+        AdminBookingRequestsResult.Failure(AdminError.Backend("Accepted reservations are not implemented."))
     suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult =
-        AdminBookingRequestsResult.Failure(AdminError.Backend("Completable reservations are not implemented."))
+        getAcceptedBookingRequests()
     suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
     suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult
     suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult =

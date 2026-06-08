@@ -111,7 +111,7 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
-    fun mapsCompletableReservationRequests() = runTest {
+    fun mapsAcceptedReservationRequests() = runTest {
         var requestedPath: String? = null
         val api = KtorAdminFunctionsApi(
             httpClient = mockClient(
@@ -132,6 +132,7 @@ class KtorAdminFunctionsApiTest {
                         "vehicleType": "passageiros",
                         "priceCents": 3200,
                         "createdAt": "2026-05-29T09:00:00.000Z",
+                        "canComplete": true,
                         "acceptedAt": "2026-05-29T10:15:00.000Z",
                         "acceptedByUid": " admin-uid "
                       }
@@ -145,14 +146,15 @@ class KtorAdminFunctionsApiTest {
             config = testConfig(),
         )
 
-        val result = api.getCompletableBookingRequests("id-token-1")
+        val result = api.getAcceptedBookingRequests("id-token-1")
 
         val success = assertIs<AdminBookingRequestsResult.Success>(result)
         val request = success.requests.single()
-        assertEquals("/test-project/europe-west1/getAdminCompletableReservations", requestedPath)
+        assertEquals("/test-project/europe-west1/getAdminAcceptedReservations", requestedPath)
         assertEquals("reservation-2", request.id)
         assertEquals("confirmed", request.status)
         assertEquals("paid", request.paymentStatus)
+        assertEquals(true, request.canComplete)
         assertEquals("2026-05-29T10:15:00.000Z", request.acceptedAtIso)
         assertEquals("admin-uid", request.acceptedByUid)
     }

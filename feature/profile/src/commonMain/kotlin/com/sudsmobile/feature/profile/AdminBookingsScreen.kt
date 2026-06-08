@@ -41,6 +41,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -131,6 +133,10 @@ private fun AdminBookingsScreenContent(
     onRejectionReasonChange: (String) -> Unit,
     onConfirmReject: (String) -> Unit,
 ) {
+    var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
+    val tabs = listOf(AdminBookingsTab.Pending, AdminBookingsTab.Accepted)
+    val selectedTab = tabs[selectedTabIndex.coerceIn(0, tabs.lastIndex)]
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -177,7 +183,7 @@ private fun AdminBookingsScreenContent(
 
                 AdminBookingsUiState.Empty -> AdminBookingsStatusCard(
                     title = "Sem marcações para ação",
-                    body = "Não existem pedidos pendentes nem serviços prontos a concluir neste momento.",
+                    body = "Não existem pedidos por aceitar nem marcações aceites neste momento.",
                     icon = Icons.Filled.CheckCircle,
                     actionLabel = "Atualizar",
                     onAction = onRetry,
@@ -194,47 +200,151 @@ private fun AdminBookingsScreenContent(
                 is AdminBookingsUiState.Loaded -> {
                     AdminBookingsCountCard(
                         pendingCount = uiState.pendingRequests.size,
-                        completableCount = uiState.completableRequests.size,
+                        acceptedCount = uiState.acceptedRequests.size,
                         onRetry = onRetry,
                     )
-                    if (uiState.pendingRequests.isNotEmpty()) {
-                        AdminBookingsSectionTitle("Pedidos pendentes")
-                        uiState.pendingRequests.forEach { request ->
-                            AdminBookingRequestCard(
-                                request = request,
-                                decisionState = decisionState,
-                                rejecting = rejectingReservationId == request.id,
-                                rejectionReason = rejectionReason,
-                                onAccept = { onAccept(request.id) },
-                                onComplete = { onComplete(request.id) },
-                                onStartReject = { onStartReject(request.id) },
-                                onCancelReject = onCancelReject,
-                                onRejectionReasonChange = onRejectionReasonChange,
-                                onConfirmReject = { onConfirmReject(request.id) },
-                            )
-                        }
-                    }
-                    if (uiState.completableRequests.isNotEmpty()) {
-                        AdminBookingsSectionTitle("Prontas a concluir")
-                        uiState.completableRequests.forEach { request ->
-                            AdminBookingRequestCard(
-                                request = request,
-                                decisionState = decisionState,
-                                rejecting = false,
-                                rejectionReason = "",
-                                completeOnly = true,
-                                onAccept = { onAccept(request.id) },
-                                onComplete = { onComplete(request.id) },
-                                onStartReject = { onStartReject(request.id) },
-                                onCancelReject = onCancelReject,
-                                onRejectionReasonChange = onRejectionReasonChange,
-                                onConfirmReject = { onConfirmReject(request.id) },
-                            )
-                        }
+                    AdminBookingsTabs(
+                        selectedTab = selectedTab,
+                        pendingCount = uiState.pendingRequests.size,
+                        acceptedCount = uiState.acceptedRequests.size,
+                        onSelect = { tab -> selectedTabIndex = tabs.indexOf(tab) },
+                    )
+                    when (selectedTab) {
+                        AdminBookingsTab.Pending -> AdminPendingBookingsList(
+                            requests = uiState.pendingRequests,
+                            decisionState = decisionState,
+                            rejectingReservationId = rejectingReservationId,
+                            rejectionReason = rejectionReason,
+                            onAccept = onAccept,
+                            onComplete = onComplete,
+                            onStartReject = onStartReject,
+                            onCancelReject = onCancelReject,
+                            onRejectionReasonChange = onRejectionReasonChange,
+                            onConfirmReject = onConfirmReject,
+                        )
+
+                        AdminBookingsTab.Accepted -> AdminAcceptedBookingsList(
+                            requests = uiState.acceptedRequests,
+                            decisionState = decisionState,
+                            onComplete = onComplete,
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+private enum class AdminBookingsTab(val label: String) {
+    Pending("Por aceitar"),
+    Accepted("Aceites"),
+}
+
+@Composable
+private fun AdminBookingsTabs(
+    selectedTab: AdminBookingsTab,
+    pendingCount: Int,
+    acceptedCount: Int,
+    onSelect: (AdminBookingsTab) -> Unit,
+) {
+    val tabs = listOf(AdminBookingsTab.Pending, AdminBookingsTab.Accepted)
+    TabRow(
+        selectedTabIndex = tabs.indexOf(selectedTab),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp)),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.tertiary,
+    ) {
+        tabs.forEach { tab ->
+            val count = when (tab) {
+                AdminBookingsTab.Pending -> pendingCount
+                AdminBookingsTab.Accepted -> acceptedCount
+            }
+            Tab(
+                selected = selectedTab == tab,
+                onClick = { onSelect(tab) },
+                text = {
+                    Text(
+                        text = "${tab.label} ($count)",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminPendingBookingsList(
+    requests: List<AdminBookingRequestUi>,
+    decisionState: AdminBookingDecisionUiState,
+    rejectingReservationId: String?,
+    rejectionReason: String,
+    onAccept: (String) -> Unit,
+    onComplete: (String) -> Unit,
+    onStartReject: (String) -> Unit,
+    onCancelReject: () -> Unit,
+    onRejectionReasonChange: (String) -> Unit,
+    onConfirmReject: (String) -> Unit,
+) {
+    if (requests.isEmpty()) {
+        AdminBookingsStatusCard(
+            title = "Sem pedidos por aceitar",
+            body = "Não há marcações a aguardar decisão neste momento.",
+            icon = Icons.Filled.CheckCircle,
+        )
+        return
+    }
+
+    requests.forEach { request ->
+        AdminBookingRequestCard(
+            request = request,
+            decisionState = decisionState,
+            rejecting = rejectingReservationId == request.id,
+            rejectionReason = rejectionReason,
+            onAccept = { onAccept(request.id) },
+            onComplete = { onComplete(request.id) },
+            onStartReject = { onStartReject(request.id) },
+            onCancelReject = onCancelReject,
+            onRejectionReasonChange = onRejectionReasonChange,
+            onConfirmReject = { onConfirmReject(request.id) },
+        )
+    }
+}
+
+@Composable
+private fun AdminAcceptedBookingsList(
+    requests: List<AdminBookingRequestUi>,
+    decisionState: AdminBookingDecisionUiState,
+    onComplete: (String) -> Unit,
+) {
+    if (requests.isEmpty()) {
+        AdminBookingsStatusCard(
+            title = "Sem marcações aceites",
+            body = "Ainda não há marcações aceites para acompanhar.",
+            icon = Icons.Filled.CheckCircle,
+        )
+        return
+    }
+
+    requests.forEach { request ->
+        AdminBookingRequestCard(
+            request = request,
+            decisionState = decisionState,
+            rejecting = false,
+            rejectionReason = "",
+            acceptedOnly = true,
+            onAccept = {},
+            onComplete = { onComplete(request.id) },
+            onStartReject = {},
+            onCancelReject = {},
+            onRejectionReasonChange = { _ -> },
+            onConfirmReject = {},
+        )
     }
 }
 
@@ -285,7 +395,7 @@ private fun AdminBookingsHeader(onBack: () -> Unit) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Validação e conclusão operacional",
+            text = "Pedidos por aceitar e marcações aceites",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
@@ -324,10 +434,10 @@ private fun AdminDecisionBanner(
 @Composable
 private fun AdminBookingsCountCard(
     pendingCount: Int,
-    completableCount: Int,
+    acceptedCount: Int,
     onRetry: () -> Unit,
 ) {
-    val totalCount = pendingCount + completableCount
+    val totalCount = pendingCount + acceptedCount
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary),
@@ -366,7 +476,7 @@ private fun AdminBookingsCountCard(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "$pendingCount pendentes · $completableCount prontas a concluir",
+                    text = "$pendingCount por aceitar · $acceptedCount aceites",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.76f),
                 )
@@ -388,22 +498,12 @@ private fun AdminBookingsCountCard(
 }
 
 @Composable
-private fun AdminBookingsSectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurface,
-        fontWeight = FontWeight.Bold,
-    )
-}
-
-@Composable
 private fun AdminBookingRequestCard(
     request: AdminBookingRequestUi,
     decisionState: AdminBookingDecisionUiState,
     rejecting: Boolean,
     rejectionReason: String,
-    completeOnly: Boolean = false,
+    acceptedOnly: Boolean = false,
     onAccept: () -> Unit,
     onComplete: () -> Unit,
     onStartReject: () -> Unit,
@@ -477,10 +577,18 @@ private fun AdminBookingRequestCard(
                 )
             }
 
-            if (completeOnly) {
+            if (acceptedOnly) {
+                AdminInlineStatus(
+                    message = if (request.canComplete) {
+                        "Serviço pronto a concluir."
+                    } else {
+                        "Marcação aceite, ainda não pronta a concluir."
+                    },
+                    icon = Icons.Filled.CheckCircle,
+                )
                 Button(
                     onClick = onComplete,
-                    enabled = !decisionInProgress,
+                    enabled = request.canComplete && !decisionInProgress,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(46.dp),

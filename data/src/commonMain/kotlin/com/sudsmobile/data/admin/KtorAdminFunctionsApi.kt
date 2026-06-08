@@ -64,9 +64,9 @@ class KtorAdminFunctionsApi(
         }
     }
 
-    override suspend fun getCompletableBookingRequests(idToken: String): AdminBookingRequestsResult {
+    override suspend fun getAcceptedBookingRequests(idToken: String): AdminBookingRequestsResult {
         return try {
-            val response = httpClient.post(config.getAdminCompletableReservationsUrl) {
+            val response = httpClient.post(config.getAdminAcceptedReservationsUrl) {
                 callableHeaders(idToken)
                 setBody(CallableEmptyRequest(data = emptyMap()))
             }
@@ -78,16 +78,20 @@ class KtorAdminFunctionsApi(
                     body.result.requests.map { it.toAdminBookingRequest() },
                 )
                 else -> AdminBookingRequestsResult.Failure(
-                    AdminError.Backend("A resposta das marcações concluíveis veio sem dados."),
+                    AdminError.Backend("A resposta das marcações aceites veio sem dados."),
                 )
             }
         } catch (cause: CancellationException) {
             throw cause
         } catch (cause: Throwable) {
             AdminBookingRequestsResult.Failure(
-                AdminError.Unavailable("Não foi possível carregar marcações prontas a concluir. Tente novamente."),
+                AdminError.Unavailable("Não foi possível carregar marcações aceites. Tente novamente."),
             )
         }
+    }
+
+    override suspend fun getCompletableBookingRequests(idToken: String): AdminBookingRequestsResult {
+        return getAcceptedBookingRequests(idToken)
     }
 
     override suspend fun acceptBookingRequest(
@@ -1341,6 +1345,7 @@ private data class AdminBookingRequestPayload(
     val createdAt: String = "",
     val pendingExpiresAt: String? = null,
     val loyaltyRewardApplied: Boolean = false,
+    val canComplete: Boolean = false,
     val acceptedAt: String? = null,
     val acceptedByUid: String = "",
     val rejectedAt: String? = null,
@@ -1368,6 +1373,7 @@ private data class AdminBookingRequestPayload(
         createdAtIso = createdAt,
         pendingExpiresAtIso = pendingExpiresAt,
         loyaltyRewardApplied = loyaltyRewardApplied,
+        canComplete = canComplete,
         acceptedAtIso = acceptedAt,
         acceptedByUid = acceptedByUid.trim(),
         rejectedAtIso = rejectedAt,
