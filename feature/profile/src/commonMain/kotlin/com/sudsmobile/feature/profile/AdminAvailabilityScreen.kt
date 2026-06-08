@@ -50,10 +50,15 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -664,16 +669,32 @@ private fun AdminWeeklyAvailabilityEditor(
     enabled: Boolean,
     onDayChange: (AdminOpeningHoursDayForm) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    var selectedDayLabel by rememberSaveable { mutableStateOf(days.firstOrNull()?.dayLabel.orEmpty()) }
+    LaunchedEffect(days) {
+        if (days.none { it.dayLabel == selectedDayLabel }) {
+            selectedDayLabel = days.firstOrNull()?.dayLabel.orEmpty()
+        }
+    }
+    val selectedDay = days.firstOrNull { it.dayLabel == selectedDayLabel } ?: days.firstOrNull()
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = "Disponibilidade semanal",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold,
         )
-        days.forEach { day ->
-            AdminWeeklyAvailabilityRow(
-                day = day,
+
+        AdminWeeklyAvailabilityTabs(
+            days = days,
+            selectedDayLabel = selectedDay?.dayLabel.orEmpty(),
+            enabled = enabled,
+            onDaySelected = { selectedDayLabel = it },
+        )
+
+        if (selectedDay != null) {
+            AdminWeeklyAvailabilityPanel(
+                day = selectedDay,
                 enabled = enabled,
                 onDayChange = onDayChange,
             )
@@ -681,9 +702,47 @@ private fun AdminWeeklyAvailabilityEditor(
     }
 }
 
+@Composable
+private fun AdminWeeklyAvailabilityTabs(
+    days: List<AdminOpeningHoursDayForm>,
+    selectedDayLabel: String,
+    enabled: Boolean,
+    onDaySelected: (String) -> Unit,
+) {
+    val selectedIndex = days.indexOfFirst { it.dayLabel == selectedDayLabel }.coerceAtLeast(0)
+    TabRow(
+        selectedTabIndex = selectedIndex,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp)),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.tertiary,
+    ) {
+        days.forEach { day ->
+            Tab(
+                selected = selectedDayLabel == day.dayLabel,
+                enabled = enabled,
+                onClick = { onDaySelected(day.dayLabel) },
+                text = {
+                    Text(
+                        text = day.dayTabLabel(),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            selectedDayLabel == day.dayLabel -> MaterialTheme.colorScheme.tertiary
+                            day.enabled -> MaterialTheme.colorScheme.onSurface
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f)
+                        },
+                    )
+                },
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AdminWeeklyAvailabilityRow(
+private fun AdminWeeklyAvailabilityPanel(
     day: AdminOpeningHoursDayForm,
     enabled: Boolean,
     onDayChange: (AdminOpeningHoursDayForm) -> Unit,
@@ -1338,4 +1397,8 @@ private fun Int.toAdminTimeLabel(): String {
     val hour = this / 60
     val minute = this % 60
     return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+}
+
+private fun AdminOpeningHoursDayForm.dayTabLabel(): String {
+    return dayLabel.take(3)
 }
