@@ -527,7 +527,6 @@ private fun ProductsScreenContent(
 
                     DateTimeStepContent(
                         availabilityState = availabilityState,
-                        businessInfoState = businessInfoState,
                         selectedDateId = selectedDateId,
                         selectedTime = selectedTime,
                         onDateSelected = { dateId ->
@@ -544,7 +543,6 @@ private fun ProductsScreenContent(
                                 onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
                             }
                         },
-                        onRetryBusinessInfo = { onLoadBusinessInfo(true) },
                         minimumMonthAnchor = minimumAvailabilityMonthAnchor,
                         onPreviousMonth = {
                             val currentAnchor = availabilityMonth?.monthAnchorDate()
@@ -2570,13 +2568,11 @@ private fun BookingContactField(
 @Composable
 private fun DateTimeStepContent(
     availabilityState: BookingAvailabilityUiState,
-    businessInfoState: BookingBusinessInfoUiState,
     selectedDateId: String?,
     selectedTime: String?,
     onDateSelected: (String) -> Unit,
     onTimeSelected: (String) -> Unit,
     onRetryAvailability: () -> Unit,
-    onRetryBusinessInfo: () -> Unit,
     minimumMonthAnchor: String?,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
@@ -2644,11 +2640,6 @@ private fun DateTimeStepContent(
                 onRetry = onRetryAvailability,
             )
         }
-
-        OpeningHoursCard(
-            state = businessInfoState,
-            onRetry = onRetryBusinessInfo,
-        )
     }
 }
 
@@ -3033,146 +3024,6 @@ private fun TimeSlotButton(
 }
 
 @Composable
-private fun OpeningHoursCard(
-    state: BookingBusinessInfoUiState,
-    onRetry: () -> Unit,
-) {
-    val info = state.infoOrDefault()
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.20f),
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            SectionHeader(
-                icon = Icons.Filled.Info,
-                title = "Horário de Funcionamento",
-            )
-
-            when (state) {
-                BookingBusinessInfoUiState.Idle,
-                BookingBusinessInfoUiState.Loading -> OpeningHoursStatusRow(
-                    title = "A carregar horário",
-                    body = "Estamos a consultar o horário atualizado do espaço.",
-                    loading = true,
-                )
-
-                is BookingBusinessInfoUiState.Error -> {
-                    OpeningHoursStatusRow(
-                        title = "Horário atualizado indisponível",
-                        body = state.message,
-                        loading = false,
-                        error = true,
-                    )
-                    OpeningHoursRows(openingHours = info.openingHours)
-                    if (state.retryable) {
-                        OutlinedButton(
-                            onClick = onRetry,
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.tertiary,
-                            ),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Atualizar horário", style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                }
-
-                is BookingBusinessInfoUiState.Loaded -> OpeningHoursRows(openingHours = info.openingHours)
-            }
-        }
-    }
-}
-
-@Composable
-private fun OpeningHoursStatusRow(
-    title: String,
-    body: String,
-    loading: Boolean,
-    error: Boolean = false,
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        if (loading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
-                color = MaterialTheme.colorScheme.tertiary,
-                strokeWidth = 2.dp,
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Filled.Info,
-                contentDescription = null,
-                tint = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun OpeningHoursRows(openingHours: List<BookingOpeningHoursUi>) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        openingHours.forEachIndexed { index, hours ->
-            OpeningHoursRow(hours)
-            if (index != openingHours.lastIndex) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-        }
-    }
-}
-
-@Composable
-private fun OpeningHoursRow(hours: BookingOpeningHoursUi) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = hours.dayLabel,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = hours.hoursLabel,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (hours.closed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Bold,
-        )
-    }
-}
-
-@Composable
 private fun SectionHeader(
     icon: ImageVector,
     title: String,
@@ -3293,17 +3144,13 @@ private fun BookingServiceCard(
             .fillMaxWidth()
             .clickable(onClick = onSelected),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.18f)
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLowest
-            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
         border = BorderStroke(
             width = 2.dp,
-            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceContainerLowest,
+            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 8.dp else 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(18.dp),
     ) {
         Row(
@@ -3470,17 +3317,13 @@ private fun BookingExtraCard(
             .fillMaxWidth()
             .clickable(onClick = onSelected),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.18f)
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLowest
-            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
         border = BorderStroke(
             width = 1.5.dp,
             color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 5.dp else 3.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         shape = RoundedCornerShape(16.dp),
     ) {
         Column(
@@ -3741,17 +3584,13 @@ private fun BookingVehicleCard(
             .fillMaxWidth()
             .clickable(onClick = onSelected),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.18f)
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLowest
-            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
         border = BorderStroke(
             width = 2.dp,
-            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceContainerLowest,
+            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 8.dp else 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(18.dp),
     ) {
         Row(
