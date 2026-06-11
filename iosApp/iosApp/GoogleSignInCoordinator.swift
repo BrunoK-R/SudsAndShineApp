@@ -9,11 +9,17 @@ final class GoogleSignInCoordinator {
     private init() {}
 
     func configureKotlinBridge() {
-        guard isConfigured else {
+        let configurationResult = GoogleSignInConfiguration.load()
+        guard configurationResult.issues.isEmpty, let configuration = configurationResult.configuration else {
+            logMissingConfiguration(configurationResult.issues)
             IosGoogleSignInKt.configureIosGoogleSignIn(signInHandler: nil)
             return
         }
 
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(
+            clientID: configuration.clientID,
+            serverClientID: configuration.serverClientID
+        )
         IosGoogleSignInKt.configureIosGoogleSignIn { onIdToken, onError in
             self.signIn(
                 onIdToken: { idToken in
@@ -28,12 +34,6 @@ final class GoogleSignInCoordinator {
 
     func handleOpenURL(_ url: URL) -> Bool {
         GIDSignIn.sharedInstance.handle(url)
-    }
-
-    private var isConfigured: Bool {
-        Bundle.main.nonPlaceholderInfoValue("GIDClientID") != nil &&
-            Bundle.main.nonPlaceholderInfoValue("GIDServerClientID") != nil &&
-            Bundle.main.nonPlaceholderInfoValue("GIDReversedClientID") != nil
     }
 
     private func signIn(
@@ -85,11 +85,101 @@ final class GoogleSignInCoordinator {
 
         return rootViewController
     }
+
+    private func logMissingConfiguration(_ issues: [String]) {
+        #if DEBUG
+        let details = issues.isEmpty ? "Unknown configuration error." : issues.joined(separator: " ")
+        print("Google Sign-In disabled on iOS: \(details)")
+        #endif
+    }
+}
+
+private struct GoogleSignInConfiguration {
+    let clientID: String
+    let serverClientID: String
+    let reversedClientID: String
+
+    static func load() -> (configuration: GoogleSignInConfiguration?, issues: [String]) {
+        let googleServiceInfo = Bundle.main.googleServiceInfo
+        let clientID = Bundle.main.nonPlaceholderInfoValue("GIDClientID")
+            ?? googleServiceInfo.nonPlaceholderValue("CLIENT_ID")
+        let serverClientID = Bundle.main.nonPlaceholderInfoValue("GIDServerClientID")
+            ?? googleServiceInfo.nonPlaceholderValue("SERVER_CLIENT_ID")
+        let reversedClientID = Bundle.main.nonPlaceholderInfoValue("GIDReversedClientID")
+            ?? googleServiceInfo.nonPlaceholderValue("REVERSED_CLIENT_ID")
+
+        var issues: [String] = []
+        if clientID == nil {
+            issues.append("Set GOOGLE_IOS_CLIENT_ID from GoogleService-Info.plist CLIENT_ID.")
+        }
+        if serverClientID == nil {
+            issues.append("Set GOOGLE_WEB_CLIENT_ID from the Firebase web OAuth client.")
+        }
+        if reversedClientID == nil {
+            issues.append("Set GOOGLE_IOS_REVERSED_CLIENT_ID from GoogleService-Info.plist REVERSED_CLIENT_ID.")
+        }
+
+        if let reversedClientID, !Bundle.main.registersURLScheme(reversedClientID) {
+            issues.append("Register \(reversedClientID) in CFBundleURLTypes by setting GOOGLE_IOS_REVERSED_CLIENT_ID.")
+        }
+
+        guard
+            issues.isEmpty,
+            let clientID,
+            let serverClientID,
+            let reversedClientID
+        else {
+            return (nil, issues)
+        }
+
+        return (GoogleSignInConfiguration(
+            clientID: clientID,
+            serverClientID: serverClientID,
+            reversedClientID: reversedClientID
+        ), [])
+    }
 }
 
 private extension Bundle {
+    var googleServiceInfo: [String: Any] {
+        guard
+            let url = url(forResource: "GoogleService-Info", withExtension: "plist"),
+            let plist = NSDictionary(contentsOf: url) as? [String: Any]
+        else {
+            return [:]
+        }
+
+        return plist
+    }
+
     func nonPlaceholderInfoValue(_ key: String) -> String? {
         guard let value = object(forInfoDictionaryKey: key) as? String else {
+            return nil
+        }
+
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedValue.isEmpty, !trimmedValue.contains("$(") else {
+            return nil
+        }
+
+        return trimmedValue
+    }
+
+    func registersURLScheme(_ scheme: String) -> Bool {
+        guard let urlTypes = object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] else {
+            return false
+        }
+
+        return urlTypes
+            .compactMap { $0["CFBundleURLSchemes"] as? [String] }
+            .flatMap { $0 }
+            .contains(scheme)
+    }
+}
+
+private extension Dictionary where Key == String, Value == Any {
+    func nonPlaceholderValue(_ key: String) -> String? {
+        guard let value = self[key] as? String else {
             return nil
         }
 
