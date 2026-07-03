@@ -31,9 +31,12 @@ data class AdminBookingRequest(
     val createdAtIso: String,
     val pendingExpiresAtIso: String?,
     val loyaltyRewardApplied: Boolean,
+    val canStart: Boolean = false,
     val canComplete: Boolean = false,
     val acceptedAtIso: String? = null,
     val acceptedByUid: String = "",
+    val startedAtIso: String? = null,
+    val startedByUid: String = "",
     val rejectedAtIso: String? = null,
     val rejectedByUid: String = "",
     val completedAtIso: String? = null,
@@ -269,6 +272,10 @@ data class AdminNotificationTestReceipt(
     val sendBlockedReason: String = "",
     val deliveryLocked: Boolean = false,
     val sendState: String = "",
+    val tokenCount: Int = 0,
+    val sentCount: Int = 0,
+    val failedCount: Int = 0,
+    val invalidatedCount: Int = 0,
 )
 
 data class AdminNotificationCampaignDraft(
@@ -283,14 +290,17 @@ data class AdminNotificationCampaignDraft(
     val notes: String,
     val sendBlocked: Boolean,
     val sendBlockedReason: String,
-    val deliveryLocked: Boolean = true,
-    val sendState: String = "draft_only",
+    val deliveryLocked: Boolean = false,
+    val sendState: String = "ready",
     val createdAtIso: String = "",
     val updatedAtIso: String = "",
     val archivedAtIso: String = "",
     val createdByUid: String = "",
     val updatedByUid: String = "",
     val archivedByUid: String = "",
+    val sentAtIso: String = "",
+    val sentByUid: String = "",
+    val queuedCount: Int = 0,
 )
 
 data class AdminNotificationCampaignDraftsConfig(
@@ -312,15 +322,33 @@ data class AdminNotificationCampaignDraftArchiveRequest(
     val campaignId: String,
 )
 
+data class AdminNotificationCampaignBroadcastRequest(
+    val campaignId: String,
+    val confirmBroadcast: Boolean = true,
+)
+
 data class AdminNotificationCampaignDraftMutationReceipt(
     val campaignId: String,
     val status: String,
     val created: Boolean = false,
     val targetAudience: String = "",
+    val sendBlocked: Boolean = false,
+    val sendBlockedReason: String = "",
+    val deliveryLocked: Boolean = false,
+    val sendState: String = "ready",
+)
+
+data class AdminNotificationCampaignBroadcastReceipt(
+    val campaignId: String,
+    val status: String,
+    val targetAudience: String,
+    val queuedCount: Int,
+    val skippedCount: Int = 0,
+    val sentByUid: String = "",
     val sendBlocked: Boolean = true,
     val sendBlockedReason: String = "",
     val deliveryLocked: Boolean = true,
-    val sendState: String = "draft_only",
+    val sendState: String = "sent",
 )
 
 data class AdminCapacityOverrideItem(
@@ -462,6 +490,14 @@ sealed interface AdminNotificationCampaignDraftMutationResult {
     data class Failure(val error: AdminError) : AdminNotificationCampaignDraftMutationResult
 }
 
+sealed interface AdminNotificationCampaignBroadcastResult {
+    data class Success(
+        val receipt: AdminNotificationCampaignBroadcastReceipt,
+    ) : AdminNotificationCampaignBroadcastResult
+
+    data class Failure(val error: AdminError) : AdminNotificationCampaignBroadcastResult
+}
+
 sealed interface AdminCapacityOverrideMutationResult {
     data class Success(val receipt: AdminCapacityOverrideMutationReceipt) : AdminCapacityOverrideMutationResult
     data class Failure(val error: AdminError) : AdminCapacityOverrideMutationResult
@@ -491,6 +527,11 @@ interface AdminRepository {
         AdminBookingRequestsResult.Failure(AdminError.Backend("Accepted reservations are not implemented."))
     suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult =
         getAcceptedBookingRequests()
+    suspend fun startBookingRequest(
+        request: AdminBookingDecisionRequest,
+    ): AdminBookingDecisionResult =
+        AdminBookingDecisionResult.Failure(AdminError.Backend("Reservation start is not implemented."))
+
     suspend fun getBusinessInfoConfiguration(): AdminBusinessInfoResult
     suspend fun getAvailabilityConfiguration(): AdminAvailabilityResult
     suspend fun getBookingPolicyConfiguration(): AdminBookingPolicyResult =
@@ -542,6 +583,13 @@ interface AdminRepository {
     ): AdminNotificationCampaignDraftMutationResult =
         AdminNotificationCampaignDraftMutationResult.Failure(
             AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
+
+    suspend fun broadcastNotificationCampaign(
+        request: AdminNotificationCampaignBroadcastRequest,
+    ): AdminNotificationCampaignBroadcastResult =
+        AdminNotificationCampaignBroadcastResult.Failure(
+            AdminError.Backend("Notification campaign broadcast is not implemented."),
         )
 
     suspend fun updateAvailabilityConfiguration(

@@ -130,7 +130,7 @@ class AdminNotificationSettingsViewModelTest {
         val summary = form.toDeliverySummary()
 
         assertEquals("4 canais ativos", summary.channelSummaryLabel)
-        assertEquals("9 modelos ativos", summary.templateSummaryLabel)
+        assertEquals("11 modelos ativos", summary.templateSummaryLabel)
         assertEquals("1 h 30 min antes", summary.reminderLeadLabel)
         assertEquals("22:00 - 07:00", summary.quietHoursLabel)
         assertEquals("Até ao dia seguinte em Europe/Lisbon", summary.quietHoursDetailLabel)
@@ -159,7 +159,7 @@ class AdminNotificationSettingsViewModelTest {
         assertEquals("Silêncio inválido", summary.quietHoursLabel)
         assertEquals("Corrija horas ou fuso horário", summary.quietHoursDetailLabel)
         assertEquals(
-            "10 modelos desligados: Pedido recebido, Marcação aceite, Marcação rejeitada +7",
+            "12 modelos desligados: Pedido recebido, Marcação aceite, Marcação rejeitada +9",
             summary.disabledTemplatesLabel,
         )
     }
@@ -340,7 +340,7 @@ class AdminNotificationSettingsViewModelTest {
 
         val success = assertIs<AdminNotificationTestState.Success>(viewModel.testState.value)
         assertEquals("Pedido recebido", success.templateLabel)
-        assertEquals("Teste de notificação em fila apenas para o administrador atual.", success.message)
+        assertEquals("Teste de notificação enviado apenas para o administrador atual.", success.message)
         assertEquals("booking_request", repository.testRequests.single().templateKey)
     }
 
@@ -624,11 +624,13 @@ private fun notificationTestSuccess(templateKey: String): AdminNotificationTestR
         AdminNotificationTestReceipt(
             notificationId = "test-notification-1",
             templateKey = templateKey,
-            deliveryState = "queued",
+            deliveryState = "sent",
             recipientUid = "uid-1",
             message = "queued",
             targetScope = "self",
             testOnly = true,
+            tokenCount = 1,
+            sentCount = 1,
         ),
     )
 
@@ -685,6 +687,20 @@ private fun adminNotificationTemplates(): List<AdminNotificationTemplateConfig> 
         enabled = true,
         title = "Marcação rejeitada",
         body = "Não foi possível aceitar a marcação.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_in_progress",
+        label = "Lavagem iniciada",
+        enabled = true,
+        title = "Lavagem iniciada",
+        body = "A lavagem começou.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_completed",
+        label = "Lavagem concluída",
+        enabled = true,
+        title = "Lavagem concluída",
+        body = "A lavagem foi concluída.",
     ),
     AdminNotificationTemplateConfig(
         key = "booking_expired",

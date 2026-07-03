@@ -19,6 +19,7 @@ crashlytics-plugin = "3.0.2"
 desugarJdkLibs = "2.1.5"
 googleid = "1.2.0"
 mokoResources = "0.25.1"
+coil = "3.3.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -51,6 +52,8 @@ moko-resources = { module = "dev.icerock.moko:resources", version.ref = "mokoRes
 moko-resources-compose = { module = "dev.icerock.moko:resources-compose", version.ref = "mokoResources" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

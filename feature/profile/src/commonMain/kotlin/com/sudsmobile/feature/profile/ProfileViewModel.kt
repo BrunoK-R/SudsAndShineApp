@@ -13,6 +13,10 @@ import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
 import com.sudsmobile.data.booking.isCompletedReservation
+import com.sudsmobile.data.notification.NotificationDeviceRegistrar
+import com.sudsmobile.data.notification.NotificationRepository
+import com.sudsmobile.data.notification.NotificationTokenDeleteRequest
+import com.sudsmobile.data.notification.NotificationTokenDeleteResult
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileChangeNotifier
@@ -34,11 +38,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal data class ProfileStatsUi(
     val washCount: String,
     val loyaltyRemaining: String,
     val vehicleCount: String,
+    val rewardReady: Boolean = false,
+    val availableRewards: Int = 0,
+    val rewardDescription: String = "1 lavagem grátis",
 )
 
 internal sealed interface ProfileStatsUiState {
@@ -56,6 +64,7 @@ internal sealed interface ProfileStatsUiState {
 internal data class ProfilePreferencesUi(
     val displayName: String,
     val phoneNumber: String,
+    val photoUrl: String,
     val marketingOptIn: Boolean,
     val appointmentReminderOptIn: Boolean,
 )
@@ -83,6 +92,8 @@ internal class ProfileViewModel(
     private val bookingChangeNotifier: BookingChangeNotifier = MutableBookingChangeNotifier(),
     private val userVehicleChangeNotifier: UserVehicleChangeNotifier = MutableUserVehicleChangeNotifier(),
     private val userProfileChangeNotifier: UserProfileChangeNotifier = MutableUserProfileChangeNotifier(),
+    private val notificationRepository: NotificationRepository? = null,
+    private val notificationDeviceRegistrar: NotificationDeviceRegistrar? = null,
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
@@ -104,6 +115,7 @@ internal class ProfileViewModel(
     private var loadingPreferencesUid: String? = null
     private var loadingPreferencesProfileRevision: Long? = null
     private var preferencesRequestSequence: Long = 0
+    private var signOutInProgress: Boolean = false
 
     fun loadStats() {
         val session = when (val currentSessionState = sessionState.value) {
@@ -265,6 +277,10 @@ internal class ProfileViewModel(
         updatePreferences { it.copy(appointmentReminderOptIn = appointmentReminderOptIn) }
     }
 
+    fun updateProfilePhotoUrl(photoUrl: String) {
+        updatePreferences { it.copy(photoUrl = photoUrl) }
+    }
+
     fun retryPreferenceSave() {
         updatePreferences { it }
     }
@@ -275,10 +291,11 @@ internal class ProfileViewModel(
         if (_preferencesState.value is ProfilePreferencesUiState.Saving) return
 
         val currentPreferences = _preferencesState.value.preferencesOrNull() ?: return
-        val validationError = currentPreferences.profileSaveValidationError()
+        val requestedPreferences = transform(currentPreferences)
+        val validationError = requestedPreferences.profileSaveValidationError()
         if (validationError != null) {
             _preferencesState.value = ProfilePreferencesUiState.SaveError(
-                preferences = currentPreferences,
+                preferences = requestedPreferences,
                 message = validationError,
                 retryable = false,
             )
@@ -293,7 +310,6 @@ internal class ProfileViewModel(
             return
         }
         val requestedUid = session.session.user.uid
-        val requestedPreferences = transform(currentPreferences)
 
         viewModelScope.launch {
             _preferencesState.value = ProfilePreferencesUiState.Saving(requestedPreferences)
@@ -308,6 +324,7 @@ internal class ProfileViewModel(
                     phoneNumber = requestedPreferences.phoneNumber,
                     marketingOptIn = requestedPreferences.marketingOptIn,
                     appointmentReminderOptIn = requestedPreferences.appointmentReminderOptIn,
+                    photoUrl = requestedPreferences.photoUrl,
                 ),
             )
             if (!preferencesSessionStillMatches(requestedUid)) {
@@ -396,11 +413,46 @@ internal class ProfileViewModel(
     }
 
     fun signOut() {
-        authRepository.signOut()
         clearLoadedStats()
         clearLoadedPreferences()
         _statsState.value = ProfileStatsUiState.Unauthenticated
         _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+
+        val uid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+        if (uid == null) {
+            authRepository.signOut()
+            return
+        }
+        if (signOutInProgress) return
+
+        signOutInProgress = true
+        viewModelScope.launch {
+            try {
+                withTimeoutOrNull(SIGN_OUT_NOTIFICATION_REVOCATION_TIMEOUT_MS) {
+                    revokeNotificationTokenForSignOut(uid)
+                }
+            } finally {
+                authRepository.signOut()
+                signOutInProgress = false
+            }
+        }
+    }
+
+    private suspend fun revokeNotificationTokenForSignOut(uid: String) {
+        val notificationRepository = notificationRepository ?: return
+        val notificationDeviceRegistrar = notificationDeviceRegistrar ?: return
+        val tokenId = runCatching {
+            notificationDeviceRegistrar.currentState(uid).registeredTokenId
+        }.getOrNull()?.takeUnless { it.isBlank() } ?: return
+
+        val result = runCatching {
+            notificationRepository.deleteNotificationToken(NotificationTokenDeleteRequest(tokenId))
+        }.getOrNull()
+        if (result is NotificationTokenDeleteResult.Success) {
+            runCatching {
+                notificationDeviceRegistrar.markDeleted(uid, result.tokenId)
+            }
+        }
     }
 
     private fun clearLoadedStats() {
@@ -484,6 +536,9 @@ private fun BookingHistory.toProfileStats(vehicleCount: Int): ProfileStatsUi {
         washCount = completedWashCount.toString(),
         loyaltyRemaining = loyaltyProgress.remainingWashes.toString(),
         vehicleCount = vehicleCount.toString(),
+        rewardReady = loyaltyProgress.rewardReady,
+        availableRewards = loyaltyProgress.availableRewards,
+        rewardDescription = loyalty?.rewardDescription?.trim()?.ifBlank { null } ?: "1 lavagem grátis",
     )
 }
 
@@ -519,6 +574,7 @@ private fun UserVehicleError.isRetryableProfileStatsError(): Boolean {
 private fun UserProfile.toPreferencesUi(): ProfilePreferencesUi = ProfilePreferencesUi(
     displayName = displayName,
     phoneNumber = phoneNumber,
+    photoUrl = photoUrl,
     marketingOptIn = marketingOptIn,
     appointmentReminderOptIn = appointmentReminderOptIn,
 )
@@ -545,8 +601,18 @@ private fun ProfilePreferencesUi.profileSaveValidationError(): String? {
         phone.length < 6 -> "Complete o telemóvel nos dados pessoais antes de atualizar preferências."
         phone.length > 32 || !phone.all { it.isDigit() || it in preferencePhoneSeparators } ->
             "Complete o telemóvel nos dados pessoais antes de atualizar preferências."
+        photoUrl.isNotBlank() && !photoUrl.isValidProfilePhotoUrl() ->
+            "Indique uma URL de fotografia válida."
         else -> null
     }
+}
+
+private fun String.isValidProfilePhotoUrl(): Boolean {
+    val value = trim()
+    if (value.length !in 1..2048) return false
+    if (value.any { it.isWhitespace() || it.isISOControl() }) return false
+    return value.startsWith("https://", ignoreCase = true) ||
+        value.startsWith("http://", ignoreCase = true)
 }
 
 private fun UserProfileError.toPreferencesState(): ProfilePreferencesUiState {
@@ -582,3 +648,5 @@ private fun AuthError.toProfilePreferencesErrorState(): ProfilePreferencesUiStat
 private fun AuthError.isRetryableSessionError(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
 }
+
+private const val SIGN_OUT_NOTIFICATION_REVOCATION_TIMEOUT_MS = 2_000L

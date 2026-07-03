@@ -36,15 +36,7 @@ class AndroidNotificationDeviceRegistrar(
 
         return try {
             val token = firebaseMessaging.awaitToken()
-            NotificationDeviceRegistrationRequestResult.Success(
-                NotificationTokenRegistrationRequest(
-                    token = token,
-                    platform = NotificationTokenPlatform.Android,
-                    tokenId = currentTokenId(),
-                    deviceLabel = deviceLabel(),
-                    appVersion = appVersion(),
-                ),
-            )
+            buildRegistrationRequestForToken(token)
         } catch (cause: CancellationException) {
             throw cause
         } catch (cause: Throwable) {
@@ -52,6 +44,32 @@ class AndroidNotificationDeviceRegistrar(
                 "Não foi possível obter o token de notificações deste dispositivo.",
             )
         }
+    }
+
+    fun buildRegistrationRequestForToken(token: String): NotificationDeviceRegistrationRequestResult {
+        val permissionStatus = currentPermissionStatus()
+        if (permissionStatus == NotificationDevicePermissionStatus.RequiresPermission) {
+            return NotificationDeviceRegistrationRequestResult.PermissionRequired(
+                "Autorize notificações para registar este dispositivo.",
+            )
+        }
+
+        val cleanToken = token.trim()
+        if (cleanToken.isBlank()) {
+            return NotificationDeviceRegistrationRequestResult.Failure(
+                "Não foi possível obter o token de notificações deste dispositivo.",
+            )
+        }
+
+        return NotificationDeviceRegistrationRequestResult.Success(
+            NotificationTokenRegistrationRequest(
+                token = cleanToken,
+                platform = NotificationTokenPlatform.Android,
+                tokenId = currentTokenId(),
+                deviceLabel = deviceLabel(),
+                appVersion = appVersion(),
+            ),
+        )
     }
 
     override suspend fun markRegistered(userUid: String, tokenId: String) {

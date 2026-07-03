@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraft
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftArchiveRequest
+import com.sudsmobile.data.admin.AdminNotificationCampaignBroadcastRequest
+import com.sudsmobile.data.admin.AdminNotificationCampaignBroadcastResult
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftMutationRequest
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftMutationResult
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftsResult
@@ -39,6 +41,8 @@ internal data class AdminNotificationCampaignDraftUi(
     val createdAuditLabel: String,
     val updatedAuditLabel: String,
     val archivedAuditLabel: String,
+    val sentAuditLabel: String,
+    val queuedCountLabel: String,
 )
 
 internal data class AdminNotificationCampaignDraftForm(
@@ -46,7 +50,7 @@ internal data class AdminNotificationCampaignDraftForm(
     val campaignId: String = "",
     val title: String = "",
     val body: String = "",
-    val targetAudience: String = "test_users",
+    val targetAudience: String = "all_users",
     val scheduledAtIso: String = "",
     val notes: String = "",
     val pushEnabled: Boolean = true,
@@ -74,6 +78,7 @@ internal sealed interface AdminNotificationCampaignDraftMutationState {
     data object Saving : AdminNotificationCampaignDraftMutationState
     data class Archiving(val campaignId: String) : AdminNotificationCampaignDraftMutationState
     data class Testing(val campaignId: String) : AdminNotificationCampaignDraftMutationState
+    data class Broadcasting(val campaignId: String) : AdminNotificationCampaignDraftMutationState
     data class Success(val message: String) : AdminNotificationCampaignDraftMutationState
     data class Error(val message: String, val retryable: Boolean) : AdminNotificationCampaignDraftMutationState
 }
@@ -280,7 +285,7 @@ internal class AdminNotificationCampaignDraftsViewModel(
                     loadedUid = null
                     loadedSessionMarker = null
                     _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
-                        "Rascunho guardado sem envio.",
+                        "Notificação guardada.",
                     )
                     loadDrafts(force = true)
                 }
@@ -301,7 +306,7 @@ internal class AdminNotificationCampaignDraftsViewModel(
         val cleanCampaignId = campaignId.trim()
         if (cleanCampaignId.isBlank()) {
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Error(
-                message = "O rascunho selecionado é inválido.",
+                message = "A notificação selecionada é inválida.",
                 retryable = false,
             )
             return
@@ -366,14 +371,14 @@ internal class AdminNotificationCampaignDraftsViewModel(
         val draft = loaded?.drafts?.firstOrNull { it.campaignId == cleanCampaignId }
         if (cleanCampaignId.isBlank() || !cleanCampaignId.isValidCampaignDraftId() || draft == null) {
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Error(
-                message = "O rascunho selecionado é inválido.",
+                message = "A notificação selecionada é inválida.",
                 retryable = false,
             )
             return
         }
         if (draft.status == "archived") {
             _mutationState.value = AdminNotificationCampaignDraftMutationState.Error(
-                message = "Apenas rascunhos ativos podem ser testados.",
+                message = "Apenas notificações ativas podem ser testadas.",
                 retryable = false,
             )
             return
@@ -438,6 +443,91 @@ internal class AdminNotificationCampaignDraftsViewModel(
         }
     }
 
+    fun broadcast(campaignId: String) {
+        val cleanCampaignId = campaignId.trim()
+        val loaded = _uiState.value as? AdminNotificationCampaignDraftsUiState.Loaded
+        val draft = loaded?.drafts?.firstOrNull { it.campaignId == cleanCampaignId }
+        if (cleanCampaignId.isBlank() || !cleanCampaignId.isValidCampaignDraftId() || draft == null) {
+            _mutationState.value = AdminNotificationCampaignDraftMutationState.Error(
+                message = "A notificação selecionada é inválida.",
+                retryable = false,
+            )
+            return
+        }
+        if (draft.status != "draft") {
+            _mutationState.value = AdminNotificationCampaignDraftMutationState.Error(
+                message = "Apenas notificações ativas podem ser enviadas.",
+                retryable = false,
+            )
+            return
+        }
+        if (draft.deliveryLocked || draft.sendBlocked) {
+            _mutationState.value = AdminNotificationCampaignDraftMutationState.Error(
+                message = draft.sendBlockedReason.ifBlank {
+                    "Esta notificação ainda não está pronta para envio."
+                },
+                retryable = false,
+            )
+            return
+        }
+        if (_mutationState.value is AdminNotificationCampaignDraftMutationState.Broadcasting) return
+
+        val requestedSession = currentAuthenticatedSessionSnapshot()
+        if (requestedSession == null) {
+            clearLoadedDrafts()
+            _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
+            return
+        }
+
+        viewModelScope.launch {
+            _mutationState.value = AdminNotificationCampaignDraftMutationState.Broadcasting(cleanCampaignId)
+            val currentSession = currentAuthenticatedSessionSnapshot()
+            if (
+                currentSession?.uid != requestedSession.uid ||
+                currentSession.marker != requestedSession.marker
+            ) {
+                _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            val result = adminRepository.broadcastNotificationCampaign(
+                AdminNotificationCampaignBroadcastRequest(cleanCampaignId, confirmBroadcast = true),
+            )
+            val latestSession = currentAuthenticatedSessionSnapshot()
+            if (
+                latestSession?.uid != requestedSession.uid ||
+                latestSession.marker != requestedSession.marker
+            ) {
+                _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
+                handleSessionChangedDuringRequest()
+                return@launch
+            }
+
+            when (result) {
+                is AdminNotificationCampaignBroadcastResult.Success -> {
+                    loadedUid = null
+                    loadedSessionMarker = null
+                    val count = result.receipt.queuedCount
+                    val suffix = if (count == 1) "dispositivo" else "dispositivos"
+                    _mutationState.value = AdminNotificationCampaignDraftMutationState.Success(
+                        "Campanha em fila para $count $suffix.",
+                    )
+                    loadDrafts(force = true)
+                }
+                is AdminNotificationCampaignBroadcastResult.Failure -> {
+                    _mutationState.value = result.error.toCampaignDraftMutationState()
+                    if (result.error is AdminError.Permission) {
+                        _uiState.value = AdminNotificationCampaignDraftsUiState.NotAdmin
+                    } else if (result.error is AdminError.Unauthenticated) {
+                        clearLoadedDrafts()
+                        _uiState.value = AdminNotificationCampaignDraftsUiState.Unauthenticated
+                    }
+                }
+            }
+        }
+    }
+
     fun clearMutationState() {
         _mutationState.value = AdminNotificationCampaignDraftMutationState.Idle
     }
@@ -480,7 +570,7 @@ private sealed interface ParsedCampaignDraftRequest {
 }
 
 private const val CampaignDraftSendBlockedReason = "campaign-send-not-implemented"
-private const val CampaignDraftSendState = "draft_only"
+private const val CampaignDraftSendState = "ready"
 
 private fun List<AdminNotificationCampaignDraft>.toCampaignDraftsState(): AdminNotificationCampaignDraftsUiState {
     val drafts = map { it.toUi() }
@@ -492,27 +582,44 @@ private fun List<AdminNotificationCampaignDraft>.toCampaignDraftsState(): AdminN
 }
 
 private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraftUi {
-    val normalizedSendBlockedReason = sendBlockedReason.trim().ifBlank { CampaignDraftSendBlockedReason }
-    val normalizedSendState = sendState.trim().ifBlank { CampaignDraftSendState }
+    val normalizedStatus = status.ifBlank { "draft" }
+    val archived = normalizedStatus == "archived"
+    val sent = normalizedStatus == "sent"
+    val normalizedSendBlockedReason = sendBlockedReason.trim().ifBlank {
+        when (normalizedStatus) {
+            "archived" -> CampaignDraftSendBlockedReason
+            "sent" -> "campaign-already-sent"
+            else -> ""
+        }
+    }
+    val normalizedSendState = sendState.trim().ifBlank {
+        when (normalizedStatus) {
+            "archived" -> "archived"
+            "sent" -> "sent"
+            else -> CampaignDraftSendState
+        }
+    }
     return AdminNotificationCampaignDraftUi(
         campaignId = campaignId,
         title = title.ifBlank { "Campanha sem título" },
         body = body,
-        targetAudience = targetAudience.ifBlank { "test_users" },
+        targetAudience = targetAudience.ifBlank { "all_users" },
         targetAudienceLabel = targetAudience.toCampaignAudienceLabel(),
-        status = status.ifBlank { "draft" },
-        statusLabel = status.toCampaignStatusLabel(),
+        status = normalizedStatus,
+        statusLabel = normalizedStatus.toCampaignStatusLabel(),
         scheduledAtIso = scheduledAtIso,
         scheduledAtLabel = scheduledAtIso.ifBlank { "Sem agendamento" },
         notes = notes,
-        sendBlocked = true,
-        sendBlockedReason = normalizedSendBlockedReason,
-        deliveryLocked = true,
+        sendBlocked = archived || sent,
+        sendBlockedReason = if (archived || sent) normalizedSendBlockedReason.toCampaignBlockedMessage() else "",
+        deliveryLocked = archived || sent,
         sendState = normalizedSendState,
         sendStateLabel = normalizedSendState.toCampaignSendStateLabel(),
         createdAuditLabel = campaignAuditLabel("Criado", createdAtIso, createdByUid),
         updatedAuditLabel = campaignAuditLabel("Atualizado", updatedAtIso, updatedByUid),
         archivedAuditLabel = campaignAuditLabel("Arquivado", archivedAtIso, archivedByUid),
+        sentAuditLabel = campaignAuditLabel("Enviado", sentAtIso, sentByUid),
+        queuedCountLabel = if (queuedCount > 0) queuedCount.toString() else "",
     )
 }
 
@@ -555,7 +662,7 @@ private fun AdminNotificationCampaignDraftForm.toMutationRequest(): ParsedCampai
         cleanNotes.length > 500 ->
             ParsedCampaignDraftRequest.Invalid("As notas devem ter no máximo 500 caracteres.")
         !pushEnabled ->
-            ParsedCampaignDraftRequest.Invalid("Os rascunhos de campanha só suportam push.")
+            ParsedCampaignDraftRequest.Invalid("As notificações só podem ser enviadas por push.")
         else -> ParsedCampaignDraftRequest.Valid(
             AdminNotificationCampaignDraftMutationRequest(
                 campaignId = cleanId,
@@ -599,6 +706,7 @@ private fun AuthError.isRetryable(): Boolean {
 
 private fun String.toCampaignAudienceLabel(): String {
     return when (trim()) {
+        "all_users" -> "Todos os utilizadores"
         "marketing_opt_in_users" -> "Clientes com opt-in marketing"
         else -> "Utilizadores de teste"
     }
@@ -607,14 +715,27 @@ private fun String.toCampaignAudienceLabel(): String {
 private fun String.toCampaignStatusLabel(): String {
     return when (trim()) {
         "archived" -> "Arquivado"
+        "sent" -> "Enviado"
         else -> "Rascunho"
     }
 }
 
 private fun String.toCampaignSendStateLabel(): String {
     return when (trim()) {
-        "draft_only" -> "Rascunho sem envio"
-        else -> "Envio bloqueado"
+        "ready" -> "Pronta para envio"
+        "sent" -> "Enviada"
+        "archived" -> "Arquivada"
+        "draft_only" -> "Envio indisponível"
+        else -> "Envio indisponível"
+    }
+}
+
+private fun String.toCampaignBlockedMessage(): String {
+    return when (trim()) {
+        "" -> ""
+        "campaign-send-not-implemented" -> "O envio para clientes ainda não está disponível nesta versão."
+        "campaign-already-sent" -> "Esta notificação já foi enviada."
+        else -> "Esta notificação não pode ser enviada neste momento."
     }
 }
 
@@ -646,4 +767,4 @@ private fun String.isValidCampaignScheduleIso(): Boolean {
     return Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$").matches(this)
 }
 
-internal val CampaignDraftAudienceKeys = setOf("test_users", "marketing_opt_in_users")
+internal val CampaignDraftAudienceKeys = setOf("all_users", "test_users", "marketing_opt_in_users")

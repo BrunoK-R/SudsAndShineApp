@@ -47,7 +47,7 @@ import kotlinx.coroutines.launch
 internal enum class BookingStatusUi(val label: String) {
     Pending("A aguardar validação"),
     Confirmed("Confirmado"),
-    InProgress("Em execução"),
+    InProgress("A decorrer"),
     Completed("Concluído"),
     Cancelled("Cancelado"),
     Rejected("Rejeitado"),
@@ -66,6 +66,7 @@ internal data class BookingSummaryUi(
     val vehicle: String,
     val price: String,
     val status: BookingStatusUi,
+    val statusDescription: String,
     val icon: ImageVector,
     val showLocation: Boolean,
     val reviewed: Boolean,
@@ -606,6 +607,7 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         status = status.toStatusUi(),
+        statusDescription = status.toStatusDescription(),
         icon = serviceIcon(),
         showLocation = upcoming,
         reviewed = reviewed,
@@ -735,6 +737,19 @@ private fun String.toStatusUi(): BookingStatusUi {
         BookingReservationStatus.Rejected -> BookingStatusUi.Rejected
         BookingReservationStatus.Expired -> BookingStatusUi.Expired
         BookingReservationStatus.Unknown -> BookingStatusUi.Unknown
+    }
+}
+
+private fun String.toStatusDescription(): String {
+    return when (toBookingReservationStatus()) {
+        BookingReservationStatus.Pending -> "Pedido recebido. A equipa vai confirmar ou recusar a lavagem."
+        BookingReservationStatus.Confirmed -> "Marcação aceite. A lavagem ainda não começou."
+        BookingReservationStatus.InProgress -> "Lavagem a decorrer. Avisamos quando estiver concluída."
+        BookingReservationStatus.Completed -> "Lavagem concluída e guardada no histórico."
+        BookingReservationStatus.Cancelled -> "Marcação cancelada."
+        BookingReservationStatus.Rejected -> "Pedido recusado pela equipa."
+        BookingReservationStatus.Expired -> "O prazo de validação deste pedido terminou."
+        BookingReservationStatus.Unknown -> "Estado em atualização."
     }
 }
 

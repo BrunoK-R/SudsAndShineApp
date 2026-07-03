@@ -47,10 +47,16 @@ kotlin {
             implementation(libs.koin.compose.viewmodel)
             implementation(libs.kotlinx.serialization)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor3)
         }
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.ktor.android.client)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.darwin.client)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

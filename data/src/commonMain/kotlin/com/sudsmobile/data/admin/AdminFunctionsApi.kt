@@ -17,6 +17,12 @@ interface AdminFunctionsApi {
         idToken: String,
     ): AdminBookingDecisionResult
 
+    suspend fun startBookingRequest(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult =
+        AdminBookingDecisionResult.Failure(AdminError.Backend("Reservation start is not implemented."))
+
     suspend fun completeBookingRequest(
         request: AdminBookingDecisionRequest,
         idToken: String,
@@ -93,6 +99,14 @@ interface AdminFunctionsApi {
     ): AdminNotificationCampaignDraftMutationResult =
         AdminNotificationCampaignDraftMutationResult.Failure(
             AdminError.Backend("Notification campaign drafts are not implemented."),
+        )
+
+    suspend fun broadcastNotificationCampaign(
+        request: AdminNotificationCampaignBroadcastRequest,
+        idToken: String,
+    ): AdminNotificationCampaignBroadcastResult =
+        AdminNotificationCampaignBroadcastResult.Failure(
+            AdminError.Backend("Notification campaign broadcast is not implemented."),
         )
 
     suspend fun upsertCapacityOverride(

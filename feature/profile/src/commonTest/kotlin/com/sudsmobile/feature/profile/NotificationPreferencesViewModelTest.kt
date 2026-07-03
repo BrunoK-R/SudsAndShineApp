@@ -86,6 +86,49 @@ class NotificationPreferencesViewModelTest {
     }
 
     @Test
+    fun refreshDeviceForSessionChecksDeviceWithoutLoadingPreferences() = runTest {
+        val repository = FakeNotificationPreferencesRepository()
+        val registrar = FakeNotificationDeviceRegistrar(
+            currentState = NotificationDeviceRegistrationState(
+                permissionStatus = NotificationDevicePermissionStatus.Granted,
+                registeredTokenId = "token-id-1",
+                platform = NotificationTokenPlatform.Android,
+            ),
+        )
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true),
+            notificationRepository = repository,
+            notificationDeviceRegistrar = registrar,
+        )
+
+        viewModel.refreshDeviceForSession()
+        runCurrent()
+
+        val state = assertIs<NotificationDeviceUiState.Ready>(viewModel.deviceState.value)
+        assertEquals("token-id-1", state.registeredTokenId)
+        assertEquals(listOf("uid-1"), registrar.currentStateUserUids)
+        assertEquals(0, repository.loadCalls)
+    }
+
+    @Test
+    fun refreshDeviceForSessionRequiresAuthenticatedSession() = runTest {
+        val repository = FakeNotificationPreferencesRepository()
+        val registrar = FakeNotificationDeviceRegistrar()
+        val viewModel = NotificationPreferencesViewModel(
+            authRepository = FakeNotificationPreferencesAuthRepository(authenticated = false),
+            notificationRepository = repository,
+            notificationDeviceRegistrar = registrar,
+        )
+
+        viewModel.refreshDeviceForSession()
+        runCurrent()
+
+        assertIs<NotificationDeviceUiState.Unauthenticated>(viewModel.deviceState.value)
+        assertEquals(emptyList(), registrar.currentStateUserUids)
+        assertEquals(0, repository.loadCalls)
+    }
+
+    @Test
     fun loadPreferencesIgnoresStaleResponseAfterSignOut() = runTest {
         val deferred = CompletableDeferred<NotificationPreferencesResult>()
         val authRepository = FakeNotificationPreferencesAuthRepository(authenticated = true)

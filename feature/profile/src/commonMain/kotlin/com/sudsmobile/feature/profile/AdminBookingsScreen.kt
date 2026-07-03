@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
@@ -67,17 +69,28 @@ fun AdminBookingsScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit = {},
+    onOpenNotificationPreferences: () -> Unit = {},
 ) {
     val viewModel: AdminBookingsViewModel = koinViewModel()
+    val notificationPreferencesViewModel: NotificationPreferencesViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val decisionState by viewModel.decisionState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val notificationSessionState by notificationPreferencesViewModel.sessionState.collectAsStateWithLifecycle()
+    val notificationDeviceState by notificationPreferencesViewModel.deviceState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     var rejectingReservationId by rememberSaveable { mutableStateOf<String?>(null) }
     var rejectionReason by rememberSaveable { mutableStateOf("") }
+    val notificationPermissionController = rememberNotificationPermissionRequestController(
+        onPermissionResult = notificationPreferencesViewModel::handlePermissionResult,
+    )
 
     LaunchedEffect(sessionState, bookingRevision) {
         viewModel.refreshForSession()
+    }
+
+    LaunchedEffect(notificationSessionState) {
+        notificationPreferencesViewModel.refreshDeviceForSession()
     }
 
     LaunchedEffect(decisionState) {
@@ -91,13 +104,23 @@ fun AdminBookingsScreen(
         contentPadding = contentPadding,
         uiState = uiState,
         decisionState = decisionState,
+        notificationDeviceState = notificationDeviceState,
         rejectingReservationId = rejectingReservationId,
         rejectionReason = rejectionReason,
         onBack = onBack,
         onRetry = { viewModel.loadRequests() },
         onRequestSignIn = onRequestSignIn,
+        onActivateNotifications = {
+            if (notificationPermissionController.shouldRequestPostNotifications) {
+                notificationPermissionController.requestPostNotifications()
+            } else {
+                notificationPreferencesViewModel.registerCurrentDevice()
+            }
+        },
+        onOpenNotificationPreferences = onOpenNotificationPreferences,
         onDismissDecision = viewModel::clearDecisionState,
         onAccept = viewModel::acceptRequest,
+        onStart = viewModel::startRequest,
         onComplete = viewModel::completeRequest,
         onStartReject = { reservationId ->
             viewModel.clearDecisionState()
@@ -120,13 +143,17 @@ private fun AdminBookingsScreenContent(
     contentPadding: PaddingValues,
     uiState: AdminBookingsUiState,
     decisionState: AdminBookingDecisionUiState,
+    notificationDeviceState: NotificationDeviceUiState,
     rejectingReservationId: String?,
     rejectionReason: String,
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onRequestSignIn: () -> Unit,
+    onActivateNotifications: () -> Unit,
+    onOpenNotificationPreferences: () -> Unit,
     onDismissDecision: () -> Unit,
     onAccept: (String) -> Unit,
+    onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
     onStartReject: (String) -> Unit,
     onCancelReject: () -> Unit,
@@ -157,6 +184,13 @@ private fun AdminBookingsScreenContent(
                 decisionState = decisionState,
                 onDismiss = onDismissDecision,
             )
+            if (uiState is AdminBookingsUiState.Loaded || uiState is AdminBookingsUiState.Empty) {
+                AdminNotificationDevicePromptCard(
+                    deviceState = notificationDeviceState,
+                    onActivate = onActivateNotifications,
+                    onOpenPreferences = onOpenNotificationPreferences,
+                )
+            }
 
             when (uiState) {
                 AdminBookingsUiState.Idle,
@@ -216,6 +250,7 @@ private fun AdminBookingsScreenContent(
                             rejectingReservationId = rejectingReservationId,
                             rejectionReason = rejectionReason,
                             onAccept = onAccept,
+                            onStart = onStart,
                             onComplete = onComplete,
                             onStartReject = onStartReject,
                             onCancelReject = onCancelReject,
@@ -226,6 +261,7 @@ private fun AdminBookingsScreenContent(
                         AdminBookingsTab.Accepted -> AdminAcceptedBookingsList(
                             requests = uiState.acceptedRequests,
                             decisionState = decisionState,
+                            onStart = onStart,
                             onComplete = onComplete,
                         )
                     }
@@ -285,6 +321,7 @@ private fun AdminPendingBookingsList(
     rejectingReservationId: String?,
     rejectionReason: String,
     onAccept: (String) -> Unit,
+    onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
     onStartReject: (String) -> Unit,
     onCancelReject: () -> Unit,
@@ -307,6 +344,7 @@ private fun AdminPendingBookingsList(
             rejecting = rejectingReservationId == request.id,
             rejectionReason = rejectionReason,
             onAccept = { onAccept(request.id) },
+            onStart = { onStart(request.id) },
             onComplete = { onComplete(request.id) },
             onStartReject = { onStartReject(request.id) },
             onCancelReject = onCancelReject,
@@ -320,6 +358,7 @@ private fun AdminPendingBookingsList(
 private fun AdminAcceptedBookingsList(
     requests: List<AdminBookingRequestUi>,
     decisionState: AdminBookingDecisionUiState,
+    onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
 ) {
     if (requests.isEmpty()) {
@@ -339,6 +378,7 @@ private fun AdminAcceptedBookingsList(
             rejectionReason = "",
             acceptedOnly = true,
             onAccept = {},
+            onStart = { onStart(request.id) },
             onComplete = { onComplete(request.id) },
             onStartReject = {},
             onCancelReject = {},
@@ -413,6 +453,7 @@ private fun AdminDecisionBanner(
             message = when (decisionState.action) {
                 AdminBookingDecisionAction.Accept -> "A aceitar marcação."
                 AdminBookingDecisionAction.Reject -> "A rejeitar marcação."
+                AdminBookingDecisionAction.Start -> "A iniciar lavagem."
                 AdminBookingDecisionAction.Complete -> "A concluir marcação."
             },
             loading = true,
@@ -428,6 +469,129 @@ private fun AdminDecisionBanner(
             error = true,
             onDismiss = onDismiss,
         )
+    }
+}
+
+@Composable
+private fun AdminNotificationDevicePromptCard(
+    deviceState: NotificationDeviceUiState,
+    onActivate: () -> Unit,
+    onOpenPreferences: () -> Unit,
+) {
+    val registeredTokenId = when (deviceState) {
+        is NotificationDeviceUiState.Ready -> deviceState.registeredTokenId
+        is NotificationDeviceUiState.Success -> deviceState.registeredTokenId
+        else -> null
+    }
+    if (registeredTokenId != null) return
+    if (
+        deviceState == NotificationDeviceUiState.Checking ||
+        deviceState == NotificationDeviceUiState.Unauthenticated ||
+        deviceState is NotificationDeviceUiState.Removing ||
+        deviceState is NotificationDeviceUiState.Unsupported
+    ) {
+        return
+    }
+
+    val registering = deviceState == NotificationDeviceUiState.Registering
+    val title = when (deviceState) {
+        NotificationDeviceUiState.Registering -> "A ativar notificações"
+        is NotificationDeviceUiState.PermissionRequired -> "Ativar pedidos em tempo real"
+        is NotificationDeviceUiState.Error -> "Notificações por ativar"
+        else -> "Receber pedidos em tempo real"
+    }
+    val body = when (deviceState) {
+        is NotificationDeviceUiState.PermissionRequired -> deviceState.message
+        is NotificationDeviceUiState.Error -> deviceState.message
+        NotificationDeviceUiState.Registering ->
+            "Estamos a registar este dispositivo para receber novos pedidos de lavagem."
+        else -> "Ative este dispositivo para receber novos pedidos de lavagem assim que forem criados."
+    }
+    val primaryActionLabel = when (deviceState) {
+        is NotificationDeviceUiState.PermissionRequired -> "Permitir"
+        is NotificationDeviceUiState.Error -> "Tentar novamente"
+        else -> "Ativar"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.12f),
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (registering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.NotificationsActive,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.76f),
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Button(
+                        onClick = onActivate,
+                        enabled = !registering,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        ),
+                    ) {
+                        Text(primaryActionLabel)
+                    }
+                    TextButton(
+                        onClick = onOpenPreferences,
+                        enabled = !registering,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        ),
+                    ) {
+                        Text(
+                            text = "Preferências",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -505,6 +669,7 @@ private fun AdminBookingRequestCard(
     rejectionReason: String,
     acceptedOnly: Boolean = false,
     onAccept: () -> Unit,
+    onStart: () -> Unit,
     onComplete: () -> Unit,
     onStartReject: () -> Unit,
     onCancelReject: () -> Unit,
@@ -578,17 +743,25 @@ private fun AdminBookingRequestCard(
             }
 
             if (acceptedOnly) {
+                val actionIsComplete = request.canComplete
+                val actionIsStart = !request.canComplete && request.canStart
+                val actionEnabled = (actionIsComplete || actionIsStart) && !decisionInProgress
+                val action = if (actionIsComplete) {
+                    AdminBookingDecisionAction.Complete
+                } else {
+                    AdminBookingDecisionAction.Start
+                }
                 AdminInlineStatus(
-                    message = if (request.canComplete) {
-                        "Serviço pronto a concluir."
-                    } else {
-                        "Marcação aceite, ainda não pronta a concluir."
+                    message = when {
+                        request.canComplete -> "Lavagem em execução, pronta a concluir."
+                        request.canStart -> "Marcação aceite, pronta a iniciar."
+                        else -> "Marcação aceite, ainda sem ação disponível."
                     },
                     icon = Icons.Filled.CheckCircle,
                 )
                 Button(
-                    onClick = onComplete,
-                    enabled = request.canComplete && !decisionInProgress,
+                    onClick = if (actionIsComplete) onComplete else onStart,
+                    enabled = actionEnabled,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(46.dp),
@@ -598,7 +771,7 @@ private fun AdminBookingRequestCard(
                         contentColor = MaterialTheme.colorScheme.onTertiary,
                     ),
                 ) {
-                    if (cardBusy && activeDecision?.action == AdminBookingDecisionAction.Complete) {
+                    if (cardBusy && activeDecision?.action == action) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             color = MaterialTheme.colorScheme.onTertiary,
@@ -606,14 +779,14 @@ private fun AdminBookingRequestCard(
                         )
                     } else {
                         Icon(
-                            imageVector = Icons.Filled.CheckCircle,
+                            imageVector = if (actionIsComplete) Icons.Filled.CheckCircle else Icons.Filled.PlayArrow,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                         )
                     }
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "Concluir",
+                        text = if (actionIsComplete) "Concluir" else "Iniciar lavagem",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                     )

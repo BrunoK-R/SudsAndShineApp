@@ -9,6 +9,9 @@ dist/
 build/
 .next/
 coverage/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 
 # Environment
 .env

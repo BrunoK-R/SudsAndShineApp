@@ -383,12 +383,15 @@ fun String.toBookingReservationStatus(): BookingReservationStatus {
 
     return when (normalized) {
         "pending", "novo", "new" -> BookingReservationStatus.Pending
-        "confirmed", "confirmado" -> BookingReservationStatus.Confirmed
-        "in_progress", "em_execucao", "em_execução" -> BookingReservationStatus.InProgress
-        "completed", "complete", "done", "concluido", "concluído" -> BookingReservationStatus.Completed
-        "cancelled", "canceled", "cancelado" -> BookingReservationStatus.Cancelled
-        "rejected", "rejeitado" -> BookingReservationStatus.Rejected
-        "expired", "expirado" -> BookingReservationStatus.Expired
+        "confirmed", "confirmado", "accepted", "aceite", "aceita", "aprovado", "aprovada" ->
+            BookingReservationStatus.Confirmed
+        "in_progress", "em_execucao", "em_execução", "em_curso", "a_decorrer", "decorrer", "running", "started" ->
+            BookingReservationStatus.InProgress
+        "completed", "complete", "done", "concluido", "concluído", "concluida", "concluída", "finalizado", "finalizada" ->
+            BookingReservationStatus.Completed
+        "cancelled", "canceled", "cancelado", "cancelada" -> BookingReservationStatus.Cancelled
+        "rejected", "rejeitado", "rejeitada", "recusado", "recusada" -> BookingReservationStatus.Rejected
+        "expired", "expirado", "expirada" -> BookingReservationStatus.Expired
         else -> BookingReservationStatus.Unknown
     }
 }
@@ -448,6 +451,9 @@ private val cancelableReservationStatuses = setOf(
 )
 
 private val nonCompletedClosedReservationStatuses = setOf(
+    BookingReservationStatus.Pending,
+    BookingReservationStatus.Confirmed,
+    BookingReservationStatus.InProgress,
     BookingReservationStatus.Cancelled,
     BookingReservationStatus.Rejected,
     BookingReservationStatus.Expired,

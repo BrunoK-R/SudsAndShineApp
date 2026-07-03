@@ -109,6 +109,26 @@ internal class NotificationPreferencesViewModel(
         loadPreferences()
     }
 
+    fun refreshDeviceForSession() {
+        val session = when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearDeviceState(NotificationDeviceUiState.Checking)
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearDeviceState(NotificationDeviceUiState.Error(currentSessionState.error.message, retryable = true))
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearDeviceState(NotificationDeviceUiState.Unauthenticated)
+                return
+            }
+            is AuthSessionState.Authenticated -> currentSessionState
+        }
+
+        refreshDeviceStateFor(session.session.user.uid)
+    }
+
     fun loadPreferences() {
         val session = when (val currentSessionState = sessionState.value) {
             AuthSessionState.Restoring -> {

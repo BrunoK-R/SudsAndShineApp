@@ -15,6 +15,7 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingLoyaltySummary
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.business.BusinessFaq
@@ -173,6 +174,83 @@ class HomeViewModelTest {
         assertEquals(false, loaded.loyalty.rewardReady)
         assertEquals("Lavagem Premium", loaded.featuredServices.first().name)
         assertEquals(DefaultBusinessInfo.stats.first().value, loaded.stats.first().value)
+    }
+
+    @Test
+    fun authenticatedHomeFallsBackToCompletedWashesWhenBackendLoyaltySummaryIsEmpty() = runTest {
+        val viewModel = homeViewModel(
+            bookingRepository = FakeHomeBookingRepository(
+                historyResult = BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            homeReservation(
+                                id = "completed-1",
+                                slotStartIso = "2026-05-10T09:00:00.000Z",
+                                upcoming = false,
+                            ),
+                        ),
+                        loyalty = loyaltySummary(
+                            totalWashes = 0,
+                            currentWashes = 0,
+                            remainingWashes = 10,
+                            progress = 0f,
+                            rewardReady = false,
+                            completedRewards = 0,
+                            claimedRewards = 0,
+                            availableRewards = 0,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val loaded = assertIs<HomeUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, loaded.loyalty.totalWashes)
+        assertEquals(1, loaded.loyalty.completedWashes)
+        assertEquals(9, loaded.loyalty.remainingWashes)
+        assertEquals(false, loaded.loyalty.rewardReady)
+    }
+
+    @Test
+    fun authenticatedHomeUsesBackendClaimedRewardSummaryWhenPresent() = runTest {
+        val viewModel = homeViewModel(
+            bookingRepository = FakeHomeBookingRepository(
+                historyResult = BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = (1..10).map {
+                            homeReservation(
+                                id = "completed-$it",
+                                slotStartIso = "2026-05-${it.toString().padStart(2, '0')}T09:00:00.000Z",
+                                upcoming = false,
+                            )
+                        },
+                        loyalty = loyaltySummary(
+                            totalWashes = 10,
+                            currentWashes = 0,
+                            remainingWashes = 10,
+                            progress = 0f,
+                            rewardReady = false,
+                            completedRewards = 1,
+                            claimedRewards = 1,
+                            availableRewards = 0,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.refreshForSession()
+        runCurrent()
+
+        val loaded = assertIs<HomeUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(10, loaded.loyalty.totalWashes)
+        assertEquals(0, loaded.loyalty.completedWashes)
+        assertEquals(10, loaded.loyalty.remainingWashes)
+        assertEquals(false, loaded.loyalty.rewardReady)
+        assertEquals(1, loaded.loyalty.claimedRewards)
     }
 
     @Test
@@ -673,4 +751,25 @@ private fun homeReservation(
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,
     upcoming = upcoming,
+)
+
+private fun loyaltySummary(
+    totalWashes: Int,
+    currentWashes: Int,
+    remainingWashes: Int,
+    progress: Float,
+    rewardReady: Boolean,
+    completedRewards: Int,
+    claimedRewards: Int,
+    availableRewards: Int,
+): BookingLoyaltySummary = BookingLoyaltySummary(
+    totalWashes = totalWashes,
+    currentWashes = currentWashes,
+    targetWashes = 10,
+    remainingWashes = remainingWashes,
+    progress = progress,
+    rewardReady = rewardReady,
+    completedRewards = completedRewards,
+    claimedRewards = claimedRewards,
+    availableRewards = availableRewards,
 )

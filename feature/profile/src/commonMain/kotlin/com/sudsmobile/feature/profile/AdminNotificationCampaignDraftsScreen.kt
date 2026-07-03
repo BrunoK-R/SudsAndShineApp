@@ -64,18 +64,25 @@ fun AdminNotificationCampaignDraftsScreen(
     onRequestSignIn: () -> Unit = {},
 ) {
     val viewModel: AdminNotificationCampaignDraftsViewModel = koinViewModel()
+    val notificationPreferencesViewModel: NotificationPreferencesViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val mutationState by viewModel.mutationState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val deviceState by notificationPreferencesViewModel.deviceState.collectAsStateWithLifecycle()
+    val permissionRequestController = rememberNotificationPermissionRequestController(
+        onPermissionResult = notificationPreferencesViewModel::handlePermissionResult,
+    )
 
     LaunchedEffect(sessionState) {
         viewModel.refreshForSession()
+        notificationPreferencesViewModel.refreshForSession()
     }
 
     AdminNotificationCampaignDraftsScreenContent(
         contentPadding = contentPadding,
         uiState = uiState,
         mutationState = mutationState,
+        deviceState = deviceState,
         onBack = onBack,
         onRequestSignIn = onRequestSignIn,
         onRetry = { viewModel.loadDrafts(force = true) },
@@ -83,6 +90,14 @@ fun AdminNotificationCampaignDraftsScreen(
         onEdit = viewModel::editDraft,
         onArchive = viewModel::archive,
         onSendTest = viewModel::sendTest,
+        onBroadcast = viewModel::broadcast,
+        onEnableDevice = {
+            if (permissionRequestController.shouldRequestPostNotifications) {
+                permissionRequestController.requestPostNotifications()
+            } else {
+                notificationPreferencesViewModel.registerCurrentDevice()
+            }
+        },
         onFormChange = viewModel::updateForm,
         onCancelEdit = viewModel::cancelEdit,
         onSave = viewModel::save,
@@ -95,6 +110,7 @@ private fun AdminNotificationCampaignDraftsScreenContent(
     contentPadding: PaddingValues,
     uiState: AdminNotificationCampaignDraftsUiState,
     mutationState: AdminNotificationCampaignDraftMutationState,
+    deviceState: NotificationDeviceUiState,
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
@@ -102,6 +118,8 @@ private fun AdminNotificationCampaignDraftsScreenContent(
     onEdit: (String) -> Unit,
     onArchive: (String) -> Unit,
     onSendTest: (String) -> Unit,
+    onBroadcast: (String) -> Unit,
+    onEnableDevice: () -> Unit,
     onFormChange: (AdminNotificationCampaignDraftForm) -> Unit,
     onCancelEdit: () -> Unit,
     onSave: () -> Unit,
@@ -123,6 +141,11 @@ private fun AdminNotificationCampaignDraftsScreenContent(
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            AdminNotificationDevicePrompt(
+                uiState = uiState,
+                deviceState = deviceState,
+                onEnableDevice = onEnableDevice,
+            )
             AdminNotificationCampaignDraftMutationBanner(
                 mutationState = mutationState,
                 onDismiss = onDismissMutationState,
@@ -131,15 +154,15 @@ private fun AdminNotificationCampaignDraftsScreenContent(
             when (uiState) {
                 AdminNotificationCampaignDraftsUiState.Idle,
                 AdminNotificationCampaignDraftsUiState.Loading -> AdminNotificationCampaignDraftStatusCard(
-                    title = "A carregar campanhas",
-                    body = "Estamos a consultar os rascunhos configurados.",
+                    title = "A carregar notificações",
+                    body = "Estamos a consultar as mensagens guardadas.",
                     icon = Icons.Filled.Notifications,
                     loading = true,
                 )
 
                 AdminNotificationCampaignDraftsUiState.Unauthenticated -> AdminNotificationCampaignDraftStatusCard(
                     title = "Sessão necessária",
-                    body = "Entre com uma conta de administrador para gerir campanhas.",
+                    body = "Entre com uma conta de administrador para enviar notificações.",
                     icon = Icons.Filled.Lock,
                     actionLabel = "Entrar ou criar conta",
                     onAction = onRequestSignIn,
@@ -147,15 +170,15 @@ private fun AdminNotificationCampaignDraftsScreenContent(
 
                 AdminNotificationCampaignDraftsUiState.NotAdmin -> AdminNotificationCampaignDraftStatusCard(
                     title = "Acesso reservado",
-                    body = "Campanhas só podem ser alteradas por administradores.",
+                    body = "Só administradores podem enviar notificações.",
                     icon = Icons.Filled.Security,
                 )
 
                 AdminNotificationCampaignDraftsUiState.Empty -> AdminNotificationCampaignDraftStatusCard(
-                    title = "Sem rascunhos",
-                    body = "Crie o primeiro rascunho push sem ativar envio.",
+                    title = "Sem notificações",
+                    body = "Crie uma notificação com título e mensagem.",
                     icon = Icons.Filled.Notifications,
-                    actionLabel = "Novo rascunho",
+                    actionLabel = "Nova notificação",
                     onAction = onStartCreate,
                 )
 
@@ -174,12 +197,70 @@ private fun AdminNotificationCampaignDraftsScreenContent(
                     onEdit = onEdit,
                     onArchive = onArchive,
                     onSendTest = onSendTest,
+                    onBroadcast = onBroadcast,
                     onFormChange = onFormChange,
                     onCancelEdit = onCancelEdit,
                     onSave = onSave,
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun AdminNotificationDevicePrompt(
+    uiState: AdminNotificationCampaignDraftsUiState,
+    deviceState: NotificationDeviceUiState,
+    onEnableDevice: () -> Unit,
+) {
+    val adminToolsAvailable = uiState is AdminNotificationCampaignDraftsUiState.Loaded ||
+        uiState is AdminNotificationCampaignDraftsUiState.Empty
+    if (!adminToolsAvailable) return
+
+    val registeredTokenId = when (deviceState) {
+        is NotificationDeviceUiState.Ready -> deviceState.registeredTokenId
+        is NotificationDeviceUiState.Success -> deviceState.registeredTokenId
+        else -> null
+    }
+    if (registeredTokenId != null) return
+
+    when (deviceState) {
+        NotificationDeviceUiState.Checking,
+        NotificationDeviceUiState.Registering -> AdminNotificationCampaignDraftStatusCard(
+            title = "A preparar notificações",
+            body = "Estamos a verificar este dispositivo.",
+            icon = Icons.Filled.Notifications,
+            loading = true,
+        )
+        is NotificationDeviceUiState.Removing,
+        NotificationDeviceUiState.Unauthenticated -> Unit
+        is NotificationDeviceUiState.Unsupported -> AdminNotificationCampaignDraftStatusCard(
+            title = "Notificações indisponíveis",
+            body = deviceState.message,
+            icon = Icons.Filled.ErrorOutline,
+        )
+        is NotificationDeviceUiState.PermissionRequired -> AdminNotificationCampaignDraftStatusCard(
+            title = "Ativar notificações",
+            body = deviceState.message,
+            icon = Icons.Filled.Notifications,
+            actionLabel = "Ativar",
+            onAction = onEnableDevice,
+        )
+        is NotificationDeviceUiState.Error -> AdminNotificationCampaignDraftStatusCard(
+            title = "Notificações não registadas",
+            body = deviceState.message,
+            icon = Icons.Filled.ErrorOutline,
+            actionLabel = if (deviceState.retryable) "Tentar novamente" else null,
+            onAction = if (deviceState.retryable) onEnableDevice else null,
+        )
+        is NotificationDeviceUiState.Ready,
+        is NotificationDeviceUiState.Success -> AdminNotificationCampaignDraftStatusCard(
+            title = "Ativar notificações",
+            body = "Registe este dispositivo para receber testes e alertas administrativos.",
+            icon = Icons.Filled.Notifications,
+            actionLabel = "Ativar",
+            onAction = onEnableDevice,
+        )
     }
 }
 
@@ -226,13 +307,13 @@ private fun AdminNotificationCampaignDraftsHeader(onBack: () -> Unit) {
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = "Campanhas",
+                text = "Notificações",
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.inverseOnSurface,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Rascunhos push com envio bloqueado",
+                text = "Escreva a mensagem e envie para os clientes.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.68f),
             )
@@ -248,6 +329,7 @@ private fun AdminNotificationCampaignDraftsLoadedContent(
     onEdit: (String) -> Unit,
     onArchive: (String) -> Unit,
     onSendTest: (String) -> Unit,
+    onBroadcast: (String) -> Unit,
     onFormChange: (AdminNotificationCampaignDraftForm) -> Unit,
     onCancelEdit: () -> Unit,
     onSave: () -> Unit,
@@ -279,7 +361,7 @@ private fun AdminNotificationCampaignDraftsLoadedContent(
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = "Novo rascunho",
+            text = "Nova notificação",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -290,9 +372,11 @@ private fun AdminNotificationCampaignDraftsLoadedContent(
             draft = draft,
             archiving = mutationState == AdminNotificationCampaignDraftMutationState.Archiving(draft.campaignId),
             testing = mutationState == AdminNotificationCampaignDraftMutationState.Testing(draft.campaignId),
+            broadcasting = mutationState == AdminNotificationCampaignDraftMutationState.Broadcasting(draft.campaignId),
             onEdit = { onEdit(draft.campaignId) },
             onArchive = { onArchive(draft.campaignId) },
             onSendTest = { onSendTest(draft.campaignId) },
+            onBroadcast = { onBroadcast(draft.campaignId) },
         )
     }
 }
@@ -316,16 +400,10 @@ private fun AdminNotificationCampaignDraftFormCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = if (form.isEditingExisting) "Editar rascunho" else "Novo rascunho",
+                text = if (form.isEditingExisting) "Editar notificação" else "Nova notificação",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold,
-            )
-            AdminNotificationCampaignDraftTextField(
-                value = form.campaignId,
-                onValueChange = { onFormChange(form.copy(campaignId = it)) },
-                label = "ID do rascunho",
-                enabled = !saving && !form.isEditingExisting,
             )
             AdminNotificationCampaignDraftTextField(
                 value = form.title,
@@ -340,25 +418,6 @@ private fun AdminNotificationCampaignDraftFormCard(
                 enabled = !saving,
                 minLines = 3,
             )
-            CampaignAudienceSelector(
-                selectedAudience = form.targetAudience,
-                enabled = !saving,
-                onAudienceSelected = { onFormChange(form.copy(targetAudience = it)) },
-            )
-            AdminNotificationCampaignDraftTextField(
-                value = form.scheduledAtIso,
-                onValueChange = { onFormChange(form.copy(scheduledAtIso = it)) },
-                label = "Agendamento ISO UTC",
-                enabled = !saving,
-            )
-            AdminNotificationCampaignDraftTextField(
-                value = form.notes,
-                onValueChange = { onFormChange(form.copy(notes = it)) },
-                label = "Notas internas",
-                enabled = !saving,
-                minLines = 2,
-            )
-
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = onCancel,
@@ -408,61 +467,21 @@ private fun AdminNotificationCampaignDraftFormCard(
 }
 
 @Composable
-private fun CampaignAudienceSelector(
-    selectedAudience: String,
-    enabled: Boolean,
-    onAudienceSelected: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "Público",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CampaignDraftAudienceKeys.forEach { audience ->
-                val selected = selectedAudience == audience
-                Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(enabled = enabled) { onAudienceSelected(audience) },
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    },
-                    contentColor = if (selected) {
-                        MaterialTheme.colorScheme.onTertiary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text(
-                        text = audience.toAudienceLabel(),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun AdminNotificationCampaignDraftCard(
     draft: AdminNotificationCampaignDraftUi,
     archiving: Boolean,
     testing: Boolean,
+    broadcasting: Boolean,
     onEdit: () -> Unit,
     onArchive: () -> Unit,
     onSendTest: () -> Unit,
+    onBroadcast: () -> Unit,
 ) {
     val archived = draft.status == "archived"
-    val busy = archiving || testing
+    val sent = draft.status == "sent"
+    val busy = archiving || testing || broadcasting
+    val canMutate = !busy && !archived && !sent
+    val canBroadcast = canMutate && !draft.deliveryLocked && !draft.sendBlocked
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -490,11 +509,6 @@ private fun AdminNotificationCampaignDraftCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = draft.campaignId,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
                 CampaignStatusPill(text = draft.statusLabel)
             }
@@ -505,28 +519,12 @@ private fun AdminNotificationCampaignDraftCard(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CampaignMetric(label = "Público", value = draft.targetAudienceLabel, modifier = Modifier.weight(1f))
-                CampaignMetric(label = "Agenda", value = draft.scheduledAtLabel, modifier = Modifier.weight(1f))
-            }
-            if (draft.notes.isNotBlank()) {
-                Text(
-                    text = draft.notes,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            CampaignDeliveryLockPanel(draft = draft)
-            if (
-                draft.createdAuditLabel.isNotBlank() ||
-                draft.updatedAuditLabel.isNotBlank() ||
-                draft.archivedAuditLabel.isNotBlank()
-            ) {
-                CampaignAuditTrail(draft = draft)
+            if (draft.deliveryLocked || draft.sendBlocked || sent) {
+                CampaignDeliveryLockPanel(draft = draft)
             }
             OutlinedButton(
                 onClick = onSendTest,
-                enabled = !busy && !archived,
+                enabled = canMutate,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -554,10 +552,42 @@ private fun AdminNotificationCampaignDraftCard(
                     fontWeight = FontWeight.Bold,
                 )
             }
+            Button(
+                onClick = onBroadcast,
+                enabled = canBroadcast,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+            ) {
+                if (broadcasting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.onTertiary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (broadcasting) "A enviar" else "Enviar para clientes",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = onEdit,
-                    enabled = !busy && !archived,
+                    enabled = canMutate,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
@@ -573,7 +603,7 @@ private fun AdminNotificationCampaignDraftCard(
                 }
                 OutlinedButton(
                     onClick = onArchive,
-                    enabled = !busy && !archived,
+                    enabled = canMutate,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
@@ -605,11 +635,16 @@ private fun AdminNotificationCampaignDraftCard(
 
 @Composable
 private fun CampaignDeliveryLockPanel(draft: AdminNotificationCampaignDraftUi) {
+    val locked = draft.deliveryLocked || draft.sendBlocked
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        color = if (locked) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = if (locked) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -617,84 +652,23 @@ private fun CampaignDeliveryLockPanel(draft: AdminNotificationCampaignDraftUi) {
             verticalAlignment = Alignment.Top,
         ) {
             Icon(
-                imageVector = Icons.Filled.Lock,
+                imageVector = if (locked) Icons.Filled.Lock else Icons.Filled.CheckCircle,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
             )
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
-                    text = if (draft.deliveryLocked) draft.sendStateLabel else "Entrega indisponível",
+                    text = draft.sendStateLabel,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
-                Text(
-                    text = draft.sendBlockedReason.ifBlank { "campaign-send-not-implemented" },
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                if (draft.sendBlockedReason.isNotBlank()) {
+                    Text(
+                        text = draft.sendBlockedReason,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
-        }
-    }
-}
-
-@Composable
-private fun CampaignAuditTrail(draft: AdminNotificationCampaignDraftUi) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = "Auditoria",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            if (draft.createdAuditLabel.isNotBlank()) {
-                Text(text = draft.createdAuditLabel, style = MaterialTheme.typography.labelMedium)
-            }
-            if (draft.updatedAuditLabel.isNotBlank()) {
-                Text(text = draft.updatedAuditLabel, style = MaterialTheme.typography.labelMedium)
-            }
-            if (draft.archivedAuditLabel.isNotBlank()) {
-                Text(text = draft.archivedAuditLabel, style = MaterialTheme.typography.labelMedium)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CampaignMetric(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
@@ -735,9 +709,10 @@ private fun AdminNotificationCampaignDraftMutationBanner(
         AdminNotificationCampaignDraftMutationState.Idle,
         AdminNotificationCampaignDraftMutationState.Saving,
         is AdminNotificationCampaignDraftMutationState.Archiving,
-        is AdminNotificationCampaignDraftMutationState.Testing -> Unit
+        is AdminNotificationCampaignDraftMutationState.Testing,
+        is AdminNotificationCampaignDraftMutationState.Broadcasting -> Unit
         is AdminNotificationCampaignDraftMutationState.Success -> AdminNotificationCampaignDraftStatusCard(
-            title = "Campanhas atualizadas",
+            title = "Notificações atualizadas",
             body = mutationState.message,
             icon = Icons.Filled.CheckCircle,
             actionLabel = "Fechar",
@@ -848,12 +823,5 @@ private fun AdminNotificationCampaignDraftIcon(icon: ImageVector) {
             tint = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.size(22.dp),
         )
-    }
-}
-
-private fun String.toAudienceLabel(): String {
-    return when (this) {
-        "marketing_opt_in_users" -> "Marketing opt-in"
-        else -> "Teste"
     }
 }

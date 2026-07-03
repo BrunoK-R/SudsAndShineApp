@@ -20,6 +20,7 @@ import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
+import com.sudsmobile.data.booking.BookingLoyaltySummary
 import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
@@ -434,7 +435,7 @@ private fun BookingHistory.toHomeState(
 ): HomeUiState {
     val validReservations = reservations.filter { it.id.isNotBlank() && it.slotStartIso.isNotBlank() }
     val completedWashCount = validReservations.count { it.isCompletedReservation() }
-    val loyaltyProgress = this.loyalty?.toBackendLoyaltyProgress() ?: completedWashCount.toLoyaltyUi()
+    val loyaltyProgress = loyaltyProgressFor(completedWashCount)
     val nextBooking = validReservations
         .filter { it.upcoming && !it.isCancelledReservation() }
         .minByOrNull { it.slotStartIso }
@@ -464,6 +465,27 @@ private fun BookingHistory.toHomeState(
             statsWarningRetryable = businessInfo.warningRetryable,
         )
     }
+}
+
+private fun BookingHistory.loyaltyProgressFor(completedWashCount: Int): HomeLoyaltyUi {
+    val backendLoyalty = loyalty
+    return if (backendLoyalty == null || backendLoyalty.isEmptyWhileReservationsAreCompleted(completedWashCount)) {
+        completedWashCount.toLoyaltyUi(
+            rewardInterval = backendLoyalty?.targetWashes,
+            claimedRewards = backendLoyalty?.claimedRewards ?: 0,
+        )
+    } else {
+        backendLoyalty.toBackendLoyaltyProgress()
+    }
+}
+
+private fun BookingLoyaltySummary.isEmptyWhileReservationsAreCompleted(completedWashCount: Int): Boolean {
+    return completedWashCount > 0 &&
+        totalWashes == 0 &&
+        currentWashes == 0 &&
+        completedRewards == 0 &&
+        claimedRewards == 0 &&
+        availableRewards == 0
 }
 
 private fun BookingHistoryError.toHomeErrorState(
@@ -671,7 +693,17 @@ private fun String.toStatusLabel(): String {
     }
 }
 
-private fun Int.toLoyaltyUi(): HomeLoyaltyUi = toLoyaltyProgress()
+private fun Int.toLoyaltyUi(
+    rewardInterval: Int? = null,
+    claimedRewards: Int = 0,
+): HomeLoyaltyUi = if (rewardInterval == null) {
+    toLoyaltyProgress(claimedRewards = claimedRewards)
+} else {
+    toLoyaltyProgress(
+        rewardInterval = rewardInterval,
+        claimedRewards = claimedRewards,
+    )
+}
 
 private fun String.toVehicleLabel(): String = when (lowercase()) {
     "suv" -> "SUV"

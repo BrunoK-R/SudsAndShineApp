@@ -340,6 +340,34 @@ class LoyaltyViewModelTest {
         assertEquals("SS-FREE-UID1-0001", loaded.rewardCodes.single().code)
         assertEquals("Disponível", loaded.rewardCodes.single().statusLabel)
         assertEquals("20 de maio, 2026", loaded.rewardCodes.single().issuedAt)
+        assertEquals(true, loaded.rewardCodes.single().active)
+    }
+
+    @Test
+    fun loadRewardsSubtractsActiveRewardCodesFromRedeemableRewards() = runTest {
+        val repository = FakeLoyaltyBookingRepository(
+            historyResult = rewardReadyHistoryResult(),
+            redemptions = listOf(
+                BookingLoyaltyRedemption(
+                    id = "reward-0001",
+                    rewardCode = "SS-FREE-UID1-0001",
+                    rewardNumber = 1,
+                    status = "issued",
+                    createdAtIso = "2026-05-20T12:00:00.000Z",
+                ),
+            ),
+        )
+        val viewModel = loyaltyViewModel(bookingRepository = repository)
+
+        viewModel.loadRewards()
+        runCurrent()
+        viewModel.redeemReward()
+        runCurrent()
+
+        val loaded = assertIs<LoyaltyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(0, loaded.availableRewards)
+        assertEquals(1, loaded.rewardCodes.count { it.active })
+        assertEquals(0, repository.redemptionCalls)
     }
 
     @Test
@@ -512,6 +540,41 @@ class LoyaltyViewModelTest {
         assertEquals("Emitida agora", loaded.rewardCodes.single().issuedAt)
         val success = assertIs<LoyaltyRedemptionUiState.Success>(loaded.redemptionState)
         assertEquals(true, success.message.contains("SS-FREE-UID1-0001"))
+    }
+
+    @Test
+    fun redeemRewardSubtractsIssuedCodeWhenBackendReturnsRawAvailableReward() = runTest {
+        val repository = FakeLoyaltyBookingRepository(
+            historyResult = rewardReadyHistoryResult(),
+            redemptionResult = BookingRewardRedemptionResult.Success(
+                rewardReceipt().copy(
+                    loyalty = loyaltySummary(
+                        totalWashes = 10,
+                        currentWashes = 10,
+                        remainingWashes = 0,
+                        progress = 1f,
+                        rewardReady = true,
+                        completedRewards = 1,
+                        claimedRewards = 0,
+                        availableRewards = 1,
+                    ),
+                ),
+            ),
+        )
+        val viewModel = loyaltyViewModel(bookingRepository = repository)
+
+        viewModel.loadRewards()
+        runCurrent()
+        viewModel.redeemReward()
+        runCurrent()
+        viewModel.redeemReward()
+        runCurrent()
+
+        val loaded = assertIs<LoyaltyUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, repository.redemptionCalls)
+        assertEquals(0, loaded.availableRewards)
+        assertEquals("SS-FREE-UID1-0001", loaded.rewardCodes.single().code)
+        assertEquals(true, loaded.rewardCodes.single().active)
     }
 
     @Test

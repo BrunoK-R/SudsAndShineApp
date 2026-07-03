@@ -138,6 +138,20 @@ class ProfileHistoryViewModelTest {
                                 priceCents = 3200,
                             ),
                             historyReservation(
+                                id = "confirmed-past",
+                                slotStartIso = "2026-05-21T09:00:00.000Z",
+                                upcoming = false,
+                                status = "confirmed",
+                                priceCents = 3200,
+                            ),
+                            historyReservation(
+                                id = "running-past",
+                                slotStartIso = "2026-05-21T10:00:00.000Z",
+                                upcoming = false,
+                                status = "in_progress",
+                                priceCents = 3200,
+                            ),
+                            historyReservation(
                                 id = "cancelled-1",
                                 slotStartIso = "2026-05-08T09:00:00.000Z",
                                 upcoming = false,

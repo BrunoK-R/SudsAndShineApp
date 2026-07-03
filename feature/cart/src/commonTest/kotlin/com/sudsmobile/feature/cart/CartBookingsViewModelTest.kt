@@ -170,6 +170,82 @@ class CartBookingsViewModelTest {
     }
 
     @Test
+    fun loadBookingsDescribesCustomerLifecycleStatuses() = runTest {
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "pending-1",
+                                slotStartIso = "2026-05-21T10:00:00.000Z",
+                                slotEndIso = "2026-05-21T10:45:00.000Z",
+                                upcoming = true,
+                                status = "pending",
+                                priceCents = 3400,
+                            ),
+                            historyReservation(
+                                id = "confirmed-1",
+                                slotStartIso = "2026-05-22T10:00:00.000Z",
+                                slotEndIso = "2026-05-22T10:45:00.000Z",
+                                upcoming = true,
+                                status = "confirmed",
+                                priceCents = 3400,
+                            ),
+                            historyReservation(
+                                id = "running-1",
+                                slotStartIso = "2026-05-23T10:00:00.000Z",
+                                slotEndIso = "2026-05-23T10:45:00.000Z",
+                                upcoming = true,
+                                status = "in_progress",
+                                priceCents = 3400,
+                            ),
+                            historyReservation(
+                                id = "completed-1",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                slotEndIso = "2026-05-18T10:45:00.000Z",
+                                upcoming = false,
+                                status = "completed",
+                                priceCents = 3200,
+                            ),
+                            historyReservation(
+                                id = "rejected-1",
+                                slotStartIso = "2026-05-17T10:00:00.000Z",
+                                slotEndIso = "2026-05-17T10:45:00.000Z",
+                                upcoming = false,
+                                status = "rejected",
+                                priceCents = 3200,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.loadBookings()
+        runCurrent()
+
+        val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(
+            listOf(
+                "Pedido recebido. A equipa vai confirmar ou recusar a lavagem.",
+                "Marcação aceite. A lavagem ainda não começou.",
+                "Lavagem a decorrer. Avisamos quando estiver concluída.",
+            ),
+            loaded.upcoming.map { it.statusDescription },
+        )
+        assertEquals(
+            listOf(
+                "Lavagem concluída e guardada no histórico.",
+                "Pedido recusado pela equipa.",
+            ),
+            loaded.completed.map { it.statusDescription },
+        )
+    }
+
+    @Test
     fun loadBookingsCarriesReviewedStateForCompletedReservations() = runTest {
         val viewModel = CartBookingsViewModel(
             bookingRepository = FakeBookingRepository(

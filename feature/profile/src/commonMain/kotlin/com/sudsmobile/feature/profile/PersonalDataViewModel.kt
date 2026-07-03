@@ -22,6 +22,7 @@ internal data class PersonalDataFormUi(
     val phoneNumber: String,
     val marketingOptIn: Boolean,
     val appointmentReminderOptIn: Boolean = false,
+    val photoUrl: String = "",
 )
 
 internal sealed interface PersonalDataUiState {
@@ -187,6 +188,7 @@ internal class PersonalDataViewModel(
                     phoneNumber = form.phoneNumber,
                     marketingOptIn = form.marketingOptIn,
                     appointmentReminderOptIn = form.appointmentReminderOptIn,
+                    photoUrl = form.photoUrl,
                 ),
             )
             if ((sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid != requestedUid) {
@@ -297,6 +299,7 @@ private fun UserProfile.toFormUi(): PersonalDataFormUi = PersonalDataFormUi(
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
     appointmentReminderOptIn = appointmentReminderOptIn,
+    photoUrl = photoUrl,
 )
 
 private fun AuthError.toPersonalDataState(): PersonalDataUiState.Error {

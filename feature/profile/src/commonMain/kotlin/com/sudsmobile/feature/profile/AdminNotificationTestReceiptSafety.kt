@@ -10,17 +10,15 @@ internal fun AdminNotificationTestReceipt.isCurrentAdminSelfTest(requestedUid: S
 }
 
 internal fun AdminNotificationTestReceipt.toSelfTestQueuedMessage(kindLabel: String): String {
-    val baseMessage = "$kindLabel em fila apenas para o administrador atual."
-    if (campaignId.isBlank()) return baseMessage
-
-    val sendStateLabel = sendState.trim().ifBlank { "draft_only" }
-    val sendBlockedReasonLabel = sendBlockedReason.trim().ifBlank { "campaign-send-not-implemented" }
-    val consentLabel = if (marketingConsentRequired) {
-        " Público requer opt-in marketing."
-    } else {
-        ""
+    return when {
+        sentCount > 0 || deliveryState.trim().equals("sent", ignoreCase = true) ->
+            "$kindLabel enviado apenas para o administrador atual."
+        tokenCount == 0 || deliveryState.trim().equals("no_recipients", ignoreCase = true) ->
+            "Ative este dispositivo antes de enviar testes de notificação."
+        failedCount > 0 || invalidatedCount > 0 || deliveryState.trim().equals("failed", ignoreCase = true) ->
+            "Não foi possível entregar o teste a este dispositivo."
+        else -> "$kindLabel em fila apenas para o administrador atual."
     }
-    return "$baseMessage Envio real bloqueado ($sendStateLabel): $sendBlockedReasonLabel.$consentLabel"
 }
 
 internal const val UnsafeAdminNotificationTestReceiptMessage =

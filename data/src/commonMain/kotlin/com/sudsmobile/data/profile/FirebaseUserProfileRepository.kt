@@ -44,6 +44,8 @@ class FirebaseUserProfileRepository(
                 UserProfileError.Validation("Indique um telemóvel válido.")
             phone.length > MaxPhoneLength || !phone.all { it.isDigit() || it in phoneSeparators } ->
                 UserProfileError.Validation("Indique um telemóvel válido.")
+            request.photoUrl.isNotBlank() && !request.photoUrl.isValidProfilePhotoUrl() ->
+                UserProfileError.Validation("Indique uma URL de fotografia válida.")
             else -> null
         }
     }
@@ -51,12 +53,22 @@ class FirebaseUserProfileRepository(
     private fun UserProfileSaveRequest.normalized(): UserProfileSaveRequest = copy(
         displayName = displayName.trim(),
         phoneNumber = phoneNumber.trim(),
+        photoUrl = photoUrl.trim(),
     )
 }
 
 private const val MaxDisplayNameLength = 100
 private const val MaxPhoneLength = 32
+private const val MaxProfilePhotoUrlLength = 2048
 private val phoneSeparators = setOf('+', '-', '(', ')', '.', ' ')
+
+private fun String.isValidProfilePhotoUrl(): Boolean {
+    val value = trim()
+    if (value.length !in 1..MaxProfilePhotoUrlLength) return false
+    if (value.any { it.isWhitespace() || it.isISOControl() }) return false
+    return value.startsWith("https://", ignoreCase = true) ||
+        value.startsWith("http://", ignoreCase = true)
+}
 
 private fun unauthenticatedError(): UserProfileError.Unauthenticated {
     return UserProfileError.Unauthenticated("Inicie sessão para gerir os seus dados.")

@@ -1,10 +1,23 @@
 package com.sudsmobile.feature.profile
 
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 val profileModule = module {
-    viewModelOf(::ProfileViewModel)
+    viewModel {
+        ProfileViewModel(
+            authRepository = get(),
+            bookingRepository = get(),
+            userVehicleRepository = get(),
+            userProfileRepository = get(),
+            bookingChangeNotifier = get(),
+            userVehicleChangeNotifier = get(),
+            userProfileChangeNotifier = get(),
+            notificationRepository = get(),
+            notificationDeviceRegistrar = get(),
+        )
+    }
     viewModelOf(::ProfileHistoryViewModel)
     viewModelOf(::AdminAccessViewModel)
     viewModelOf(::AdminBookingsViewModel)

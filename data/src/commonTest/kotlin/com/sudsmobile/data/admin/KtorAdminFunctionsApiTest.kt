@@ -127,7 +127,7 @@ class KtorAdminFunctionsApiTest {
                         "serviceName": "Lavagem Premium",
                         "slotStart": "2026-05-30T09:30:00.000Z",
                         "slotEnd": "2026-05-30T10:15:00.000Z",
-                        "status": "confirmed",
+                        "status": "in_progress",
                         "paymentStatus": "paid",
                         "vehicleType": "passageiros",
                         "priceCents": 3200,
@@ -152,11 +152,45 @@ class KtorAdminFunctionsApiTest {
         val request = success.requests.single()
         assertEquals("/test-project/europe-west1/getAdminAcceptedReservations", requestedPath)
         assertEquals("reservation-2", request.id)
-        assertEquals("confirmed", request.status)
+        assertEquals("in_progress", request.status)
         assertEquals("paid", request.paymentStatus)
         assertEquals(true, request.canComplete)
         assertEquals("2026-05-29T10:15:00.000Z", request.acceptedAtIso)
         assertEquals("admin-uid", request.acceptedByUid)
+    }
+
+    @Test
+    fun postsStartReservationDecision() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "reservationId": "reservation-2",
+                    "reservationCode": "SS-RUN",
+                    "status": "in_progress"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.startBookingRequest(
+            AdminBookingDecisionRequest(reservationId = "reservation-2"),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminBookingDecisionResult.Success>(result)
+        assertEquals("/test-project/europe-west1/startReservation", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("in_progress", success.receipt.status)
     }
 
     @Test
@@ -658,10 +692,14 @@ class KtorAdminFunctionsApiTest {
                   "result": {
                     "notificationId": "test-notification-1",
                     "templateKey": "booking_request",
-                    "deliveryState": "queued",
+                    "deliveryState": "sent",
                     "recipientUid": "admin-1",
                     "targetScope": "self",
                     "testOnly": true,
+                    "tokenCount": 1,
+                    "sentCount": 1,
+                    "failedCount": 0,
+                    "invalidatedCount": 0,
                     "message": "queued"
                   }
                 }
@@ -682,9 +720,13 @@ class KtorAdminFunctionsApiTest {
         assertEquals("/test-project/europe-west1/sendAdminNotificationTest", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals("test-notification-1", success.receipt.notificationId)
-        assertEquals("queued", success.receipt.deliveryState)
+        assertEquals("sent", success.receipt.deliveryState)
         assertEquals("self", success.receipt.targetScope)
         assertEquals(true, success.receipt.testOnly)
+        assertEquals(1, success.receipt.tokenCount)
+        assertEquals(1, success.receipt.sentCount)
+        assertEquals(0, success.receipt.failedCount)
+        assertEquals(0, success.receipt.invalidatedCount)
     }
 
     @Test
@@ -731,7 +773,7 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
-    fun mapsNotificationCampaignTestReceiptAsBlockedWhenCallableOmitsSendMetadata() = runTest {
+    fun mapsNotificationCampaignTestReceiptWithDefaultReadySendState() = runTest {
         val api = KtorAdminFunctionsApi(
             httpClient = mockClient(
                 """
@@ -765,7 +807,7 @@ class KtorAdminFunctionsApiTest {
         assertEquals(true, success.receipt.sendBlocked)
         assertEquals("campaign-send-not-implemented", success.receipt.sendBlockedReason)
         assertEquals(true, success.receipt.deliveryLocked)
-        assertEquals("draft_only", success.receipt.sendState)
+        assertEquals("ready", success.receipt.sendState)
     }
 
     @Test
@@ -815,9 +857,9 @@ class KtorAdminFunctionsApiTest {
         assertEquals("firestore", success.config.source)
         assertEquals("summer-test", draft.campaignId)
         assertEquals("push", draft.channels.single())
-        assertEquals(true, draft.sendBlocked)
-        assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
-        assertEquals(true, draft.deliveryLocked)
+        assertEquals(false, draft.sendBlocked)
+        assertEquals("", draft.sendBlockedReason)
+        assertEquals(false, draft.deliveryLocked)
         assertEquals("draft_only", draft.sendState)
         assertEquals("2026-06-01T10:00:00.000Z", draft.createdAtIso)
         assertEquals("2026-06-01T11:00:00.000Z", draft.updatedAtIso)
@@ -826,7 +868,7 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
-    fun mapsAdminNotificationCampaignDraftsAsBlockedWhenCallableReturnsUnsafeSendMetadata() = runTest {
+    fun mapsAdminNotificationCampaignDraftsAsReadyWhenCallableReturnsDraftSendMetadata() = runTest {
         val api = KtorAdminFunctionsApi(
             httpClient = mockClient(
                 """
@@ -854,10 +896,10 @@ class KtorAdminFunctionsApiTest {
 
         val success = assertIs<AdminNotificationCampaignDraftsResult.Success>(result)
         val draft = success.config.campaigns.single()
-        assertEquals(true, draft.sendBlocked)
-        assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
-        assertEquals(true, draft.deliveryLocked)
-        assertEquals("draft_only", draft.sendState)
+        assertEquals(false, draft.sendBlocked)
+        assertEquals("", draft.sendBlockedReason)
+        assertEquals(false, draft.deliveryLocked)
+        assertEquals("ready", draft.sendState)
     }
 
     @Test
@@ -905,13 +947,13 @@ class KtorAdminFunctionsApiTest {
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals("summer-test", success.receipt.campaignId)
         assertEquals(true, success.receipt.created)
-        assertEquals(true, success.receipt.sendBlocked)
-        assertEquals(true, success.receipt.deliveryLocked)
+        assertEquals(false, success.receipt.sendBlocked)
+        assertEquals(false, success.receipt.deliveryLocked)
         assertEquals("draft_only", success.receipt.sendState)
     }
 
     @Test
-    fun mapsNotificationCampaignDraftMutationReceiptAsBlockedWhenCallableReturnsUnsafeSendMetadata() = runTest {
+    fun mapsNotificationCampaignDraftMutationReceiptAsReadyForDrafts() = runTest {
         val api = KtorAdminFunctionsApi(
             httpClient = mockClient(
                 """
@@ -941,10 +983,10 @@ class KtorAdminFunctionsApiTest {
         )
 
         val success = assertIs<AdminNotificationCampaignDraftMutationResult.Success>(result)
-        assertEquals(true, success.receipt.sendBlocked)
-        assertEquals("campaign-send-not-implemented", success.receipt.sendBlockedReason)
-        assertEquals(true, success.receipt.deliveryLocked)
-        assertEquals("draft_only", success.receipt.sendState)
+        assertEquals(false, success.receipt.sendBlocked)
+        assertEquals("", success.receipt.sendBlockedReason)
+        assertEquals(false, success.receipt.deliveryLocked)
+        assertEquals("ready", success.receipt.sendState)
     }
 
     @Test

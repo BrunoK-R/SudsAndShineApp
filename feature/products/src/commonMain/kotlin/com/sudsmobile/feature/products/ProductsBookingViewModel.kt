@@ -540,7 +540,7 @@ class ProductsBookingViewModel(
         if (request == null) {
             pendingSubmitRequest = null
             _submitState.value = BookingSubmitUiState.Error(
-                message = "Complete os dados da marcação antes de confirmar.",
+                message = "Complete os dados da marcação antes de enviar o pedido.",
                 retryable = false,
                 resolution = BookingSubmitResolution.None,
             )
@@ -682,7 +682,7 @@ class ProductsBookingViewModel(
 
     private fun unauthenticatedSubmitState(): BookingSubmitUiState.Error {
         return BookingSubmitUiState.Error(
-            message = "Inicie sessão para confirmar esta marcação com os dados guardados.",
+            message = "Inicie sessão para enviar este pedido com os dados guardados.",
             retryable = false,
             resolution = BookingSubmitResolution.SignIn,
         )
@@ -690,7 +690,7 @@ class ProductsBookingViewModel(
 
     private fun changedSessionSubmitState(): BookingSubmitUiState.Error {
         return BookingSubmitUiState.Error(
-            message = "A sessão mudou antes de confirmarmos a marcação. Reveja os dados antes de continuar.",
+            message = "A sessão mudou antes de enviarmos o pedido. Reveja os dados antes de continuar.",
             retryable = true,
             resolution = BookingSubmitResolution.Retry,
         )

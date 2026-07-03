@@ -16,7 +16,10 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 @Composable
-fun App() {
+fun App(
+    pendingNotificationRoute: String? = null,
+    onNotificationRouteConsumed: () -> Unit = {},
+) {
     val onboardingGateViewModel: OnboardingGateViewModel = koinViewModel()
     val onboardingGateState by onboardingGateViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -25,6 +28,8 @@ fun App() {
             onboardingGateState = onboardingGateState,
             onCompleteOnboarding = onboardingGateViewModel::completeOnboarding,
             onResetOnboardingPreference = onboardingGateViewModel::resetOnboardingPreference,
+            pendingNotificationRoute = pendingNotificationRoute,
+            onNotificationRouteConsumed = onNotificationRouteConsumed,
         )
     }
 }
@@ -34,6 +39,8 @@ private fun AppContent(
     onboardingGateState: OnboardingGateUiState,
     onCompleteOnboarding: suspend () -> Unit,
     onResetOnboardingPreference: suspend () -> Unit,
+    pendingNotificationRoute: String?,
+    onNotificationRouteConsumed: () -> Unit,
 ) {
     var splashComplete by rememberSaveable { mutableStateOf(false) }
 
@@ -44,6 +51,8 @@ private fun AppContent(
             showOnboarding = onboardingGateState == OnboardingGateUiState.ShowOnboarding,
             onCompleteOnboarding = onCompleteOnboarding,
             onResetOnboardingPreference = onResetOnboardingPreference,
+            pendingNotificationRoute = pendingNotificationRoute,
+            onNotificationRouteConsumed = onNotificationRouteConsumed,
             renderOnboarding = { actionsEnabled, onSkip, onComplete ->
                 DefaultOnboardingScreen(
                     actionsEnabled = actionsEnabled,
@@ -63,6 +72,8 @@ private fun AppPreview() {
             onboardingGateState = OnboardingGateUiState.ShowOnboarding,
             onCompleteOnboarding = {},
             onResetOnboardingPreference = {},
+            pendingNotificationRoute = null,
+            onNotificationRouteConsumed = {},
         )
     }
 }

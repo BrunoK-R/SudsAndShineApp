@@ -70,6 +70,9 @@ data class FirebaseFunctionsConfig(
     val rejectReservationUrl: String
         get() = functionUrl("rejectReservation")
 
+    val startReservationUrl: String
+        get() = functionUrl("startReservation")
+
     val completeReservationUrl: String
         get() = functionUrl("completeReservation")
 
@@ -120,6 +123,9 @@ data class FirebaseFunctionsConfig(
 
     val archiveAdminNotificationCampaignDraftUrl: String
         get() = functionUrl("archiveAdminNotificationCampaignDraft")
+
+    val broadcastAdminNotificationCampaignUrl: String
+        get() = functionUrl("broadcastAdminNotificationCampaign")
 
     val upsertCapacityOverrideUrl: String
         get() = functionUrl("upsertCapacityOverride")

@@ -36,6 +36,7 @@ internal data class LoyaltyRewardCodeUi(
     val code: String,
     val statusLabel: String,
     val issuedAt: String,
+    val active: Boolean,
 )
 
 internal sealed interface LoyaltyRedemptionUiState {
@@ -200,7 +201,7 @@ internal class LoyaltyViewModel(
                     val rewardCodes = content.rewardCodes.withLatest(result.receipt.toRewardCodeUi())
                     content.copy(
                         progress = progress,
-                        availableRewards = result.receipt.loyalty.availableRewards,
+                        availableRewards = result.receipt.loyalty.availableRewards.redeemableAfter(rewardCodes),
                         claimedRewards = result.receipt.loyalty.claimedRewards,
                         rewardCodes = rewardCodes,
                     ).toUiState(
@@ -293,10 +294,11 @@ private fun BookingLoyalty.toLoyaltyState(): LoyaltyUiState {
     val earnedItems = stampHistory.mapNotNull { it.toLoyaltyHistoryItemOrNull() }
     val rewardCodes = redemptions.mapNotNull { it.toRewardCodeUiOrNull() }
     val progress = summary.toBackendLoyaltyProgress()
+    val redeemableRewards = progress.availableRewards.redeemableAfter(rewardCodes)
     return if (earnedItems.isEmpty()) {
         LoyaltyUiState.Empty(
             progress = progress,
-            availableRewards = progress.availableRewards,
+            availableRewards = redeemableRewards,
             claimedRewards = progress.claimedRewards,
             rewardCodes = rewardCodes,
         )
@@ -304,7 +306,7 @@ private fun BookingLoyalty.toLoyaltyState(): LoyaltyUiState {
         LoyaltyUiState.Loaded(
             progress = progress,
             history = earnedItems,
-            availableRewards = progress.availableRewards,
+            availableRewards = redeemableRewards,
             claimedRewards = progress.claimedRewards,
             rewardCodes = rewardCodes,
         )
@@ -332,19 +334,22 @@ private fun BookingLoyaltyStamp.toLoyaltyHistoryItemOrNull(): LoyaltyHistoryItem
 
 private fun BookingLoyaltyRedemption.toRewardCodeUiOrNull(): LoyaltyRewardCodeUi? {
     if (id.isBlank() || rewardCode.isBlank()) return null
+    val normalizedStatus = status.normalizedRewardStatus()
     return LoyaltyRewardCodeUi(
         id = id,
         code = rewardCode,
-        statusLabel = status.toRewardStatusLabel(),
+        statusLabel = normalizedStatus.toRewardStatusLabel(),
         issuedAt = createdAtIso.toIssuedAtLabel(),
+        active = normalizedStatus.isActiveRewardStatus(),
     )
 }
 
 private fun BookingRewardRedemptionReceipt.toRewardCodeUi(): LoyaltyRewardCodeUi = LoyaltyRewardCodeUi(
     id = redemptionId,
     code = rewardCode,
-    statusLabel = status.toRewardStatusLabel(),
+    statusLabel = status.normalizedRewardStatus().toRewardStatusLabel(),
     issuedAt = "Emitida agora",
+    active = status.normalizedRewardStatus().isActiveRewardStatus(),
 )
 
 private fun List<LoyaltyRewardCodeUi>.withLatest(item: LoyaltyRewardCodeUi): List<LoyaltyRewardCodeUi> {
@@ -366,12 +371,24 @@ private fun String.toIssuedAtLabel(): String {
 }
 
 private fun String.toRewardStatusLabel(): String {
-    return when (lowercase()) {
-        "issued" -> "Disponível"
-        "redeemed" -> "Usada"
+    return when (this) {
+        "issued", "emitida", "emitted", "available", "disponivel", "disponível" -> "Disponível"
+        "used", "redeemed", "usada", "utilizada" -> "Usada"
         "reserved" -> "Reservada"
         else -> replaceFirstChar { it.titlecase() }.ifBlank { "Disponível" }
     }
+}
+
+private fun String.normalizedRewardStatus(): String {
+    return trim().lowercase()
+}
+
+private fun String.isActiveRewardStatus(): Boolean {
+    return this in setOf("issued", "emitida", "emitted", "available", "disponivel", "disponível", "reserved")
+}
+
+private fun Int.redeemableAfter(rewardCodes: List<LoyaltyRewardCodeUi>): Int {
+    return (this - rewardCodes.count { it.active }).coerceAtLeast(0)
 }
 
 private fun AuthError.isRetryable(): Boolean {

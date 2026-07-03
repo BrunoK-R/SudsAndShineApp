@@ -14,6 +14,8 @@ fun SetupNavGraph(
     showOnboarding: Boolean = false,
     onCompleteOnboarding: suspend () -> Unit = {},
     onResetOnboardingPreference: suspend () -> Unit = {},
+    pendingNotificationRoute: String? = null,
+    onNotificationRouteConsumed: () -> Unit = {},
     renderOnboarding: @Composable (
         actionsEnabled: Boolean,
         onSkip: () -> Unit,
@@ -56,6 +58,8 @@ fun SetupNavGraph(
         composable(Routes.Main) {
             MainScreen(
                 onRequestSignIn = { navController.navigate(Routes.Auth) },
+                pendingNotificationRoute = pendingNotificationRoute,
+                onNotificationRouteConsumed = onNotificationRouteConsumed,
             )
         }
     }

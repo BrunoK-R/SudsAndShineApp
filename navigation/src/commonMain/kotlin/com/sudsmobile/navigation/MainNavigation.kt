@@ -1,6 +1,5 @@
 package com.sudsmobile.navigation
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,28 +9,41 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.savedstate.read
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.auth.AuthRepository
+import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.notification.NotificationDeviceRegistrar
+import com.sudsmobile.data.notification.NotificationRepository
 import com.sudsmobile.feature.blog.BlogScreen
 import com.sudsmobile.feature.cart.CartScreen
 import com.sudsmobile.feature.cart.RatingScreen
@@ -54,15 +66,24 @@ import com.sudsmobile.feature.products.ProductsScreen
 import com.sudsmobile.feature.products.ServicesScreen
 import com.sudsmobile.feature.profile.ProfileScreen
 import com.sudsmobile.feature.profile.VehiclesScreen
+import org.koin.compose.koinInject
 
 @Composable
 fun MainNavigation(
     onRequestSignIn: () -> Unit,
+    pendingNotificationRoute: String? = null,
+    onNotificationRouteConsumed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
+    val bookingChangeNotifier: MutableBookingChangeNotifier = koinInject()
+    val authRepository: AuthRepository = koinInject()
+    val notificationDeviceRegistrar: NotificationDeviceRegistrar = koinInject()
+    val notificationRepository: NotificationRepository = koinInject()
+    val sessionState by authRepository.sessionState.collectAsStateWithLifecycle()
+    val latestOnNotificationRouteConsumed by rememberUpdatedState(onNotificationRouteConsumed)
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
-    val showBottomBar = currentRoute == Routes.Services || mainDestinations.any { it.route == currentRoute }
+    val showBottomBar = mainDestinations.any { it.route == currentRoute }
     var initialBookingServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var initialBookingRequestKey by rememberSaveable { mutableStateOf(0L) }
 
@@ -82,6 +103,26 @@ fun MainNavigation(
             launchSingleTop = true
             restoreState = true
         }
+    }
+
+    LaunchedEffect(pendingNotificationRoute) {
+        val route = pendingNotificationRoute?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        if (route.invalidatesBookingsFromNotification()) {
+            bookingChangeNotifier.notifyBookingsChanged()
+        }
+        navController.navigateToNotificationRoute(route)
+        latestOnNotificationRouteConsumed()
+    }
+
+    LaunchedEffect((sessionState as? AuthSessionState.Authenticated)?.session?.user?.uid) {
+        val uid = (sessionState as? AuthSessionState.Authenticated)?.session?.user?.uid
+            ?.takeIf { it.isNotBlank() }
+            ?: return@LaunchedEffect
+        registerNotificationDeviceIfAllowed(
+            userUid = uid,
+            notificationDeviceRegistrar = notificationDeviceRegistrar,
+            notificationRepository = notificationRepository,
+        )
     }
 
     Scaffold(
@@ -219,6 +260,7 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,
+                    onOpenNotificationPreferences = { navController.navigate(Routes.NotificationPreferences) },
                 )
             }
             composable(Routes.AdminAvailability) {
@@ -348,6 +390,25 @@ fun MainNavigation(
     }
 }
 
+private fun NavHostController.navigateToNotificationRoute(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = mainDestinations.any { it.route == route }
+    }
+}
+
+internal fun String.invalidatesBookingsFromNotification(): Boolean {
+    val route = trim()
+    return route == Routes.Cart ||
+        route == Routes.AdminBookings ||
+        route == Routes.Loyalty ||
+        route == Routes.History ||
+        route.startsWith("rating/")
+}
+
 @Composable
 private fun SudsBottomBar(
     currentRoute: String?,
@@ -403,14 +464,21 @@ private fun SudsBottomBarItem(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .clickable(onClick = onClick)
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.Tab,
+            )
+            .semantics {
+                contentDescription = destination.label
+            }
             .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(
             imageVector = destination.icon,
-            contentDescription = destination.label,
+            contentDescription = null,
             tint = iconColor,
             modifier = Modifier.size(24.dp),
         )

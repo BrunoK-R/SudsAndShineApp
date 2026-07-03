@@ -212,6 +212,19 @@ class FirebaseAdminRepository(
         return api.archiveNotificationCampaignDraft(normalizedRequest, idToken)
     }
 
+    override suspend fun broadcastNotificationCampaign(
+        request: AdminNotificationCampaignBroadcastRequest,
+    ): AdminNotificationCampaignBroadcastResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminNotificationCampaignBroadcastResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminNotificationCampaignBroadcastResult.Failure(unauthenticatedError())
+
+        return api.broadcastNotificationCampaign(normalizedRequest, idToken)
+    }
+
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
     ): AdminCapacityOverrideMutationResult {
@@ -293,6 +306,24 @@ class FirebaseAdminRepository(
             ?: return AdminBookingDecisionResult.Failure(unauthenticatedError())
 
         return api.rejectBookingRequest(normalizedRequest, idToken)
+            .also { result ->
+                if (result is AdminBookingDecisionResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
+    }
+
+    override suspend fun startBookingRequest(
+        request: AdminBookingDecisionRequest,
+    ): AdminBookingDecisionResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminBookingDecisionResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBookingDecisionResult.Failure(unauthenticatedError())
+
+        return api.startBookingRequest(normalizedRequest, idToken)
             .also { result ->
                 if (result is AdminBookingDecisionResult.Success) {
                     bookingChangeNotifier.notifyBookingsChanged()
@@ -657,6 +688,16 @@ class FirebaseAdminRepository(
         }
     }
 
+    private fun validate(request: AdminNotificationCampaignBroadcastRequest): AdminError.Validation? {
+        return when {
+            request.campaignId.isBlank() || !request.campaignId.isValidCampaignId() ->
+                AdminError.Validation("O identificador da campanha é inválido.")
+            !request.confirmBroadcast ->
+                AdminError.Validation("Confirme o envio da campanha.")
+            else -> null
+        }
+    }
+
     private fun AdminBookingDecisionRequest.normalized(): AdminBookingDecisionRequest = copy(
         reservationId = reservationId.trim(),
         rejectionReason = rejectionReason.trim().replace(Regex("\\s+"), " "),
@@ -787,6 +828,12 @@ class FirebaseAdminRepository(
         AdminNotificationCampaignDraftArchiveRequest = copy(
         campaignId = campaignId.trim(),
     )
+
+    private fun AdminNotificationCampaignBroadcastRequest.normalized():
+        AdminNotificationCampaignBroadcastRequest = copy(
+        campaignId = campaignId.trim(),
+        confirmBroadcast = confirmBroadcast,
+    )
 }
 
 private const val MaxRejectionReasonLength = 500
@@ -830,6 +877,8 @@ private val NotificationTemplateKeys = setOf(
     "booking_request",
     "booking_accepted",
     "booking_rejected",
+    "booking_in_progress",
+    "booking_completed",
     "booking_expired",
     "booking_cancelled",
     "booking_rescheduled",
@@ -845,7 +894,7 @@ private val UtcInstantIsoRegex = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
 private val AdminTimeRegex = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
 private val NotificationTimeZoneRegex = Regex("^[A-Za-z_]+(/[A-Za-z0-9_+\\-]+)*$")
-private val NotificationCampaignTargetAudiences = setOf("test_users", "marketing_opt_in_users")
+private val NotificationCampaignTargetAudiences = setOf("all_users", "test_users", "marketing_opt_in_users")
 
 private fun unauthenticatedError(): AdminError.Unauthenticated {
     return AdminError.Unauthenticated("Inicie sessão para gerir a área administrativa.")

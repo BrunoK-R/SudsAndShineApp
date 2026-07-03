@@ -14,6 +14,9 @@ import com.sudsmobile.data.admin.AdminCapacityOverrideUpsertRequest
 import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraft
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftArchiveRequest
+import com.sudsmobile.data.admin.AdminNotificationCampaignBroadcastReceipt
+import com.sudsmobile.data.admin.AdminNotificationCampaignBroadcastRequest
+import com.sudsmobile.data.admin.AdminNotificationCampaignBroadcastResult
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftMutationReceipt
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftMutationRequest
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftMutationResult
@@ -116,7 +119,7 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
-    fun loadDraftsShowsCampaignDraftsAsBlockedWhenMetadataIsUnsafe() = runTest {
+    fun loadDraftsPreservesReadyCampaignSendMetadata() = runTest {
         val viewModel = AdminNotificationCampaignDraftsViewModel(
             authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
             adminRepository = FakeCampaignDraftsAdminRepository(
@@ -131,11 +134,11 @@ class AdminNotificationCampaignDraftsViewModelTest {
 
         val loaded = assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
         val draft = loaded.drafts.single()
-        assertEquals(true, draft.sendBlocked)
-        assertEquals("campaign-send-not-implemented", draft.sendBlockedReason)
-        assertEquals(true, draft.deliveryLocked)
-        assertEquals("draft_only", draft.sendState)
-        assertEquals("Rascunho sem envio", draft.sendStateLabel)
+        assertEquals(false, draft.sendBlocked)
+        assertEquals("", draft.sendBlockedReason)
+        assertEquals(false, draft.deliveryLocked)
+        assertEquals("ready", draft.sendState)
+        assertEquals("Pronta para envio", draft.sendStateLabel)
     }
 
     @Test
@@ -236,7 +239,7 @@ class AdminNotificationCampaignDraftsViewModelTest {
     }
 
     @Test
-    fun saveSubmitsParsedDraft() = runTest {
+    fun saveSubmitsTitleAndMessageWithGeneratedIdAndCustomerAudience() = runTest {
         val repository = FakeCampaignDraftsAdminRepository()
         val viewModel = AdminNotificationCampaignDraftsViewModel(
             authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
@@ -248,11 +251,9 @@ class AdminNotificationCampaignDraftsViewModelTest {
         viewModel.startCreate()
         viewModel.updateForm(
             campaignForm(
-                campaignId = " summer-test ",
                 title = " Oferta verão ",
-                body = " Campanha apenas em rascunho ",
-                targetAudience = "marketing_opt_in_users",
-                scheduledAtIso = "2026-06-10T10:00:00.000Z",
+                body = " Campanha para clientes ",
+                campaignId = "",
             ),
         )
         viewModel.save()
@@ -260,10 +261,10 @@ class AdminNotificationCampaignDraftsViewModelTest {
 
         assertIs<AdminNotificationCampaignDraftMutationState.Success>(viewModel.mutationState.value)
         val request = repository.upsertRequests.single()
-        assertEquals("summer-test", request.campaignId)
+        assertEquals("", request.campaignId)
         assertEquals("Oferta verão", request.title)
-        assertEquals("Campanha apenas em rascunho", request.body)
-        assertEquals("marketing_opt_in_users", request.targetAudience)
+        assertEquals("Campanha para clientes", request.body)
+        assertEquals("all_users", request.targetAudience)
     }
 
     @Test
@@ -421,11 +422,7 @@ class AdminNotificationCampaignDraftsViewModelTest {
         runCurrent()
 
         val success = assertIs<AdminNotificationCampaignDraftMutationState.Success>(viewModel.mutationState.value)
-        assertEquals(
-            "Teste de campanha em fila apenas para o administrador atual. " +
-                "Envio real bloqueado (draft_only): campaign-send-not-implemented.",
-            success.message,
-        )
+        assertEquals("Teste de campanha enviado apenas para o administrador atual.", success.message)
         assertEquals("summer-test", repository.testRequests.single().campaignId)
     }
 
@@ -544,6 +541,52 @@ class AdminNotificationCampaignDraftsViewModelTest {
         assertIs<AdminNotificationCampaignDraftsUiState.NotAdmin>(viewModel.uiState.value)
         assertIs<AdminNotificationCampaignDraftMutationState.Idle>(viewModel.mutationState.value)
     }
+
+    @Test
+    fun broadcastSubmitsConfirmedCampaignSend() = runTest {
+        val repository = FakeCampaignDraftsAdminRepository()
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.broadcast("summer-test")
+        runCurrent()
+
+        val success = assertIs<AdminNotificationCampaignDraftMutationState.Success>(viewModel.mutationState.value)
+        assertEquals("Campanha em fila para 3 dispositivos.", success.message)
+        assertEquals(
+            AdminNotificationCampaignBroadcastRequest("summer-test", confirmBroadcast = true),
+            repository.broadcastRequests.single(),
+        )
+    }
+
+    @Test
+    fun broadcastIgnoresLegacyDraftLockMetadata() = runTest {
+        val repository = FakeCampaignDraftsAdminRepository(
+            loadResult = AdminNotificationCampaignDraftsResult.Success(
+                campaignDraftsConfig(sendBlocked = true, sendBlockedReason = "locked"),
+            ),
+        )
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+        viewModel.broadcast("summer-test")
+        runCurrent()
+
+        val success = assertIs<AdminNotificationCampaignDraftMutationState.Success>(viewModel.mutationState.value)
+        assertEquals("Campanha em fila para 3 dispositivos.", success.message)
+        assertEquals(
+            AdminNotificationCampaignBroadcastRequest("summer-test", confirmBroadcast = true),
+            repository.broadcastRequests.single(),
+        )
+    }
 }
 
 private class FakeCampaignDraftsAdminRepository(
@@ -552,6 +595,7 @@ private class FakeCampaignDraftsAdminRepository(
     var upsertResult: AdminNotificationCampaignDraftMutationResult? = null,
     var archiveResult: AdminNotificationCampaignDraftMutationResult? = null,
     var testResult: AdminNotificationTestResult? = null,
+    var broadcastResult: AdminNotificationCampaignBroadcastResult? = null,
     loadResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftsResult>? = null,
     upsertResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftMutationResult>? = null,
     archiveResultDeferred: CompletableDeferred<AdminNotificationCampaignDraftMutationResult>? = null,
@@ -566,6 +610,7 @@ private class FakeCampaignDraftsAdminRepository(
     val upsertRequests = mutableListOf<AdminNotificationCampaignDraftMutationRequest>()
     val archiveRequests = mutableListOf<AdminNotificationCampaignDraftArchiveRequest>()
     val testRequests = mutableListOf<AdminNotificationTestRequest>()
+    val broadcastRequests = mutableListOf<AdminNotificationCampaignBroadcastRequest>()
 
     override suspend fun syncMyRole(): AdminRoleResult {
         return AdminRoleResult.Success(AdminRole(uid = "uid-1", email = "admin@example.com", role = "admin"))
@@ -609,6 +654,13 @@ private class FakeCampaignDraftsAdminRepository(
         val deferred = pendingTestResultDeferred
         pendingTestResultDeferred = null
         return deferred?.await() ?: testResult ?: notificationTestSuccess(campaignId = request.campaignId)
+    }
+
+    override suspend fun broadcastNotificationCampaign(
+        request: AdminNotificationCampaignBroadcastRequest,
+    ): AdminNotificationCampaignBroadcastResult {
+        broadcastRequests += request
+        return broadcastResult ?: campaignBroadcastSuccess(campaignId = request.campaignId)
     }
 
     override suspend fun getPendingBookingRequests(): AdminBookingRequestsResult =
@@ -724,7 +776,7 @@ private fun campaignForm(
     campaignId: String = "summer-test",
     title: String = "Oferta verão",
     body: String = "Campanha apenas em rascunho",
-    targetAudience: String = "test_users",
+    targetAudience: String = "all_users",
     scheduledAtIso: String = "",
 ): AdminNotificationCampaignDraftForm = AdminNotificationCampaignDraftForm(
     campaignId = campaignId,
@@ -740,7 +792,7 @@ private fun notificationTestSuccess(campaignId: String): AdminNotificationTestRe
             notificationId = "test-notification-1",
             templateKey = "campaign_draft",
             campaignId = campaignId,
-            deliveryState = "queued",
+            deliveryState = "sent",
             recipientUid = "uid-1",
             message = "queued",
             targetScope = "self",
@@ -750,6 +802,8 @@ private fun notificationTestSuccess(campaignId: String): AdminNotificationTestRe
             sendBlockedReason = "campaign-send-not-implemented",
             deliveryLocked = true,
             sendState = "draft_only",
+            tokenCount = 1,
+            sentCount = 1,
         ),
     )
 
@@ -779,13 +833,29 @@ private fun campaignDraftMutationReceipt(
         status = status,
         created = created,
         targetAudience = targetAudience,
-        sendBlocked = true,
-        sendBlockedReason = "campaign-send-not-implemented",
+        sendBlocked = status == "archived",
+        sendBlockedReason = if (status == "archived") "campaign-send-not-implemented" else "",
+        deliveryLocked = status == "archived",
+        sendState = if (status == "archived") "archived" else "ready",
+    )
+
+private fun campaignBroadcastSuccess(campaignId: String): AdminNotificationCampaignBroadcastResult.Success =
+    AdminNotificationCampaignBroadcastResult.Success(
+        AdminNotificationCampaignBroadcastReceipt(
+            campaignId = campaignId,
+            status = "sent",
+            targetAudience = "test_users",
+            queuedCount = 3,
+            sendBlocked = true,
+            sendBlockedReason = "campaign-already-sent",
+            deliveryLocked = true,
+            sendState = "sent",
+        ),
     )
 
 private fun campaignDraftsConfig(
-    sendBlocked: Boolean = true,
-    sendBlockedReason: String = "campaign-send-not-implemented",
+    sendBlocked: Boolean = false,
+    sendBlockedReason: String = "",
 ): AdminNotificationCampaignDraftsConfig = AdminNotificationCampaignDraftsConfig(
     source = "firestore",
     campaigns = listOf(
@@ -801,6 +871,8 @@ private fun campaignDraftsConfig(
             notes = "QA",
             sendBlocked = sendBlocked,
             sendBlockedReason = sendBlockedReason,
+            deliveryLocked = sendBlocked,
+            sendState = if (sendBlocked) "draft_only" else "ready",
             createdAtIso = "2026-06-01T10:00:00.000Z",
             updatedAtIso = "2026-06-01T11:30:00.000Z",
             createdByUid = "admin-cr",

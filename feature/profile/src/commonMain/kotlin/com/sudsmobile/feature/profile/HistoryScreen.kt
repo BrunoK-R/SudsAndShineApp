@@ -15,10 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -92,71 +92,121 @@ private fun HistoryScreenContent(
     onRateService: (String) -> Unit,
     onBookAgain: (String) -> Unit,
 ) {
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        HistoryHeader(onBack = onBack)
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(y = (-16).dp)
-                .padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        item(
+            key = "history-header",
+            contentType = "header",
         ) {
-            when (uiState) {
-                ProfileHistoryUiState.Idle,
-                ProfileHistoryUiState.Loading -> HistoryStatusCard(
-                    title = "A carregar histórico",
-                    body = "Estamos a consultar as lavagens associadas à sua conta.",
-                    loading = true,
-                )
+            HistoryHeader(onBack = onBack)
+        }
 
-                ProfileHistoryUiState.Unauthenticated -> HistoryStatusCard(
-                    title = "Sessão necessária",
-                    body = "Entre na sua conta para ver o histórico de lavagens.",
-                    icon = HistoryStatusIcon.Locked,
-                    actionLabel = "Entrar ou criar conta",
-                    onAction = onRequestSignIn,
-                )
+        when (uiState) {
+            ProfileHistoryUiState.Idle,
+            ProfileHistoryUiState.Loading -> item(
+                key = "history-loading",
+                contentType = "status",
+            ) {
+                HistoryContentItem {
+                    HistoryStatusCard(
+                        title = "A carregar histórico",
+                        body = "Estamos a consultar as lavagens associadas à sua conta.",
+                        loading = true,
+                    )
+                }
+            }
 
-                ProfileHistoryUiState.Empty -> HistoryStatusCard(
-                    title = "Sem histórico de lavagens",
-                    body = "Quando uma lavagem for concluída ou cancelada, o detalhe aparece aqui.",
-                    icon = HistoryStatusIcon.Empty,
-                    actionLabel = "Atualizar",
-                    onAction = onRetry,
-                )
+            ProfileHistoryUiState.Unauthenticated -> item(
+                key = "history-unauthenticated",
+                contentType = "status",
+            ) {
+                HistoryContentItem {
+                    HistoryStatusCard(
+                        title = "Sessão necessária",
+                        body = "Entre na sua conta para ver o histórico de lavagens.",
+                        icon = HistoryStatusIcon.Locked,
+                        actionLabel = "Entrar ou criar conta",
+                        onAction = onRequestSignIn,
+                    )
+                }
+            }
 
-                is ProfileHistoryUiState.Error -> HistoryStatusCard(
-                    title = "Não foi possível carregar",
-                    body = uiState.message,
-                    icon = HistoryStatusIcon.Error,
-                    actionLabel = if (uiState.retryable) "Tentar novamente" else null,
-                    onAction = if (uiState.retryable) onRetry else null,
-                )
+            ProfileHistoryUiState.Empty -> item(
+                key = "history-empty",
+                contentType = "status",
+            ) {
+                HistoryContentItem {
+                    HistoryStatusCard(
+                        title = "Sem histórico de lavagens",
+                        body = "Quando uma lavagem for concluída ou cancelada, o detalhe aparece aqui.",
+                        icon = HistoryStatusIcon.Empty,
+                        actionLabel = "Atualizar",
+                        onAction = onRetry,
+                    )
+                }
+            }
 
-                is ProfileHistoryUiState.Loaded -> {
-                    HistorySummaryCard(summary = uiState.summary)
+            is ProfileHistoryUiState.Error -> item(
+                key = "history-error",
+                contentType = "status",
+            ) {
+                HistoryContentItem {
+                    HistoryStatusCard(
+                        title = "Não foi possível carregar",
+                        body = uiState.message,
+                        icon = HistoryStatusIcon.Error,
+                        actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+                        onAction = if (uiState.retryable) onRetry else null,
+                    )
+                }
+            }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        uiState.items.forEach { item ->
-                            HistoryItemCard(
-                                item = item,
-                                onRateService = { onRateService(item.id) },
-                                onBookAgain = item.rebookServiceId?.let { serviceId ->
-                                    { onBookAgain(serviceId) }
-                                },
-                            )
-                        }
+            is ProfileHistoryUiState.Loaded -> {
+                item(
+                    key = "history-summary",
+                    contentType = "summary",
+                ) {
+                    HistoryContentItem {
+                        HistorySummaryCard(summary = uiState.summary)
+                    }
+                }
+
+                items(
+                    items = uiState.items,
+                    key = { item -> "history-${item.id}" },
+                    contentType = { "history-item" },
+                ) { item ->
+                    HistoryContentItem {
+                        HistoryItemCard(
+                            item = item,
+                            onRateService = { onRateService(item.id) },
+                            onBookAgain = item.rebookServiceId?.let { serviceId ->
+                                { onBookAgain(serviceId) }
+                            },
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HistoryContentItem(
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .offset(y = (-16).dp)
+            .padding(horizontal = 24.dp),
+    ) {
+        content()
     }
 }
 

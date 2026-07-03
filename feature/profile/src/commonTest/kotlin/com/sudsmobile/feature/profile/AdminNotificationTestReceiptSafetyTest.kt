@@ -61,7 +61,7 @@ class AdminNotificationTestReceiptSafetyTest {
     }
 
     @Test
-    fun campaignQueuedMessageIncludesSendLockAndConsentMetadata() {
+    fun campaignSentMessageUsesCampaignCopy() {
         val receipt = testReceipt(
             recipientUid = "admin-1",
             targetScope = "self",
@@ -71,13 +71,64 @@ class AdminNotificationTestReceiptSafetyTest {
             marketingConsentRequired = true,
             sendBlockedReason = "campaign-send-not-implemented",
             sendState = "draft_only",
+            deliveryState = "sent",
+            tokenCount = 1,
+            sentCount = 1,
         )
 
         assertEquals(
-            "Teste de campanha em fila apenas para o administrador atual. " +
-                "Envio real bloqueado (draft_only): campaign-send-not-implemented. " +
-                "Público requer opt-in marketing.",
+            "Teste de campanha enviado apenas para o administrador atual.",
             receipt.toSelfTestQueuedMessage("Teste de campanha"),
+        )
+    }
+
+    @Test
+    fun selfTestMessageConfirmsSentDelivery() {
+        val receipt = testReceipt(
+            recipientUid = "admin-1",
+            targetScope = "self",
+            testOnly = true,
+            deliveryState = "sent",
+            tokenCount = 1,
+            sentCount = 1,
+        )
+
+        assertEquals(
+            "Teste de notificação enviado apenas para o administrador atual.",
+            receipt.toSelfTestQueuedMessage("Teste de notificação"),
+        )
+    }
+
+    @Test
+    fun selfTestMessageExplainsMissingDeviceToken() {
+        val receipt = testReceipt(
+            recipientUid = "admin-1",
+            targetScope = "self",
+            testOnly = true,
+            deliveryState = "no_recipients",
+            tokenCount = 0,
+        )
+
+        assertEquals(
+            "Ative este dispositivo antes de enviar testes de notificação.",
+            receipt.toSelfTestQueuedMessage("Teste de notificação"),
+        )
+    }
+
+    @Test
+    fun selfTestMessageExplainsDeliveryFailure() {
+        val receipt = testReceipt(
+            recipientUid = "admin-1",
+            targetScope = "self",
+            testOnly = true,
+            deliveryState = "failed",
+            tokenCount = 1,
+            failedCount = 1,
+        )
+
+        assertEquals(
+            "Não foi possível entregar o teste a este dispositivo.",
+            receipt.toSelfTestQueuedMessage("Teste de notificação"),
         )
     }
 
@@ -90,11 +141,16 @@ class AdminNotificationTestReceiptSafetyTest {
         marketingConsentRequired: Boolean = false,
         sendBlockedReason: String = "",
         sendState: String = "",
+        deliveryState: String = "queued",
+        tokenCount: Int = 0,
+        sentCount: Int = 0,
+        failedCount: Int = 0,
+        invalidatedCount: Int = 0,
     ): AdminNotificationTestReceipt = AdminNotificationTestReceipt(
         notificationId = "test-notification-1",
         templateKey = "booking_request",
         campaignId = campaignId,
-        deliveryState = "queued",
+        deliveryState = deliveryState,
         recipientUid = recipientUid,
         message = "queued",
         targetScope = targetScope,
@@ -103,5 +159,9 @@ class AdminNotificationTestReceiptSafetyTest {
         marketingConsentRequired = marketingConsentRequired,
         sendBlockedReason = sendBlockedReason,
         sendState = sendState,
+        tokenCount = tokenCount,
+        sentCount = sentCount,
+        failedCount = failedCount,
+        invalidatedCount = invalidatedCount,
     )
 }

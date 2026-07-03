@@ -742,11 +742,11 @@ private fun ProductsScreenContent(
                 label = when (currentStep) {
                     BookingStep.Contact -> "Rever Marcação"
                     BookingStep.Confirmation -> if (submitState is BookingSubmitUiState.Loading) {
-                        "A confirmar..."
+                        "A enviar pedido..."
                     } else if (submitState is BookingSubmitUiState.Error) {
                         submitState.resolution.continueLabel()
                     } else {
-                        "Confirmar Marcação"
+                        "Enviar pedido"
                     }
                     else -> "Continuar"
                 },
@@ -796,8 +796,8 @@ private fun BookingContactHeader(onBack: () -> Unit) {
 @Composable
 private fun BookingConfirmationHeader(onBack: () -> Unit) {
     BookingStepHeader(
-        title = "Confirmar Marcação",
-        subtitle = "Reveja os detalhes antes de confirmar",
+        title = "Confirmar pedido",
+        subtitle = "Reveja os detalhes antes de enviar",
         onBack = onBack,
     )
 }
@@ -1143,7 +1143,7 @@ private fun LoyaltyRewardCodeCard(
                 )
                 Text(
                     text = when {
-                        authenticated -> "O código é validado na sua conta ao confirmar a marcação."
+                        authenticated -> "O código é validado na sua conta ao enviar o pedido."
                         restoringSession -> "Estamos a confirmar se há recompensas associadas à sua conta."
                         else -> "As recompensas emitidas ficam associadas à sua conta e só podem ser usadas uma vez."
                     },
@@ -1274,12 +1274,12 @@ private fun BookingSubmitStatusCard(
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "A confirmar marcação",
+                            text = "A enviar pedido",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            text = "Estamos a validar o horário com o sistema de reservas.",
+                            text = "Estamos a validar o horário e a enviar o pedido à equipa.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -1349,16 +1349,16 @@ private fun BookingSubmitResolution.continueLabel(): String {
         BookingSubmitResolution.ChangeSlot -> "Escolher outro horário"
         BookingSubmitResolution.Retry -> "Tentar novamente"
         BookingSubmitResolution.SignIn -> "Entrar para continuar"
-        BookingSubmitResolution.None -> "Confirmar Marcação"
+        BookingSubmitResolution.None -> "Enviar pedido"
     }
 }
 
 private fun BookingSubmitResolution.errorTitle(): String {
     return when (this) {
         BookingSubmitResolution.ChangeSlot -> "Horário indisponível"
-        BookingSubmitResolution.Retry -> "Não foi possível confirmar"
+        BookingSubmitResolution.Retry -> "Não foi possível enviar"
         BookingSubmitResolution.SignIn -> "Sessão necessária"
-        BookingSubmitResolution.None -> "Não foi possível confirmar"
+        BookingSubmitResolution.None -> "Não foi possível enviar"
     }
 }
 
@@ -1791,7 +1791,7 @@ private fun PriceSummaryCard(
                         color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
                     )
                     Text(
-                        text = "Valida ao confirmar",
+                        text = "Valida ao enviar",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                         fontWeight = FontWeight.Bold,
@@ -1948,7 +1948,7 @@ private fun BookingSuccessContent(
             Spacer(Modifier.height(16.dp))
         }
 
-        ConfirmationSentCard()
+        ConfirmationSentCard(pendingValidation = pendingValidation)
 
         Spacer(Modifier.height(28.dp))
 
@@ -2227,7 +2227,14 @@ private fun SuccessSummaryCard(
 }
 
 @Composable
-private fun ConfirmationSentCard() {
+private fun ConfirmationSentCard(pendingValidation: Boolean) {
+    val title = if (pendingValidation) "Pedido enviado" else "Confirmação enviada"
+    val body = if (pendingValidation) {
+        "Enviámos o pedido à equipa. Receberá uma notificação quando for aceite ou recusado."
+    } else {
+        "Enviámos a confirmação com todos os detalhes da sua marcação."
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -2250,12 +2257,12 @@ private fun ConfirmationSentCard() {
             )
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Confirmação enviada",
+                    text = title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Enviámos um email de confirmação com todos os detalhes da sua marcação.",
+                    text = body,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

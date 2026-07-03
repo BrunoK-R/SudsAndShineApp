@@ -17,6 +17,21 @@ import com.sudsmobile.data.booking.BookingHistoryReservation
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.notification.NotificationDevicePermissionStatus
+import com.sudsmobile.data.notification.NotificationDeviceRegistrar
+import com.sudsmobile.data.notification.NotificationDeviceRegistrationRequestResult
+import com.sudsmobile.data.notification.NotificationDeviceRegistrationState
+import com.sudsmobile.data.notification.NotificationError
+import com.sudsmobile.data.notification.NotificationPreferences
+import com.sudsmobile.data.notification.NotificationPreferencesMutationResult
+import com.sudsmobile.data.notification.NotificationPreferencesResult
+import com.sudsmobile.data.notification.NotificationPreferencesUpdateRequest
+import com.sudsmobile.data.notification.NotificationRepository
+import com.sudsmobile.data.notification.NotificationTokenDeleteRequest
+import com.sudsmobile.data.notification.NotificationTokenDeleteResult
+import com.sudsmobile.data.notification.NotificationTokenPlatform
+import com.sudsmobile.data.notification.NotificationTokenRegistrationRequest
+import com.sudsmobile.data.notification.NotificationTokenRegistrationResult
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileMutationResult
@@ -169,6 +184,8 @@ class ProfileViewModelTest {
                             profileStatsHistoryReservation("completed-7", upcoming = false, status = "concluido"),
                             profileStatsHistoryReservation("upcoming-1", upcoming = true),
                             profileStatsHistoryReservation("running-1", upcoming = true, status = "em_execucao"),
+                            profileStatsHistoryReservation("confirmed-past", upcoming = false, status = "confirmed"),
+                            profileStatsHistoryReservation("running-past", upcoming = false, status = "in_progress"),
                             profileStatsHistoryReservation("cancelled-1", upcoming = false, status = "cancelled"),
                         ),
                     ),
@@ -257,6 +274,9 @@ class ProfileViewModelTest {
         val loaded = assertIs<ProfileStatsUiState.Loaded>(viewModel.statsState.value)
         assertEquals("10", loaded.stats.washCount)
         assertEquals("0", loaded.stats.loyaltyRemaining)
+        assertEquals(true, loaded.stats.rewardReady)
+        assertEquals(1, loaded.stats.availableRewards)
+        assertEquals("1 lavagem grátis", loaded.stats.rewardDescription)
     }
 
     @Test
@@ -433,6 +453,87 @@ class ProfileViewModelTest {
     }
 
     @Test
+    fun signOutDeletesRegisteredNotificationTokenBeforeEndingSession() = runTest {
+        val events = mutableListOf<String>()
+        val authRepository = ProfileStatsFakeAuthRepository(authenticated = true, events = events)
+        val notificationRepository = ProfileSignOutFakeNotificationRepository(events = events)
+        val notificationDeviceRegistrar = ProfileSignOutFakeNotificationDeviceRegistrar(
+            state = NotificationDeviceRegistrationState(
+                permissionStatus = NotificationDevicePermissionStatus.Granted,
+                registeredTokenId = "token-id-1",
+                platform = NotificationTokenPlatform.Android,
+            ),
+            events = events,
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = authRepository,
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
+            notificationRepository = notificationRepository,
+            notificationDeviceRegistrar = notificationDeviceRegistrar,
+        )
+
+        viewModel.signOut()
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                "delete:token-id-1",
+                "markDeleted:uid-1:token-id-1",
+                "signOut",
+            ),
+            events,
+        )
+        assertEquals(1, notificationRepository.deleteCalls)
+        assertEquals(1, authRepository.signOutCalls)
+        assertIs<ProfileStatsUiState.Unauthenticated>(viewModel.statsState.value)
+    }
+
+    @Test
+    fun signOutContinuesWhenNotificationTokenDeleteFails() = runTest {
+        val events = mutableListOf<String>()
+        val authRepository = ProfileStatsFakeAuthRepository(authenticated = true, events = events)
+        val notificationRepository = ProfileSignOutFakeNotificationRepository(
+            result = NotificationTokenDeleteResult.Failure(
+                NotificationError.Unavailable("Serviço indisponível."),
+            ),
+            events = events,
+        )
+        val notificationDeviceRegistrar = ProfileSignOutFakeNotificationDeviceRegistrar(
+            state = NotificationDeviceRegistrationState(
+                permissionStatus = NotificationDevicePermissionStatus.Granted,
+                registeredTokenId = "token-id-1",
+                platform = NotificationTokenPlatform.Android,
+            ),
+            events = events,
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = authRepository,
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
+            notificationRepository = notificationRepository,
+            notificationDeviceRegistrar = notificationDeviceRegistrar,
+        )
+
+        viewModel.signOut()
+        runCurrent()
+
+        assertEquals(listOf("delete:token-id-1", "signOut"), events)
+        assertEquals(0, notificationDeviceRegistrar.markDeletedCalls)
+        assertEquals(1, authRepository.signOutCalls)
+    }
+
+    @Test
     fun loadPreferencesRequiresAuthenticatedSession() = runTest {
         val profileRepository = ProfileStatsFakeProfileRepository(
             UserProfileResult.Success(profilePreferencesProfile(marketingOptIn = true)),
@@ -595,6 +696,86 @@ class ProfileViewModelTest {
         assertEquals(true, saved.preferences.appointmentReminderOptIn)
         assertEquals(true, profileRepository.lastRequest?.appointmentReminderOptIn)
         assertEquals(true, profileRepository.lastRequest?.marketingOptIn)
+        assertEquals(1, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun updateProfilePhotoUrlSavesProfilePhotoWithoutChangingNotificationPrefs() = runTest {
+        val photoUrl = "https://example.com/profile/bruno.jpg"
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            profileResult = UserProfileResult.Success(
+                profilePreferencesProfile(
+                    marketingOptIn = true,
+                    appointmentReminderOptIn = true,
+                ),
+            ),
+            mutationResult = UserProfileMutationResult.Success(
+                profilePreferencesProfile(
+                    marketingOptIn = true,
+                    appointmentReminderOptIn = true,
+                    photoUrl = photoUrl,
+                ),
+            ),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.updateProfilePhotoUrl(photoUrl)
+        runCurrent()
+
+        val saved = assertIs<ProfilePreferencesUiState.Saved>(viewModel.preferencesState.value)
+        assertEquals(photoUrl, saved.preferences.photoUrl)
+        assertEquals(photoUrl, profileRepository.lastRequest?.photoUrl)
+        assertEquals(true, profileRepository.lastRequest?.marketingOptIn)
+        assertEquals(true, profileRepository.lastRequest?.appointmentReminderOptIn)
+        assertEquals(1, profileRepository.updateCalls)
+    }
+
+    @Test
+    fun updateProfilePhotoUrlCanRemoveCurrentProfilePhoto() = runTest {
+        val profileRepository = ProfileStatsFakeProfileRepository(
+            profileResult = UserProfileResult.Success(
+                profilePreferencesProfile(
+                    marketingOptIn = true,
+                    appointmentReminderOptIn = true,
+                    photoUrl = "https://example.com/profile/bruno.jpg",
+                ),
+            ),
+            mutationResult = UserProfileMutationResult.Success(
+                profilePreferencesProfile(
+                    marketingOptIn = true,
+                    appointmentReminderOptIn = true,
+                    photoUrl = "",
+                ),
+            ),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = profileRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.updateProfilePhotoUrl("")
+        runCurrent()
+
+        val saved = assertIs<ProfilePreferencesUiState.Saved>(viewModel.preferencesState.value)
+        assertEquals("", saved.preferences.photoUrl)
+        assertEquals("", profileRepository.lastRequest?.photoUrl)
+        assertEquals(true, profileRepository.lastRequest?.marketingOptIn)
+        assertEquals(true, profileRepository.lastRequest?.appointmentReminderOptIn)
         assertEquals(1, profileRepository.updateCalls)
     }
 
@@ -825,6 +1006,7 @@ private class DeferredProfilePreferencesRepository(
 private class ProfileStatsFakeAuthRepository(
     authenticated: Boolean,
     initialState: AuthSessionState? = null,
+    private val events: MutableList<String> = mutableListOf(),
 ) : AuthRepository {
     private val mutableSessionState = MutableStateFlow(
         initialState ?: if (authenticated) {
@@ -835,6 +1017,8 @@ private class ProfileStatsFakeAuthRepository(
     )
 
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
+    var signOutCalls: Int = 0
+        private set
 
     override suspend fun currentSession(): AuthSession? {
         return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
@@ -858,6 +1042,8 @@ private class ProfileStatsFakeAuthRepository(
     }
 
     override fun signOut() {
+        signOutCalls += 1
+        events += "signOut"
         mutableSessionState.value = AuthSessionState.Unauthenticated
     }
 
@@ -879,6 +1065,74 @@ private class ProfileStatsFakeAuthRepository(
                 expiresInSeconds = 3600,
             ),
         )
+    }
+}
+
+private class ProfileSignOutFakeNotificationDeviceRegistrar(
+    private val state: NotificationDeviceRegistrationState,
+    private val events: MutableList<String> = mutableListOf(),
+) : NotificationDeviceRegistrar {
+    var markDeletedCalls: Int = 0
+        private set
+
+    override suspend fun currentState(userUid: String): NotificationDeviceRegistrationState {
+        return state
+    }
+
+    override suspend fun buildRegistrationRequest(userUid: String): NotificationDeviceRegistrationRequestResult {
+        error("Not used")
+    }
+
+    override suspend fun markRegistered(userUid: String, tokenId: String) {
+        error("Not used")
+    }
+
+    override suspend fun markDeleted(userUid: String, tokenId: String) {
+        markDeletedCalls += 1
+        events += "markDeleted:$userUid:$tokenId"
+    }
+}
+
+private class ProfileSignOutFakeNotificationRepository(
+    private val result: NotificationTokenDeleteResult = NotificationTokenDeleteResult.Success(
+        tokenId = "token-id-1",
+        status = "deleted",
+    ),
+    private val events: MutableList<String> = mutableListOf(),
+) : NotificationRepository {
+    var deleteCalls: Int = 0
+        private set
+
+    override suspend fun getMyNotificationPreferences(): NotificationPreferencesResult {
+        return NotificationPreferencesResult.Success(
+            NotificationPreferences(
+                bookingStatusEnabled = true,
+                appointmentReminderEnabled = true,
+                loyaltyEnabled = true,
+                adminPendingAlertEnabled = true,
+                marketingEnabled = false,
+            ),
+        )
+    }
+
+    override suspend fun updateMyNotificationPreferences(
+        request: NotificationPreferencesUpdateRequest,
+    ): NotificationPreferencesMutationResult {
+        error("Not used")
+    }
+
+    override suspend fun registerNotificationToken(
+        request: NotificationTokenRegistrationRequest,
+    ): NotificationTokenRegistrationResult {
+        error("Not used")
+    }
+
+    override suspend fun deleteNotificationToken(
+        request: NotificationTokenDeleteRequest,
+    ): NotificationTokenDeleteResult {
+        deleteCalls += 1
+        events += "delete:${request.tokenId}"
+        return result
     }
 }
 
@@ -916,6 +1170,7 @@ private fun profilePreferencesProfile(
     phoneNumber: String = "913005855",
     marketingOptIn: Boolean = false,
     appointmentReminderOptIn: Boolean = false,
+    photoUrl: String = "",
 ): UserProfile = UserProfile(
     uid = "uid-1",
     email = "bruno@example.com",
@@ -923,4 +1178,5 @@ private fun profilePreferencesProfile(
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
     appointmentReminderOptIn = appointmentReminderOptIn,
+    photoUrl = photoUrl,
 )

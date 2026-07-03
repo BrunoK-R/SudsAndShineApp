@@ -6,6 +6,7 @@ import com.sudsmobile.data.auth.AuthResult
 import com.sudsmobile.data.auth.AuthSession
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
+import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -895,6 +896,53 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun adminBookingDecisionsNotifyBookingChangesOnSuccess() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val changeNotifier = MutableBookingChangeNotifier()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+            bookingChangeNotifier = changeNotifier,
+        )
+
+        assertEquals(0L, changeNotifier.revision.value)
+
+        val acceptResult = repository.acceptBookingRequest(AdminBookingDecisionRequest(" reservation-1 "))
+        val rejectResult = repository.rejectBookingRequest(AdminBookingDecisionRequest(" reservation-2 "))
+        val startResult = repository.startBookingRequest(AdminBookingDecisionRequest(" reservation-3 "))
+        val completeResult = repository.completeBookingRequest(AdminBookingDecisionRequest(" reservation-4 "))
+
+        assertIs<AdminBookingDecisionResult.Success>(acceptResult)
+        assertIs<AdminBookingDecisionResult.Success>(rejectResult)
+        assertIs<AdminBookingDecisionResult.Success>(startResult)
+        assertIs<AdminBookingDecisionResult.Success>(completeResult)
+        assertEquals(4L, changeNotifier.revision.value)
+        assertEquals("reservation-1", api.acceptBookingRequests.single().reservationId)
+        assertEquals("reservation-2", api.rejectBookingRequests.single().reservationId)
+        assertEquals("reservation-3", api.startBookingRequests.single().reservationId)
+        assertEquals("reservation-4", api.completeBookingRequests.single().reservationId)
+    }
+
+    @Test
+    fun failedAdminBookingDecisionDoesNotNotifyBookingChanges() = runTest {
+        val api = FakeAdminFunctionsApi(
+            acceptBookingResult = AdminBookingDecisionResult.Failure(AdminError.Conflict("Estado alterado.")),
+        )
+        val changeNotifier = MutableBookingChangeNotifier()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+            bookingChangeNotifier = changeNotifier,
+        )
+
+        val result = repository.acceptBookingRequest(AdminBookingDecisionRequest("reservation-1"))
+
+        val failure = assertIs<AdminBookingDecisionResult.Failure>(result)
+        assertIs<AdminError.Conflict>(failure.error)
+        assertEquals(0L, changeNotifier.revision.value)
+    }
+
+    @Test
     fun completeBookingRequestNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -932,6 +980,20 @@ class FirebaseAdminRepositoryTest {
 
 private class FakeAdminFunctionsApi(
     private val roleResult: AdminRoleResult = AdminRoleResult.Failure(AdminError.Backend("unused")),
+    private val acceptBookingResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
+        AdminBookingDecisionReceipt(
+            reservationId = "reservation-1",
+            reservationCode = "SS-ACCEPT",
+            status = "confirmed",
+        ),
+    ),
+    private val rejectBookingResult: AdminBookingDecisionResult = AdminBookingDecisionResult.Success(
+        AdminBookingDecisionReceipt(
+            reservationId = "reservation-2",
+            reservationCode = "SS-REJECT",
+            status = "rejected",
+        ),
+    ),
 ) : AdminFunctionsApi {
     val syncRoleIdTokens = mutableListOf<String>()
     val upsertRequests = mutableListOf<AdminServiceCatalogMutationRequest>()
@@ -972,6 +1034,12 @@ private class FakeAdminFunctionsApi(
     val clearBlockedSlotRequests = mutableListOf<AdminBlockedSlotClearRequest>()
     val clearBlockedSlotIdTokens = mutableListOf<String>()
     val acceptedBookingsIdTokens = mutableListOf<String>()
+    val acceptBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
+    val acceptBookingIdTokens = mutableListOf<String>()
+    val rejectBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
+    val rejectBookingIdTokens = mutableListOf<String>()
+    val startBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
+    val startBookingIdTokens = mutableListOf<String>()
     val completeBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
     val completeBookingIdTokens = mutableListOf<String>()
 
@@ -1017,14 +1085,33 @@ private class FakeAdminFunctionsApi(
         request: AdminBookingDecisionRequest,
         idToken: String,
     ): AdminBookingDecisionResult {
-        return AdminBookingDecisionResult.Failure(AdminError.Backend("unused"))
+        acceptBookingRequests += request
+        acceptBookingIdTokens += idToken
+        return acceptBookingResult
     }
 
     override suspend fun rejectBookingRequest(
         request: AdminBookingDecisionRequest,
         idToken: String,
     ): AdminBookingDecisionResult {
-        return AdminBookingDecisionResult.Failure(AdminError.Backend("unused"))
+        rejectBookingRequests += request
+        rejectBookingIdTokens += idToken
+        return rejectBookingResult
+    }
+
+    override suspend fun startBookingRequest(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult {
+        startBookingRequests += request
+        startBookingIdTokens += idToken
+        return AdminBookingDecisionResult.Success(
+            AdminBookingDecisionReceipt(
+                reservationId = request.reservationId,
+                reservationCode = "SS-START",
+                status = "in_progress",
+            ),
+        )
     }
 
     override suspend fun completeBookingRequest(
@@ -1538,6 +1625,20 @@ private fun adminNotificationTemplates(): List<AdminNotificationTemplateConfig> 
         enabled = true,
         title = "Marcação rejeitada",
         body = "Não foi possível aceitar a marcação.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_in_progress",
+        label = "Lavagem iniciada",
+        enabled = true,
+        title = "Lavagem iniciada",
+        body = "A lavagem começou.",
+    ),
+    AdminNotificationTemplateConfig(
+        key = "booking_completed",
+        label = "Lavagem concluída",
+        enabled = true,
+        title = "Lavagem concluída",
+        body = "A lavagem foi concluída.",
     ),
     AdminNotificationTemplateConfig(
         key = "booking_expired",

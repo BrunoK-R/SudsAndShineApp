@@ -10,10 +10,15 @@ class BookingReservationStatusTest {
     fun mapsWebsiteCompatibleReservationStatuses() {
         assertEquals(BookingReservationStatus.Pending, "novo".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Confirmed, "confirmado".toBookingReservationStatus())
+        assertEquals(BookingReservationStatus.Confirmed, "aceita".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.InProgress, "em_execucao".toBookingReservationStatus())
+        assertEquals(BookingReservationStatus.InProgress, "a decorrer".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Completed, "concluido".toBookingReservationStatus())
+        assertEquals(BookingReservationStatus.Completed, "concluída".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Cancelled, "cancelado".toBookingReservationStatus())
+        assertEquals(BookingReservationStatus.Cancelled, "cancelada".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Rejected, "rejeitado".toBookingReservationStatus())
+        assertEquals(BookingReservationStatus.Rejected, "recusada".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Expired, "expirado".toBookingReservationStatus())
         assertEquals(BookingReservationStatus.Unknown, "waiting_for_payment".toBookingReservationStatus())
     }
@@ -38,6 +43,9 @@ class BookingReservationStatusTest {
 
         assertTrue(reservation(status = "concluido", upcoming = false).isReviewableReservation())
         assertTrue(reservation(status = "waiting_for_payment", upcoming = false).isCompletedReservation())
+        assertFalse(reservation(status = "pending", upcoming = false).isCompletedReservation())
+        assertFalse(reservation(status = "confirmed", upcoming = false).isCompletedReservation())
+        assertFalse(reservation(status = "in_progress", upcoming = false).isCompletedReservation())
         assertFalse(reservation(status = "cancelado", upcoming = false).isReviewableReservation())
         assertFalse(reservation(status = "pending", upcoming = true).isReviewableReservation())
     }

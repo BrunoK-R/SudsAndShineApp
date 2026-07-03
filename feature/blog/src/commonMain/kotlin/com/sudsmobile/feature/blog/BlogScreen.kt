@@ -172,6 +172,7 @@ private fun LoyaltyContent(
             RewardClaimCard(
                 availableRewards = uiState.availableRewards,
                 claimedRewards = uiState.claimedRewards,
+                activeRewards = uiState.rewardCodes.count { it.active },
                 redemptionState = uiState.redemptionState,
                 onRedeemReward = onRedeemReward,
             )
@@ -187,6 +188,7 @@ private fun LoyaltyContent(
             RewardClaimCard(
                 availableRewards = uiState.availableRewards,
                 claimedRewards = uiState.claimedRewards,
+                activeRewards = uiState.rewardCodes.count { it.active },
                 redemptionState = uiState.redemptionState,
                 onRedeemReward = onRedeemReward,
             )
@@ -203,10 +205,12 @@ private fun LoyaltyContent(
 private fun RewardClaimCard(
     availableRewards: Int,
     claimedRewards: Int,
+    activeRewards: Int,
     redemptionState: LoyaltyRedemptionUiState,
     onRedeemReward: () -> Unit,
 ) {
     val shouldShow = availableRewards > 0 ||
+        activeRewards > 0 ||
         claimedRewards > 0 ||
         redemptionState !is LoyaltyRedemptionUiState.Idle
     if (!shouldShow) return
@@ -220,15 +224,19 @@ private fun RewardClaimCard(
 
     when (redemptionState) {
         LoyaltyRedemptionUiState.Idle -> {
-            title = if (availableRewards > 0) {
-                "Lavagem grátis disponível"
-            } else {
-                "Recompensas resgatadas"
-            }
-            body = if (availableRewards > 0) {
-                "Tem ${availableRewards.toRewardLabel()} pronta para emitir e validar na loja."
-            } else {
-                "${claimedRewards.toRewardLabel().replaceFirstChar { it.uppercase() }} já foi emitida neste ciclo."
+            when {
+                availableRewards > 0 -> {
+                    title = "Lavagem grátis disponível"
+                    body = "Tem ${availableRewards.toRewardLabel()} pronta para emitir e validar na loja."
+                }
+                activeRewards > 0 -> {
+                    title = "Lavagem grátis emitida"
+                    body = "Use o código já emitido na próxima marcação. O banner desaparece quando a lavagem gratuita for concluída."
+                }
+                else -> {
+                    title = "Recompensas usadas"
+                    body = "${claimedRewards.toRewardLabel().replaceFirstChar { it.uppercase() }} já foi usada neste ciclo."
+                }
             }
             icon = Icons.Filled.CardGiftcard
             loading = false

@@ -601,7 +601,16 @@ private fun BookingSummaryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top,
             ) {
-                BookingStatusBadge(status = booking.status)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    BookingStatusBadge(status = booking.status)
+                    BookingLifecycleMessage(
+                        status = booking.status,
+                        message = booking.statusDescription,
+                    )
+                }
                 IconButton(
                     onClick = {},
                     modifier = Modifier.size(36.dp),
@@ -749,6 +758,60 @@ private fun BookingSummaryCard(
                     modifier = Modifier.padding(top = 14.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun BookingLifecycleMessage(
+    status: BookingStatusUi,
+    message: String,
+) {
+    val warning = status == BookingStatusUi.Rejected ||
+        status == BookingStatusUi.Cancelled ||
+        status == BookingStatusUi.Expired
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = if (warning) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.36f)
+        } else {
+            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f)
+        },
+        contentColor = if (warning) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        },
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = when (status) {
+                    BookingStatusUi.Completed -> Icons.Filled.CheckCircle
+                    BookingStatusUi.Confirmed -> Icons.Filled.Recommend
+                    BookingStatusUi.InProgress -> Icons.Filled.FlashOn
+                    BookingStatusUi.Rejected,
+                    BookingStatusUi.Cancelled,
+                    BookingStatusUi.Expired -> Icons.Filled.Info
+                    BookingStatusUi.Pending,
+                    BookingStatusUi.Unknown -> Icons.Filled.AccessTime
+                },
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = if (warning) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.tertiary
+                },
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

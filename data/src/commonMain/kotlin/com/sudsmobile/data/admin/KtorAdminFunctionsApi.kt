@@ -114,6 +114,16 @@ class KtorAdminFunctionsApi(
         unavailableMessage = "Não foi possível rejeitar a marcação. Tente novamente.",
     )
 
+    override suspend fun startBookingRequest(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult = postDecision(
+        url = config.startReservationUrl,
+        payload = DecisionPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível iniciar a lavagem. Tente novamente.",
+    )
+
     override suspend fun completeBookingRequest(
         request: AdminBookingDecisionRequest,
         idToken: String,
@@ -504,6 +514,37 @@ class KtorAdminFunctionsApi(
         unavailableMessage = "Não foi possível arquivar o rascunho da campanha. Tente novamente.",
     )
 
+    override suspend fun broadcastNotificationCampaign(
+        request: AdminNotificationCampaignBroadcastRequest,
+        idToken: String,
+    ): AdminNotificationCampaignBroadcastResult {
+        return try {
+            val response = httpClient.post(config.broadcastAdminNotificationCampaignUrl) {
+                callableHeaders(idToken)
+                setBody(
+                    CallableNotificationCampaignBroadcastRequest(
+                        NotificationCampaignBroadcastPayload.from(request),
+                    ),
+                )
+            }
+            val body = response.body<CallableNotificationCampaignBroadcastResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminNotificationCampaignBroadcastResult.Failure(error.toAdminError())
+                body.result != null -> AdminNotificationCampaignBroadcastResult.Success(body.result.toReceipt())
+                else -> AdminNotificationCampaignBroadcastResult.Failure(
+                    AdminError.Backend("A resposta do envio veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminNotificationCampaignBroadcastResult.Failure(
+                AdminError.Unavailable("Não foi possível enviar a campanha. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun upsertCapacityOverride(
         request: AdminCapacityOverrideUpsertRequest,
         idToken: String,
@@ -798,6 +839,11 @@ private data class CallableNotificationCampaignDraftMutationRequest(
 )
 
 @Serializable
+private data class CallableNotificationCampaignBroadcastRequest(
+    val data: NotificationCampaignBroadcastPayload,
+)
+
+@Serializable
 private data class CallableCapacityOverrideMutationRequest(
     val data: CapacityOverridePayload,
 )
@@ -1011,6 +1057,21 @@ private data class NotificationCampaignDraftArchivePayload(
     companion object {
         fun from(request: AdminNotificationCampaignDraftArchiveRequest): NotificationCampaignDraftArchivePayload {
             return NotificationCampaignDraftArchivePayload(campaignId = request.campaignId)
+        }
+    }
+}
+
+@Serializable
+private data class NotificationCampaignBroadcastPayload(
+    val campaignId: String,
+    val confirmBroadcast: Boolean = true,
+) {
+    companion object {
+        fun from(request: AdminNotificationCampaignBroadcastRequest): NotificationCampaignBroadcastPayload {
+            return NotificationCampaignBroadcastPayload(
+                campaignId = request.campaignId,
+                confirmBroadcast = request.confirmBroadcast,
+            )
         }
     }
 }
@@ -1271,6 +1332,12 @@ private data class CallableNotificationCampaignDraftMutationResponse(
 )
 
 @Serializable
+private data class CallableNotificationCampaignBroadcastResponse(
+    val result: NotificationCampaignBroadcastResultPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class CallableCapacityOverrideMutationResponse(
     val result: CapacityOverrideMutationResultPayload? = null,
     val error: CallableError? = null,
@@ -1345,9 +1412,12 @@ private data class AdminBookingRequestPayload(
     val createdAt: String = "",
     val pendingExpiresAt: String? = null,
     val loyaltyRewardApplied: Boolean = false,
+    val canStart: Boolean = false,
     val canComplete: Boolean = false,
     val acceptedAt: String? = null,
     val acceptedByUid: String = "",
+    val startedAt: String? = null,
+    val startedByUid: String = "",
     val rejectedAt: String? = null,
     val rejectedByUid: String = "",
     val completedAt: String? = null,
@@ -1373,9 +1443,12 @@ private data class AdminBookingRequestPayload(
         createdAtIso = createdAt,
         pendingExpiresAtIso = pendingExpiresAt,
         loyaltyRewardApplied = loyaltyRewardApplied,
+        canStart = canStart,
         canComplete = canComplete,
         acceptedAtIso = acceptedAt,
         acceptedByUid = acceptedByUid.trim(),
+        startedAtIso = startedAt,
+        startedByUid = startedByUid.trim(),
         rejectedAtIso = rejectedAt,
         rejectedByUid = rejectedByUid.trim(),
         completedAtIso = completedAt,
@@ -1694,6 +1767,10 @@ private data class NotificationTestResultPayload(
     val sendBlockedReason: String = "",
     val deliveryLocked: Boolean = false,
     val sendState: String = "",
+    val tokenCount: Int = 0,
+    val sentCount: Int = 0,
+    val failedCount: Int = 0,
+    val invalidatedCount: Int = 0,
     val message: String = "",
 ) {
     fun toAdminNotificationTestReceipt(): AdminNotificationTestReceipt {
@@ -1725,6 +1802,10 @@ private data class NotificationTestResultPayload(
             sendBlockedReason = normalizedSendBlockedReason,
             deliveryLocked = if (isCampaignReceipt) true else deliveryLocked,
             sendState = normalizedSendState,
+            tokenCount = tokenCount.coerceAtLeast(0),
+            sentCount = sentCount.coerceAtLeast(0),
+            failedCount = failedCount.coerceAtLeast(0),
+            invalidatedCount = invalidatedCount.coerceAtLeast(0),
         )
     }
 }
@@ -1743,14 +1824,14 @@ private data class NotificationCampaignDraftsPayload(
 }
 
 private const val NotificationCampaignDraftSendBlockedReason = "campaign-send-not-implemented"
-private const val NotificationCampaignDraftSendState = "draft_only"
+private const val NotificationCampaignDraftSendState = "ready"
 
 @Serializable
 private data class NotificationCampaignDraftPayload(
     val campaignId: String = "",
     val title: String = "",
     val body: String = "",
-    val targetAudience: String = "test_users",
+    val targetAudience: String = "all_users",
     val channels: List<String> = emptyList(),
     val marketingConsentRequired: Boolean = false,
     val status: String = "draft",
@@ -1766,16 +1847,32 @@ private data class NotificationCampaignDraftPayload(
     val createdByUid: String = "",
     val updatedByUid: String = "",
     val archivedByUid: String = "",
+    val sentAtIso: String = "",
+    val sentByUid: String = "",
+    val queuedCount: Int = 0,
 ) {
     fun toAdminNotificationCampaignDraftOrNull(): AdminNotificationCampaignDraft? {
         val id = campaignId.trim()
         val cleanTitle = title.trim()
         val cleanBody = body.trim()
         if (id.isBlank() || cleanTitle.isBlank() || cleanBody.isBlank()) return null
-        val normalizedAudience = targetAudience.trim().ifBlank { "test_users" }
+        val normalizedAudience = targetAudience.trim().ifBlank { "all_users" }
+        val normalizedStatus = status.trim().ifBlank { "draft" }
         val normalizedSendBlockedReason = sendBlockedReason.trim()
-            .ifBlank { NotificationCampaignDraftSendBlockedReason }
-        val normalizedSendState = sendState.trim().ifBlank { NotificationCampaignDraftSendState }
+            .ifBlank {
+                when (normalizedStatus) {
+                    "archived" -> NotificationCampaignDraftSendBlockedReason
+                    "sent" -> "campaign-already-sent"
+                    else -> ""
+                }
+            }
+        val normalizedSendState = sendState.trim().ifBlank {
+            when (normalizedStatus) {
+                "archived" -> "archived"
+                "sent" -> "sent"
+                else -> NotificationCampaignDraftSendState
+            }
+        }
         return AdminNotificationCampaignDraft(
             campaignId = id,
             title = cleanTitle,
@@ -1783,12 +1880,16 @@ private data class NotificationCampaignDraftPayload(
             targetAudience = normalizedAudience,
             channels = channels.map { it.trim() }.filter { it.isNotBlank() }.ifEmpty { listOf("push") },
             marketingConsentRequired = marketingConsentRequired || normalizedAudience == "marketing_opt_in_users",
-            status = status.trim().ifBlank { "draft" },
+            status = normalizedStatus,
             scheduledAtIso = scheduledAtIso.trim(),
             notes = notes.trim(),
-            sendBlocked = true,
-            sendBlockedReason = normalizedSendBlockedReason,
-            deliveryLocked = true,
+            sendBlocked = normalizedStatus == "sent" || normalizedStatus == "archived",
+            sendBlockedReason = if (normalizedStatus == "sent" || normalizedStatus == "archived") {
+                normalizedSendBlockedReason
+            } else {
+                ""
+            },
+            deliveryLocked = normalizedStatus == "sent" || normalizedStatus == "archived",
             sendState = normalizedSendState,
             createdAtIso = createdAtIso.trim(),
             updatedAtIso = updatedAtIso.trim(),
@@ -1796,6 +1897,9 @@ private data class NotificationCampaignDraftPayload(
             createdByUid = createdByUid.trim(),
             updatedByUid = updatedByUid.trim(),
             archivedByUid = archivedByUid.trim(),
+            sentAtIso = sentAtIso.trim(),
+            sentByUid = sentByUid.trim(),
+            queuedCount = queuedCount.coerceAtLeast(0),
         )
     }
 }
@@ -1812,18 +1916,61 @@ private data class NotificationCampaignDraftMutationResultPayload(
     val sendState: String = "",
 ) {
     fun toReceipt(): AdminNotificationCampaignDraftMutationReceipt {
+        val normalizedStatus = status.trim().ifBlank { "draft" }
         val normalizedSendBlockedReason = sendBlockedReason.trim()
-            .ifBlank { NotificationCampaignDraftSendBlockedReason }
-        val normalizedSendState = sendState.trim().ifBlank { NotificationCampaignDraftSendState }
+            .ifBlank {
+                when (normalizedStatus) {
+                    "archived" -> NotificationCampaignDraftSendBlockedReason
+                    "sent" -> "campaign-already-sent"
+                    else -> ""
+                }
+            }
+        val normalizedSendState = sendState.trim().ifBlank {
+            when (normalizedStatus) {
+                "archived" -> "archived"
+                "sent" -> "sent"
+                else -> NotificationCampaignDraftSendState
+            }
+        }
+        val locked = normalizedStatus == "sent" || normalizedStatus == "archived"
         return AdminNotificationCampaignDraftMutationReceipt(
             campaignId = campaignId.trim(),
-            status = status.trim(),
+            status = normalizedStatus,
             created = created,
             targetAudience = targetAudience.trim(),
-            sendBlocked = true,
-            sendBlockedReason = normalizedSendBlockedReason,
-            deliveryLocked = true,
+            sendBlocked = locked,
+            sendBlockedReason = if (locked) normalizedSendBlockedReason else "",
+            deliveryLocked = locked,
             sendState = normalizedSendState,
+        )
+    }
+}
+
+@Serializable
+private data class NotificationCampaignBroadcastResultPayload(
+    val campaignId: String = "",
+    val status: String = "",
+    val targetAudience: String = "",
+    val queuedCount: Int = 0,
+    val skippedCount: Int = 0,
+    val sentByUid: String = "",
+    val sendBlocked: Boolean = true,
+    val sendBlockedReason: String = "",
+    val deliveryLocked: Boolean = true,
+    val sendState: String = "sent",
+) {
+    fun toReceipt(): AdminNotificationCampaignBroadcastReceipt {
+        return AdminNotificationCampaignBroadcastReceipt(
+            campaignId = campaignId.trim(),
+            status = status.trim(),
+            targetAudience = targetAudience.trim(),
+            queuedCount = queuedCount.coerceAtLeast(0),
+            skippedCount = skippedCount.coerceAtLeast(0),
+            sentByUid = sentByUid.trim(),
+            sendBlocked = sendBlocked,
+            sendBlockedReason = sendBlockedReason.trim().ifBlank { "campaign-already-sent" },
+            deliveryLocked = deliveryLocked,
+            sendState = sendState.trim().ifBlank { "sent" },
         )
     }
 }

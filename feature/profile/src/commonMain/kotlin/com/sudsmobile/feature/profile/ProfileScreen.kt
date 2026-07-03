@@ -28,11 +28,14 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,8 +43,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -50,15 +55,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
@@ -153,11 +163,8 @@ private val adminServiceExtrasMenuItem = ProfileMenuItem(
 private val adminMenuItems = listOf(
     adminMenuItem,
     adminAvailabilityMenuItem,
-    adminBookingPolicyMenuItem,
-    adminLoyaltySettingsMenuItem,
     adminNotificationSettingsMenuItem,
     adminNotificationCampaignDraftsMenuItem,
-    adminBusinessInfoMenuItem,
     adminServiceCatalogMenuItem,
     adminServiceExtrasMenuItem,
 )
@@ -219,6 +226,7 @@ fun ProfileScreen(
     val viewModel: ProfileViewModel = koinViewModel()
     val adminAccessViewModel: AdminAccessViewModel = koinViewModel()
     val contactViewModel: ContactViewModel = koinViewModel()
+    val notificationPreferencesViewModel: NotificationPreferencesViewModel = koinViewModel()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val adminAccessState by adminAccessViewModel.uiState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
@@ -227,6 +235,7 @@ fun ProfileScreen(
     val statsState by viewModel.statsState.collectAsStateWithLifecycle()
     val preferencesState by viewModel.preferencesState.collectAsStateWithLifecycle()
     val businessInfoState by contactViewModel.businessInfoState.collectAsStateWithLifecycle()
+    val notificationDeviceState by notificationPreferencesViewModel.deviceState.collectAsStateWithLifecycle()
 
     LaunchedEffect(sessionState, bookingRevision, vehicleRevision, profileRevision) {
         viewModel.refreshForSession()
@@ -234,6 +243,7 @@ fun ProfileScreen(
 
     LaunchedEffect(sessionState) {
         adminAccessViewModel.refreshForSession()
+        notificationPreferencesViewModel.refreshDeviceForSession()
     }
 
     LaunchedEffect(Unit) {
@@ -246,6 +256,7 @@ fun ProfileScreen(
         adminAccessState = adminAccessState,
         statsState = statsState,
         preferencesState = preferencesState,
+        notificationDeviceState = notificationDeviceState,
         businessInfoState = businessInfoState,
         onRequestSignIn = onRequestSignIn,
         onSignOut = viewModel::signOut,
@@ -254,6 +265,7 @@ fun ProfileScreen(
         onRetryPreferenceSave = viewModel::retryPreferenceSave,
         onRetryAdminAccess = { adminAccessViewModel.refreshForSession(force = true) },
         onRetryBusinessInfo = { contactViewModel.loadBusinessInfo(force = true) },
+        onProfilePhotoUrlChange = viewModel::updateProfilePhotoUrl,
         onMarketingOptInChange = viewModel::updateMarketingOptIn,
         onAppointmentReminderOptInChange = viewModel::updateAppointmentReminderOptIn,
         onOpenPersonalData = onOpenPersonalData,
@@ -281,6 +293,7 @@ private fun ProfileScreenContent(
     adminAccessState: AdminAccessUiState,
     statsState: ProfileStatsUiState,
     preferencesState: ProfilePreferencesUiState,
+    notificationDeviceState: NotificationDeviceUiState,
     businessInfoState: ContactBusinessInfoUiState,
     onRequestSignIn: () -> Unit,
     onSignOut: () -> Unit,
@@ -289,6 +302,7 @@ private fun ProfileScreenContent(
     onRetryPreferenceSave: () -> Unit,
     onRetryAdminAccess: () -> Unit,
     onRetryBusinessInfo: () -> Unit,
+    onProfilePhotoUrlChange: (String) -> Unit,
     onMarketingOptInChange: (Boolean) -> Unit,
     onAppointmentReminderOptInChange: (Boolean) -> Unit,
     onOpenPersonalData: () -> Unit = {},
@@ -311,6 +325,27 @@ private fun ProfileScreenContent(
     val isRestoringSession = sessionState == AuthSessionState.Restoring
     val restoreFailedMessage = (sessionState as? AuthSessionState.RestoreFailed)?.error?.message
     val uriHandler = LocalUriHandler.current
+    var editingProfilePhoto by rememberSaveable { mutableStateOf(false) }
+    var profilePhotoDraft by rememberSaveable { mutableStateOf("") }
+    var profilePhotoSavePending by rememberSaveable { mutableStateOf(false) }
+    val profilePhotoSaving = profilePhotoSavePending && preferencesState is ProfilePreferencesUiState.Saving
+    val profilePhotoSaveError = if (profilePhotoSavePending) {
+        (preferencesState as? ProfilePreferencesUiState.SaveError)?.message
+    } else {
+        null
+    }
+
+    LaunchedEffect(preferencesState, profilePhotoSavePending, profilePhotoDraft) {
+        if (!profilePhotoSavePending) return@LaunchedEffect
+        val savedPhotoUrl = (preferencesState as? ProfilePreferencesUiState.Saved)
+            ?.preferences
+            ?.photoUrl
+            ?.trim()
+        if (savedPhotoUrl != null && savedPhotoUrl == profilePhotoDraft.trim()) {
+            profilePhotoSavePending = false
+            editingProfilePhoto = false
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -323,7 +358,14 @@ private fun ProfileScreenContent(
             ProfileHeader(
                 user = authenticatedUser,
                 statsState = statsState,
+                preferencesState = preferencesState,
                 onRetryStats = onRetryStats,
+                onOpenRewards = onOpenRewards,
+                onEditPhoto = { currentPhotoUrl ->
+                    profilePhotoDraft = currentPhotoUrl
+                    profilePhotoSavePending = false
+                    editingProfilePhoto = true
+                },
             )
         } else if (isRestoringSession) {
             RestoringProfileHeader()
@@ -344,6 +386,11 @@ private fun ProfileScreenContent(
                 onOpenMaps = { mapsUri -> uriHandler.openUri(mapsUri) },
             )
             if (authenticatedUser != null) {
+                NotificationDevicePromptCard(
+                    deviceState = notificationDeviceState,
+                    isAdmin = adminAccessState is AdminAccessUiState.Admin,
+                    onOpenNotificationPreferences = onOpenNotificationPreferences,
+                )
                 ProfileMenuCard(
                     onOpenPersonalData = onOpenPersonalData,
                     onOpenNotificationPreferences = onOpenNotificationPreferences,
@@ -386,14 +433,46 @@ private fun ProfileScreenContent(
             AppVersionText()
         }
     }
+
+    if (editingProfilePhoto) {
+        ProfilePhotoUrlDialog(
+            photoUrl = profilePhotoDraft,
+            saving = profilePhotoSaving,
+            errorMessage = profilePhotoSaveError,
+            onPhotoUrlChange = {
+                profilePhotoDraft = it.take(MaxProfilePhotoUrlLength)
+                profilePhotoSavePending = false
+            },
+            onDismiss = {
+                if (!profilePhotoSaving) {
+                    profilePhotoSavePending = false
+                    editingProfilePhoto = false
+                }
+            },
+            onSave = {
+                profilePhotoSavePending = true
+                onProfilePhotoUrlChange(profilePhotoDraft)
+            },
+            onRemove = {
+                profilePhotoDraft = ""
+                profilePhotoSavePending = true
+                onProfilePhotoUrlChange("")
+            },
+        )
+    }
 }
 
 @Composable
 private fun ProfileHeader(
     user: AuthUser,
     statsState: ProfileStatsUiState,
+    preferencesState: ProfilePreferencesUiState,
     onRetryStats: () -> Unit,
+    onOpenRewards: () -> Unit,
+    onEditPhoto: (String) -> Unit,
 ) {
+    val displayName = preferencesState.displayNameOrNull() ?: user.resolvedDisplayName
+    val photoUrl = preferencesState.photoUrlOrBlank()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -415,24 +494,57 @@ private fun ProfileHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Surface(
-                modifier = Modifier.size(80.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.tertiary,
-                contentColor = MaterialTheme.colorScheme.onTertiary,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = user.initials(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
+            Box(modifier = Modifier.size(88.dp)) {
+                Surface(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .align(Alignment.Center),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (photoUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = photoUrl,
+                                contentDescription = "Foto de perfil",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Text(
+                                text = user.initials(displayName),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                }
+                Surface(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .align(Alignment.BottomEnd),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    shadowElevation = 4.dp,
+                ) {
+                    IconButton(
+                        onClick = { onEditPhoto(photoUrl) },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = "Alterar foto",
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = user.resolvedDisplayName,
+                    text = displayName,
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
                     fontWeight = FontWeight.Bold,
@@ -462,6 +574,11 @@ private fun ProfileHeader(
         ProfileStatsStatus(
             statsState = statsState,
             onRetryStats = onRetryStats,
+        )
+
+        ProfileRewardBanner(
+            statsState = statsState,
+            onOpenRewards = onOpenRewards,
         )
     }
 }
@@ -688,6 +805,84 @@ private fun RestoreFailedSessionCard(
 }
 
 @Composable
+private fun NotificationDevicePromptCard(
+    deviceState: NotificationDeviceUiState,
+    isAdmin: Boolean,
+    onOpenNotificationPreferences: () -> Unit,
+) {
+    val registeredTokenId = when (deviceState) {
+        is NotificationDeviceUiState.Ready -> deviceState.registeredTokenId
+        is NotificationDeviceUiState.Success -> deviceState.registeredTokenId
+        else -> null
+    }
+    if (registeredTokenId != null) return
+    if (
+        deviceState == NotificationDeviceUiState.Checking ||
+        deviceState == NotificationDeviceUiState.Registering ||
+        deviceState == NotificationDeviceUiState.Unauthenticated ||
+        deviceState is NotificationDeviceUiState.Removing ||
+        deviceState is NotificationDeviceUiState.Unsupported
+    ) {
+        return
+    }
+
+    val title = when (deviceState) {
+        is NotificationDeviceUiState.PermissionRequired -> "Ativar notificações"
+        is NotificationDeviceUiState.Error -> "Notificações por ativar"
+        else -> "Receber atualizações"
+    }
+    val body = when {
+        deviceState is NotificationDeviceUiState.PermissionRequired -> deviceState.message
+        deviceState is NotificationDeviceUiState.Error -> deviceState.message
+        isAdmin -> "Ative este dispositivo para receber pedidos de lavagem assim que chegarem."
+        else -> "Ative este dispositivo para acompanhar aceitações, recusas e alterações das suas marcações."
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            ProfileIconContainer(icon = Icons.Filled.Notifications)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.76f),
+                )
+                TextButton(
+                    onClick = onOpenNotificationPreferences,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    ),
+                ) {
+                    Text(
+                        text = "Gerir notificações",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun GuestProfileCard(onRequestSignIn: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -872,14 +1067,203 @@ private fun ProfileStatsUiState.toProfileStats(): List<ProfileStat> {
     }
 }
 
-private fun AuthUser.initials(): String {
-    val source = displayName.ifBlank { email.substringBefore("@") }
+@Composable
+private fun ProfileRewardBanner(
+    statsState: ProfileStatsUiState,
+    onOpenRewards: () -> Unit,
+) {
+    val stats = (statsState as? ProfileStatsUiState.Loaded)?.stats ?: return
+    if (!stats.rewardReady || stats.availableRewards <= 0) return
+
+    Spacer(Modifier.height(12.dp))
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CardGiftcard,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Tens uma lavagem grátis",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stats.rewardDescription,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.78f),
+                )
+            }
+            TextButton(
+                onClick = onOpenRewards,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                ),
+            ) {
+                Text(
+                    text = "Ver",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfilePhotoUrlDialog(
+    photoUrl: String,
+    saving: Boolean,
+    errorMessage: String?,
+    onPhotoUrlChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val trimmedPhotoUrl = photoUrl.trim()
+    val validationError = if (trimmedPhotoUrl.isNotBlank() && !trimmedPhotoUrl.isValidEditableProfilePhotoUrl()) {
+        "Indique uma URL http:// ou https://."
+    } else {
+        null
+    }
+    val fieldMessage = validationError ?: errorMessage ?: "http:// ou https://"
+    val canSave = !saving && validationError == null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Foto de perfil",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (trimmedPhotoUrl.isNotBlank()) {
+                    Surface(
+                        modifier = Modifier
+                            .size(112.dp)
+                            .align(Alignment.CenterHorizontally),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        AsyncImage(
+                            model = trimmedPhotoUrl,
+                            contentDescription = "Pré-visualização da foto",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = photoUrl,
+                    onValueChange = onPhotoUrlChange,
+                    enabled = !saving,
+                    isError = validationError != null || errorMessage != null,
+                    label = { Text("URL da imagem") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    supportingText = {
+                        Text(fieldMessage)
+                    },
+                )
+                if (trimmedPhotoUrl.isNotBlank()) {
+                    OutlinedButton(
+                        onClick = onRemove,
+                        enabled = !saving,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Remover foto")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onSave,
+                enabled = canSave,
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text("Guardar", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !saving,
+            ) {
+                Text("Cancelar")
+            }
+        },
+    )
+}
+
+private fun ProfilePreferencesUiState.displayNameOrNull(): String? {
+    return preferencesOrNull()?.displayName?.takeIf { it.isNotBlank() }
+}
+
+private fun ProfilePreferencesUiState.photoUrlOrBlank(): String {
+    return preferencesOrNull()?.photoUrl?.trim().orEmpty()
+}
+
+private fun ProfilePreferencesUiState.preferencesOrNull(): ProfilePreferencesUi? {
+    return when (this) {
+        is ProfilePreferencesUiState.Loaded -> preferences
+        is ProfilePreferencesUiState.Saving -> preferences
+        is ProfilePreferencesUiState.Saved -> preferences
+        is ProfilePreferencesUiState.SaveError -> preferences
+        ProfilePreferencesUiState.Idle,
+        ProfilePreferencesUiState.Loading,
+        ProfilePreferencesUiState.Unauthenticated,
+        is ProfilePreferencesUiState.Error -> null
+    }
+}
+
+private fun AuthUser.initials(profileDisplayName: String = displayName): String {
+    val source = profileDisplayName.ifBlank { email.substringBefore("@") }
     return source
         .split(" ", ".", "_", "-", limit = 4)
         .filter { it.isNotBlank() }
         .take(2)
         .joinToString(separator = "") { it.first().uppercaseChar().toString() }
         .ifBlank { "SS" }
+}
+
+private const val MaxProfilePhotoUrlLength = 2048
+
+private fun String.isValidEditableProfilePhotoUrl(): Boolean {
+    val value = trim()
+    if (value.length !in 1..MaxProfilePhotoUrlLength) return false
+    if (value.any { it.isWhitespace() || it.isISOControl() }) return false
+    return value.startsWith("https://", ignoreCase = true) ||
+        value.startsWith("http://", ignoreCase = true)
 }
 
 @Composable
@@ -1565,19 +1949,6 @@ private data class PreferenceStatusUi(
     val actionLabel: String?,
     val onAction: (() -> Unit)?,
 )
-
-private fun ProfilePreferencesUiState.preferencesOrNull(): ProfilePreferencesUi? {
-    return when (this) {
-        is ProfilePreferencesUiState.Loaded -> preferences
-        is ProfilePreferencesUiState.Saving -> preferences
-        is ProfilePreferencesUiState.Saved -> preferences
-        is ProfilePreferencesUiState.SaveError -> preferences
-        ProfilePreferencesUiState.Idle,
-        ProfilePreferencesUiState.Loading,
-        ProfilePreferencesUiState.Unauthenticated,
-        is ProfilePreferencesUiState.Error -> null
-    }
-}
 
 @Composable
 private fun LogoutButton(onClick: () -> Unit) {

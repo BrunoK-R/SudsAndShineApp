@@ -48,6 +48,7 @@ internal data class AdminBookingRequestUi(
     val createdAt: String,
     val expiresAt: String,
     val loyaltyRewardApplied: Boolean,
+    val canStart: Boolean,
     val canComplete: Boolean,
     val auditLabels: List<String>,
 )
@@ -84,6 +85,7 @@ internal sealed interface AdminBookingDecisionUiState {
 internal enum class AdminBookingDecisionAction {
     Accept,
     Reject,
+    Start,
     Complete,
 }
 
@@ -367,6 +369,14 @@ internal class AdminBookingsViewModel(
         )
     }
 
+    fun startRequest(reservationId: String) {
+        decideRequest(
+            reservationId = reservationId,
+            action = AdminBookingDecisionAction.Start,
+            rejectionReason = "",
+        )
+    }
+
     fun clearDecisionState() {
         _decisionState.value = AdminBookingDecisionUiState.Idle
     }
@@ -419,6 +429,7 @@ internal class AdminBookingsViewModel(
             val result = when (action) {
                 AdminBookingDecisionAction.Accept -> adminRepository.acceptBookingRequest(request)
                 AdminBookingDecisionAction.Reject -> adminRepository.rejectBookingRequest(request)
+                AdminBookingDecisionAction.Start -> adminRepository.startBookingRequest(request)
                 AdminBookingDecisionAction.Complete -> adminRepository.completeBookingRequest(request)
             }
             if (currentAuthenticatedSessionSnapshot() != requestedSession) {
@@ -436,6 +447,7 @@ internal class AdminBookingsViewModel(
                     val message = when (action) {
                         AdminBookingDecisionAction.Accept -> "Marcação aceite."
                         AdminBookingDecisionAction.Reject -> "Marcação rejeitada."
+                        AdminBookingDecisionAction.Start -> "Lavagem iniciada."
                         AdminBookingDecisionAction.Complete -> "Marcação concluída."
                     }
                     AdminBookingDecisionUiState.Success(message)
@@ -500,6 +512,7 @@ private fun AdminBookingRequest.toUi(): AdminBookingRequestUi = AdminBookingRequ
     statusLabel = status.toReservationStatusLabel(),
     statusDetail = status.toReservationStatusDetail(
         pendingExpiresAtIso = pendingExpiresAtIso,
+        canStart = canStart,
         canComplete = canComplete,
     ),
     extras = extras.toAdminExtraUi(),
@@ -507,6 +520,7 @@ private fun AdminBookingRequest.toUi(): AdminBookingRequestUi = AdminBookingRequ
     createdAt = createdAtIso.toDateTimeLabel() ?: "Data a confirmar",
     expiresAt = pendingExpiresAtIso?.toDateTimeLabel() ?: "Sem expiração automática",
     loyaltyRewardApplied = loyaltyRewardApplied,
+    canStart = canStart,
     canComplete = canComplete,
     auditLabels = decisionAuditLabels(),
 )
@@ -537,6 +551,7 @@ private fun AdminError.toAdminAccessState(): AdminAccessUiState {
 private fun AdminBookingRequest.decisionAuditLabels(): List<String> {
     return listOfNotNull(
         decisionAuditLabel("Aceite", acceptedAtIso, acceptedByUid),
+        decisionAuditLabel("Iniciada", startedAtIso, startedByUid),
         decisionAuditLabel("Rejeitada", rejectedAtIso, rejectedByUid),
         decisionAuditLabel("Concluída", completedAtIso, completedByUid),
     )
@@ -615,13 +630,14 @@ private fun String.toReservationStatusLabel(): String {
     ) {
         "pending", "novo" -> "Pendente"
         "confirmed", "confirmado" -> "Confirmada"
-        "in_progress", "em_execucao", "em_execução" -> "Em execução"
+        "in_progress", "em_execucao", "em_execução" -> "A decorrer"
         else -> "Estado a confirmar"
     }
 }
 
 private fun String.toReservationStatusDetail(
     pendingExpiresAtIso: String?,
+    canStart: Boolean,
     canComplete: Boolean,
 ): String {
     val normalized = trim()
@@ -631,8 +647,12 @@ private fun String.toReservationStatusDetail(
     return when (normalized) {
         "pending", "novo" -> pendingExpiresAtIso?.toDateTimeLabel()?.let { "Expira $it" }
             ?: "Sem expiração automática"
-        "confirmed", "confirmado" -> if (canComplete) "Pronta a concluir" else "Aceite"
-        "in_progress", "em_execucao", "em_execução" -> if (canComplete) "Pronta a concluir" else "Em execução"
+        "confirmed", "confirmado" -> when {
+            canComplete -> "Pronta a concluir"
+            canStart -> "Pronta a iniciar"
+            else -> "Aceite"
+        }
+        "in_progress", "em_execucao", "em_execução" -> if (canComplete) "Pronta a concluir" else "A decorrer"
         else -> ""
     }
 }

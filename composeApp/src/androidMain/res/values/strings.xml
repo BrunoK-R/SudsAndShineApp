@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">SudsAndShine</string>
+    <string name="notification_channel_name">Suds notifications</string>
+    <string name="notification_channel_description">Booking updates, reminders, rewards, and account notifications.</string>
 </resources>
