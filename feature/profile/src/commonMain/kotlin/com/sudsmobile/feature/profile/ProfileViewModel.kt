@@ -22,6 +22,8 @@ import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfileError
 import com.sudsmobile.data.profile.UserProfileMutationResult
+import com.sudsmobile.data.profile.UserProfilePhotoRepository
+import com.sudsmobile.data.profile.UserProfilePhotoSaveRequest
 import com.sudsmobile.data.profile.UserProfileRepository
 import com.sudsmobile.data.profile.UserProfileResult
 import com.sudsmobile.data.profile.UserProfileSaveRequest
@@ -84,6 +86,28 @@ internal sealed interface ProfilePreferencesUiState {
     ) : ProfilePreferencesUiState
 }
 
+internal sealed interface ProfilePhotoUiState {
+    data object Idle : ProfilePhotoUiState
+    data class Saving(
+        val previewImageBytes: ByteArray?,
+        val hidesStoredPhoto: Boolean,
+    ) : ProfilePhotoUiState
+    data class Saved(
+        val previewImageBytes: ByteArray?,
+        val hidesStoredPhoto: Boolean,
+        val message: String,
+    ) : ProfilePhotoUiState
+    data class Error(
+        val message: String,
+        val retryable: Boolean,
+    ) : ProfilePhotoUiState
+}
+
+private sealed interface ProfilePhotoMutation {
+    data class Upload(val imageBytes: ByteArray, val mimeType: String) : ProfilePhotoMutation
+    data object Remove : ProfilePhotoMutation
+}
+
 internal class ProfileViewModel(
     private val authRepository: AuthRepository,
     private val bookingRepository: BookingRepository,
@@ -94,6 +118,7 @@ internal class ProfileViewModel(
     private val userProfileChangeNotifier: UserProfileChangeNotifier = MutableUserProfileChangeNotifier(),
     private val notificationRepository: NotificationRepository? = null,
     private val notificationDeviceRegistrar: NotificationDeviceRegistrar? = null,
+    private val userProfilePhotoRepository: UserProfilePhotoRepository = UnavailableUserProfilePhotoRepository,
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
@@ -103,6 +128,8 @@ internal class ProfileViewModel(
     val statsState: StateFlow<ProfileStatsUiState> = _statsState.asStateFlow()
     private val _preferencesState = MutableStateFlow<ProfilePreferencesUiState>(ProfilePreferencesUiState.Idle)
     val preferencesState: StateFlow<ProfilePreferencesUiState> = _preferencesState.asStateFlow()
+    private val _profilePhotoState = MutableStateFlow<ProfilePhotoUiState>(ProfilePhotoUiState.Idle)
+    val profilePhotoState: StateFlow<ProfilePhotoUiState> = _profilePhotoState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedBookingRevision: Long? = null
     private var loadedVehicleRevision: Long? = null
@@ -116,6 +143,8 @@ internal class ProfileViewModel(
     private var loadingPreferencesProfileRevision: Long? = null
     private var preferencesRequestSequence: Long = 0
     private var signOutInProgress: Boolean = false
+    private var lastProfilePhotoMutation: ProfilePhotoMutation? = null
+    private var profilePhotoOwnerUid: String? = null
 
     fun loadStats() {
         val session = when (val currentSessionState = sessionState.value) {
@@ -281,6 +310,99 @@ internal class ProfileViewModel(
         updatePreferences { it.copy(photoUrl = photoUrl) }
     }
 
+    fun updateProfilePhoto(
+        imageBytes: ByteArray,
+        mimeType: String = "image/jpeg",
+    ) {
+        mutateProfilePhoto(
+            ProfilePhotoMutation.Upload(
+                imageBytes = imageBytes.copyOf(),
+                mimeType = mimeType,
+            ),
+        )
+    }
+
+    fun removeProfilePhoto() {
+        mutateProfilePhoto(ProfilePhotoMutation.Remove)
+    }
+
+    fun retryProfilePhotoMutation() {
+        val mutation = lastProfilePhotoMutation ?: return
+        mutateProfilePhoto(mutation)
+    }
+
+    fun dismissProfilePhotoError() {
+        if (_profilePhotoState.value is ProfilePhotoUiState.Error) {
+            _profilePhotoState.value = ProfilePhotoUiState.Idle
+            lastProfilePhotoMutation = null
+        }
+    }
+
+    private fun mutateProfilePhoto(mutation: ProfilePhotoMutation) {
+        if (_profilePhotoState.value is ProfilePhotoUiState.Saving) return
+        val session = sessionState.value as? AuthSessionState.Authenticated
+        if (session == null) {
+            _profilePhotoState.value = ProfilePhotoUiState.Error(
+                message = "Inicie sessão para alterar a foto de perfil.",
+                retryable = false,
+            )
+            return
+        }
+        val requestedUid = session.session.user.uid
+        val previewImageBytes = (mutation as? ProfilePhotoMutation.Upload)?.imageBytes
+        val hidesStoredPhoto = mutation is ProfilePhotoMutation.Remove
+        lastProfilePhotoMutation = mutation
+        profilePhotoOwnerUid = requestedUid
+        _profilePhotoState.value = ProfilePhotoUiState.Saving(
+            previewImageBytes = previewImageBytes,
+            hidesStoredPhoto = hidesStoredPhoto,
+        )
+
+        viewModelScope.launch {
+            if (!preferencesSessionStillMatches(requestedUid)) {
+                clearProfilePhotoMutationState()
+                return@launch
+            }
+            val result = when (mutation) {
+                is ProfilePhotoMutation.Upload -> userProfilePhotoRepository.updateMyProfilePhoto(
+                    UserProfilePhotoSaveRequest(
+                        imageBytes = mutation.imageBytes,
+                        mimeType = mutation.mimeType,
+                    ),
+                )
+                ProfilePhotoMutation.Remove -> userProfilePhotoRepository.removeMyProfilePhoto()
+            }
+            if (!preferencesSessionStillMatches(requestedUid)) {
+                clearProfilePhotoMutationState()
+                return@launch
+            }
+
+            when (result) {
+                is UserProfileMutationResult.Success -> {
+                    loadedPreferencesUid = requestedUid
+                    loadedProfileRevision = profileRevision.value
+                    _preferencesState.value = ProfilePreferencesUiState.Loaded(result.profile.toPreferencesUi())
+                    _profilePhotoState.value = ProfilePhotoUiState.Saved(
+                        previewImageBytes = previewImageBytes,
+                        hidesStoredPhoto = hidesStoredPhoto,
+                        message = if (hidesStoredPhoto) {
+                            "Foto de perfil removida."
+                        } else {
+                            "Foto de perfil atualizada."
+                        },
+                    )
+                    lastProfilePhotoMutation = null
+                }
+                is UserProfileMutationResult.Failure -> {
+                    _profilePhotoState.value = ProfilePhotoUiState.Error(
+                        message = result.error.toProfilePhotoMessage(),
+                        retryable = result.error.isRetryableProfilePhotoError(),
+                    )
+                }
+            }
+        }
+    }
+
     fun retryPreferenceSave() {
         updatePreferences { it }
     }
@@ -353,6 +475,7 @@ internal class ProfileViewModel(
             AuthSessionState.Restoring -> {
                 clearLoadedStats()
                 clearLoadedPreferences()
+                clearProfilePhotoMutationState()
                 _statsState.value = ProfileStatsUiState.Loading
                 _preferencesState.value = ProfilePreferencesUiState.Loading
                 return
@@ -360,6 +483,7 @@ internal class ProfileViewModel(
             is AuthSessionState.RestoreFailed -> {
                 clearLoadedStats()
                 clearLoadedPreferences()
+                clearProfilePhotoMutationState()
                 _statsState.value = currentSessionState.error.toProfileStatsErrorState()
                 _preferencesState.value = currentSessionState.error.toProfilePreferencesErrorState()
                 return
@@ -367,11 +491,16 @@ internal class ProfileViewModel(
             AuthSessionState.Unauthenticated -> {
                 clearLoadedStats()
                 clearLoadedPreferences()
+                clearProfilePhotoMutationState()
                 _statsState.value = ProfileStatsUiState.Unauthenticated
                 _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
                 return
             }
             is AuthSessionState.Authenticated -> currentSessionState
+        }
+
+        if (profilePhotoOwnerUid != null && profilePhotoOwnerUid != session.session.user.uid) {
+            clearProfilePhotoMutationState()
         }
 
         refreshStatsForSession(session)
@@ -415,6 +544,7 @@ internal class ProfileViewModel(
     fun signOut() {
         clearLoadedStats()
         clearLoadedPreferences()
+        clearProfilePhotoMutationState()
         _statsState.value = ProfileStatsUiState.Unauthenticated
         _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
 
@@ -479,6 +609,12 @@ internal class ProfileViewModel(
     private fun clearLoadingPreferencesRequest() {
         loadingPreferencesUid = null
         loadingPreferencesProfileRevision = null
+    }
+
+    private fun clearProfilePhotoMutationState() {
+        _profilePhotoState.value = ProfilePhotoUiState.Idle
+        lastProfilePhotoMutation = null
+        profilePhotoOwnerUid = null
     }
 
     private fun preferencesSessionStillMatches(uid: String): Boolean {
@@ -635,6 +771,33 @@ private fun UserProfileError.toPreferenceSaveState(
         is UserProfileError.Unavailable,
         is UserProfileError.Backend -> ProfilePreferencesUiState.SaveError(preferences, message, retryable = true)
     }
+}
+
+private fun UserProfileError.toProfilePhotoMessage(): String {
+    return when (this) {
+        is UserProfileError.Validation -> message
+        is UserProfileError.Unauthenticated -> "Inicie sessão para alterar a foto de perfil."
+        is UserProfileError.Permission -> "Não tem permissões para alterar esta foto de perfil."
+        is UserProfileError.Unavailable,
+        is UserProfileError.Backend -> "Não foi possível guardar a foto de perfil. Tente novamente."
+    }
+}
+
+private fun UserProfileError.isRetryableProfilePhotoError(): Boolean {
+    return this is UserProfileError.Unavailable || this is UserProfileError.Backend
+}
+
+private object UnavailableUserProfilePhotoRepository : UserProfilePhotoRepository {
+    override suspend fun updateMyProfilePhoto(
+        request: UserProfilePhotoSaveRequest,
+    ): UserProfileMutationResult = UserProfileMutationResult.Failure(
+        UserProfileError.Unavailable("A atualização da foto de perfil está indisponível."),
+    )
+
+    override suspend fun removeMyProfilePhoto(): UserProfileMutationResult =
+        UserProfileMutationResult.Failure(
+            UserProfileError.Unavailable("A atualização da foto de perfil está indisponível."),
+        )
 }
 
 private fun AuthError.toProfileStatsErrorState(): ProfileStatsUiState.Error {

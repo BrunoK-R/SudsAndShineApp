@@ -169,6 +169,9 @@ data class FirebaseFunctionsConfig(
     val updateMyProfileUrl: String
         get() = functionUrl("updateMyProfile")
 
+    val updateMyProfilePhotoUrl: String
+        get() = functionUrl("updateMyProfilePhoto")
+
     val getMyNotificationPreferencesUrl: String
         get() = functionUrl("getMyNotificationPreferences")
 

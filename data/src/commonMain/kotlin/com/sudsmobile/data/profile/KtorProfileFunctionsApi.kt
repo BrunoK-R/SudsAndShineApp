@@ -10,11 +10,13 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 class KtorProfileFunctionsApi(
     private val httpClient: HttpClient,
     private val config: FirebaseFunctionsConfig,
-) : ProfileFunctionsApi {
+) : ProfileFunctionsApi, ProfilePhotoFunctionsApi {
     override suspend fun getMyProfile(idToken: String): UserProfileResult {
         return try {
             val response = httpClient.post(config.getMyProfileUrl) {
@@ -66,6 +68,54 @@ class KtorProfileFunctionsApi(
         }
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
+    override suspend fun updateMyProfilePhoto(
+        request: UserProfilePhotoSaveRequest,
+        idToken: String,
+    ): UserProfileMutationResult {
+        return mutateProfilePhoto(
+            payload = ProfilePhotoPayload(
+                imageBase64 = Base64.Default.encode(request.imageBytes),
+                mimeType = request.mimeType,
+            ),
+            idToken = idToken,
+        )
+    }
+
+    override suspend fun removeMyProfilePhoto(idToken: String): UserProfileMutationResult {
+        return mutateProfilePhoto(
+            payload = ProfilePhotoPayload(remove = true),
+            idToken = idToken,
+        )
+    }
+
+    private suspend fun mutateProfilePhoto(
+        payload: ProfilePhotoPayload,
+        idToken: String,
+    ): UserProfileMutationResult {
+        return try {
+            val response = httpClient.post(config.updateMyProfilePhotoUrl) {
+                callableHeaders(idToken)
+                setBody(CallableProfilePhotoRequest(data = payload))
+            }
+            val body = response.body<CallableProfileResponse>()
+            val error = body.error
+            when {
+                error != null -> UserProfileMutationResult.Failure(error.toProfileError())
+                body.result?.profile != null -> UserProfileMutationResult.Success(body.result.profile.toUserProfile())
+                else -> UserProfileMutationResult.Failure(
+                    UserProfileError.Backend("A resposta da foto de perfil veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            UserProfileMutationResult.Failure(
+                UserProfileError.Unavailable("Não foi possível guardar a foto de perfil. Tente novamente."),
+            )
+        }
+    }
+
     private fun io.ktor.client.request.HttpRequestBuilder.callableHeaders(idToken: String) {
         header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
         header(HttpHeaders.Authorization, "Bearer $idToken")
@@ -80,6 +130,18 @@ private data class CallableProfileRequest(
 @Serializable
 private data class CallableProfileSaveRequest(
     val data: ProfileSavePayload,
+)
+
+@Serializable
+private data class CallableProfilePhotoRequest(
+    val data: ProfilePhotoPayload,
+)
+
+@Serializable
+private data class ProfilePhotoPayload(
+    val imageBase64: String? = null,
+    val mimeType: String? = null,
+    val remove: Boolean = false,
 )
 
 @Serializable

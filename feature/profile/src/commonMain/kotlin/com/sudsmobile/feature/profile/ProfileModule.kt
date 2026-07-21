@@ -16,6 +16,7 @@ val profileModule = module {
             userProfileChangeNotifier = get(),
             notificationRepository = get(),
             notificationDeviceRegistrar = get(),
+            userProfilePhotoRepository = get(),
         )
     }
     viewModelOf(::ProfileHistoryViewModel)

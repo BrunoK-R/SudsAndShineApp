@@ -18,6 +18,11 @@ data class UserProfileSaveRequest(
     val photoUrl: String = "",
 )
 
+data class UserProfilePhotoSaveRequest(
+    val imageBytes: ByteArray,
+    val mimeType: String = "image/jpeg",
+)
+
 sealed interface UserProfileResult {
     data class Success(val profile: UserProfile) : UserProfileResult
     data class Failure(val error: UserProfileError) : UserProfileResult
@@ -41,4 +46,9 @@ sealed interface UserProfileError {
 interface UserProfileRepository {
     suspend fun getMyProfile(): UserProfileResult
     suspend fun updateMyProfile(request: UserProfileSaveRequest): UserProfileMutationResult
+}
+
+interface UserProfilePhotoRepository {
+    suspend fun updateMyProfilePhoto(request: UserProfilePhotoSaveRequest): UserProfileMutationResult
+    suspend fun removeMyProfilePhoto(): UserProfileMutationResult
 }

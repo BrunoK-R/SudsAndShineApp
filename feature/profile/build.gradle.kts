@@ -53,6 +53,7 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.exifinterface)
             implementation(libs.ktor.android.client)
         }
         iosMain.dependencies {

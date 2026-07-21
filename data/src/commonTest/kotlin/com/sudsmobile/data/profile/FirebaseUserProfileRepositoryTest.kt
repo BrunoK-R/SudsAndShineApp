@@ -72,9 +72,67 @@ class FirebaseUserProfileRepositoryTest {
         assertIs<UserProfileError.Validation>(result.error)
         assertEquals(0, api.updateCalls)
     }
+
+    @Test
+    fun uploadsProcessedJpegAndNotifiesProfileObservers() = runTest {
+        val api = RecordingProfileFunctionsApi()
+        val profileChangeNotifier = MutableUserProfileChangeNotifier()
+        val repository = FirebaseUserProfileRepository(
+            api = api,
+            authRepository = FakeProfileAuthRepository(authenticated = true),
+            profileChangeNotifier = profileChangeNotifier,
+        )
+        val imageBytes = byteArrayOf(1, 2, 3, 4)
+
+        val result = repository.updateMyProfilePhoto(
+            UserProfilePhotoSaveRequest(imageBytes = imageBytes, mimeType = " IMAGE/JPEG "),
+        )
+
+        assertIs<UserProfileMutationResult.Success>(result)
+        assertEquals("id-token-1", api.lastPhotoIdToken)
+        assertEquals(imageBytes.toList(), api.lastPhotoRequest?.imageBytes?.toList())
+        assertEquals("image/jpeg", api.lastPhotoRequest?.mimeType)
+        assertEquals(1, api.photoUpdateCalls)
+        assertEquals(1L, profileChangeNotifier.revision.value)
+    }
+
+    @Test
+    fun rejectsOversizedProfilePhotoBeforeCallingApi() = runTest {
+        val api = RecordingProfileFunctionsApi()
+        val repository = FirebaseUserProfileRepository(
+            api = api,
+            authRepository = FakeProfileAuthRepository(authenticated = true),
+        )
+
+        val result = repository.updateMyProfilePhoto(
+            UserProfilePhotoSaveRequest(imageBytes = ByteArray(1_000_001)),
+        )
+
+        val failure = assertIs<UserProfileMutationResult.Failure>(result)
+        assertIs<UserProfileError.Validation>(failure.error)
+        assertEquals(0, api.photoUpdateCalls)
+    }
+
+    @Test
+    fun removesProfilePhotoAndNotifiesProfileObservers() = runTest {
+        val api = RecordingProfileFunctionsApi()
+        val profileChangeNotifier = MutableUserProfileChangeNotifier()
+        val repository = FirebaseUserProfileRepository(
+            api = api,
+            authRepository = FakeProfileAuthRepository(authenticated = true),
+            profileChangeNotifier = profileChangeNotifier,
+        )
+
+        val result = repository.removeMyProfilePhoto()
+
+        assertIs<UserProfileMutationResult.Success>(result)
+        assertEquals("id-token-1", api.lastPhotoIdToken)
+        assertEquals(1, api.photoRemoveCalls)
+        assertEquals(1L, profileChangeNotifier.revision.value)
+    }
 }
 
-private class RecordingProfileFunctionsApi : ProfileFunctionsApi {
+private class RecordingProfileFunctionsApi : ProfileFunctionsApi, ProfilePhotoFunctionsApi {
     var loadCalls: Int = 0
         private set
     var updateCalls: Int = 0
@@ -82,6 +140,14 @@ private class RecordingProfileFunctionsApi : ProfileFunctionsApi {
     var lastRequest: UserProfileSaveRequest? = null
         private set
     var lastIdToken: String? = null
+        private set
+    var photoUpdateCalls: Int = 0
+        private set
+    var photoRemoveCalls: Int = 0
+        private set
+    var lastPhotoRequest: UserProfilePhotoSaveRequest? = null
+        private set
+    var lastPhotoIdToken: String? = null
         private set
 
     override suspend fun getMyProfile(idToken: String): UserProfileResult {
@@ -105,6 +171,22 @@ private class RecordingProfileFunctionsApi : ProfileFunctionsApi {
                 appointmentReminderOptIn = request.appointmentReminderOptIn,
             ),
         )
+    }
+
+    override suspend fun updateMyProfilePhoto(
+        request: UserProfilePhotoSaveRequest,
+        idToken: String,
+    ): UserProfileMutationResult {
+        photoUpdateCalls += 1
+        lastPhotoRequest = request
+        lastPhotoIdToken = idToken
+        return UserProfileMutationResult.Success(profile(photoUrl = "https://example.com/avatar.jpg"))
+    }
+
+    override suspend fun removeMyProfilePhoto(idToken: String): UserProfileMutationResult {
+        photoRemoveCalls += 1
+        lastPhotoIdToken = idToken
+        return UserProfileMutationResult.Success(profile(photoUrl = ""))
     }
 }
 
@@ -160,6 +242,7 @@ private fun profile(
     phoneNumber: String = "913005855",
     marketingOptIn: Boolean = false,
     appointmentReminderOptIn: Boolean = false,
+    photoUrl: String = "",
 ): UserProfile = UserProfile(
     uid = "uid-1",
     email = "bruno@example.com",
@@ -167,4 +250,5 @@ private fun profile(
     phoneNumber = phoneNumber,
     marketingOptIn = marketingOptIn,
     appointmentReminderOptIn = appointmentReminderOptIn,
+    photoUrl = photoUrl,
 )

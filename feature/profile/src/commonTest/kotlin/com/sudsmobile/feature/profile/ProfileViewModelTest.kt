@@ -34,7 +34,10 @@ import com.sudsmobile.data.notification.NotificationTokenRegistrationRequest
 import com.sudsmobile.data.notification.NotificationTokenRegistrationResult
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfile
+import com.sudsmobile.data.profile.UserProfileError
 import com.sudsmobile.data.profile.UserProfileMutationResult
+import com.sudsmobile.data.profile.UserProfilePhotoRepository
+import com.sudsmobile.data.profile.UserProfilePhotoSaveRequest
 import com.sudsmobile.data.profile.UserProfileRepository
 import com.sudsmobile.data.profile.UserProfileResult
 import com.sudsmobile.data.profile.UserProfileSaveRequest
@@ -780,6 +783,118 @@ class ProfileViewModelTest {
     }
 
     @Test
+    fun updateProfilePhotoShowsOptimisticPreviewAndStoresReturnedUrl() = runTest {
+        val imageBytes = byteArrayOf(10, 20, 30)
+        val photoRepository = ProfilePhotoFakeRepository(
+            updateResult = UserProfileMutationResult.Success(
+                profilePreferencesProfile(
+                    marketingOptIn = true,
+                    appointmentReminderOptIn = true,
+                    photoUrl = "https://example.com/profile/current.jpg",
+                ),
+            ),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(
+                    profilePreferencesProfile(marketingOptIn = true, appointmentReminderOptIn = true),
+                ),
+            ),
+            userProfilePhotoRepository = photoRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.updateProfilePhoto(imageBytes)
+
+        val saving = assertIs<ProfilePhotoUiState.Saving>(viewModel.profilePhotoState.value)
+        assertEquals(imageBytes.toList(), saving.previewImageBytes?.toList())
+        assertEquals(false, saving.hidesStoredPhoto)
+        runCurrent()
+
+        val saved = assertIs<ProfilePhotoUiState.Saved>(viewModel.profilePhotoState.value)
+        val preferences = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(imageBytes.toList(), saved.previewImageBytes?.toList())
+        assertEquals("https://example.com/profile/current.jpg", preferences.preferences.photoUrl)
+        assertEquals(imageBytes.toList(), photoRepository.lastRequest?.imageBytes?.toList())
+        assertEquals("image/jpeg", photoRepository.lastRequest?.mimeType)
+    }
+
+    @Test
+    fun failedProfilePhotoUploadRollsBackToStoredPhotoAndCanRetry() = runTest {
+        val storedPhotoUrl = "https://example.com/profile/previous.jpg"
+        val photoRepository = ProfilePhotoFakeRepository(
+            updateResult = UserProfileMutationResult.Failure(
+                UserProfileError.Unavailable("Upload indisponível."),
+            ),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile(photoUrl = storedPhotoUrl)),
+            ),
+            userProfilePhotoRepository = photoRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.updateProfilePhoto(byteArrayOf(1, 2, 3))
+        runCurrent()
+
+        val error = assertIs<ProfilePhotoUiState.Error>(viewModel.profilePhotoState.value)
+        val preferences = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(true, error.retryable)
+        assertEquals(storedPhotoUrl, preferences.preferences.photoUrl)
+        assertEquals(1, photoRepository.updateCalls)
+
+        viewModel.retryProfilePhotoMutation()
+        runCurrent()
+        assertEquals(2, photoRepository.updateCalls)
+    }
+
+    @Test
+    fun removeProfilePhotoOptimisticallyHidesStoredImage() = runTest {
+        val photoRepository = ProfilePhotoFakeRepository(
+            removeResult = UserProfileMutationResult.Success(profilePreferencesProfile(photoUrl = "")),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = ProfileStatsFakeAuthRepository(authenticated = true),
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile(photoUrl = "https://example.com/old.jpg")),
+            ),
+            userProfilePhotoRepository = photoRepository,
+        )
+
+        viewModel.loadPreferences()
+        runCurrent()
+        viewModel.removeProfilePhoto()
+
+        val saving = assertIs<ProfilePhotoUiState.Saving>(viewModel.profilePhotoState.value)
+        assertEquals(true, saving.hidesStoredPhoto)
+        assertEquals(null, saving.previewImageBytes)
+        runCurrent()
+
+        val saved = assertIs<ProfilePhotoUiState.Saved>(viewModel.profilePhotoState.value)
+        val preferences = assertIs<ProfilePreferencesUiState.Loaded>(viewModel.preferencesState.value)
+        assertEquals(true, saved.hidesStoredPhoto)
+        assertEquals("", preferences.preferences.photoUrl)
+        assertEquals(1, photoRepository.removeCalls)
+    }
+
+    @Test
     fun updateMarketingOptInValidatesIncompleteProfileBeforeSaving() = runTest {
         val profileRepository = ProfileStatsFakeProfileRepository(
             UserProfileResult.Success(profilePreferencesProfile(phoneNumber = "")),
@@ -979,6 +1094,35 @@ private class ProfileStatsFakeProfileRepository(
         updateCalls += 1
         lastRequest = request
         return mutationResult
+    }
+}
+
+private class ProfilePhotoFakeRepository(
+    private val updateResult: UserProfileMutationResult = UserProfileMutationResult.Success(
+        profilePreferencesProfile(photoUrl = "https://example.com/profile/avatar.jpg"),
+    ),
+    private val removeResult: UserProfileMutationResult = UserProfileMutationResult.Success(
+        profilePreferencesProfile(photoUrl = ""),
+    ),
+) : UserProfilePhotoRepository {
+    var updateCalls: Int = 0
+        private set
+    var removeCalls: Int = 0
+        private set
+    var lastRequest: UserProfilePhotoSaveRequest? = null
+        private set
+
+    override suspend fun updateMyProfilePhoto(
+        request: UserProfilePhotoSaveRequest,
+    ): UserProfileMutationResult {
+        updateCalls += 1
+        lastRequest = request
+        return updateResult
+    }
+
+    override suspend fun removeMyProfilePhoto(): UserProfileMutationResult {
+        removeCalls += 1
+        return removeResult
     }
 }
 

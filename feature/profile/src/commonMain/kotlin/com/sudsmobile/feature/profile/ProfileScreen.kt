@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
@@ -46,7 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -56,7 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -234,6 +232,7 @@ fun ProfileScreen(
     val profileRevision by viewModel.profileRevision.collectAsStateWithLifecycle()
     val statsState by viewModel.statsState.collectAsStateWithLifecycle()
     val preferencesState by viewModel.preferencesState.collectAsStateWithLifecycle()
+    val profilePhotoState by viewModel.profilePhotoState.collectAsStateWithLifecycle()
     val businessInfoState by contactViewModel.businessInfoState.collectAsStateWithLifecycle()
     val notificationDeviceState by notificationPreferencesViewModel.deviceState.collectAsStateWithLifecycle()
 
@@ -256,6 +255,7 @@ fun ProfileScreen(
         adminAccessState = adminAccessState,
         statsState = statsState,
         preferencesState = preferencesState,
+        profilePhotoState = profilePhotoState,
         notificationDeviceState = notificationDeviceState,
         businessInfoState = businessInfoState,
         onRequestSignIn = onRequestSignIn,
@@ -265,7 +265,10 @@ fun ProfileScreen(
         onRetryPreferenceSave = viewModel::retryPreferenceSave,
         onRetryAdminAccess = { adminAccessViewModel.refreshForSession(force = true) },
         onRetryBusinessInfo = { contactViewModel.loadBusinessInfo(force = true) },
-        onProfilePhotoUrlChange = viewModel::updateProfilePhotoUrl,
+        onProfilePhotoChange = viewModel::updateProfilePhoto,
+        onRemoveProfilePhoto = viewModel::removeProfilePhoto,
+        onRetryProfilePhoto = viewModel::retryProfilePhotoMutation,
+        onDismissProfilePhotoError = viewModel::dismissProfilePhotoError,
         onMarketingOptInChange = viewModel::updateMarketingOptIn,
         onAppointmentReminderOptInChange = viewModel::updateAppointmentReminderOptIn,
         onOpenPersonalData = onOpenPersonalData,
@@ -293,6 +296,7 @@ private fun ProfileScreenContent(
     adminAccessState: AdminAccessUiState,
     statsState: ProfileStatsUiState,
     preferencesState: ProfilePreferencesUiState,
+    profilePhotoState: ProfilePhotoUiState,
     notificationDeviceState: NotificationDeviceUiState,
     businessInfoState: ContactBusinessInfoUiState,
     onRequestSignIn: () -> Unit,
@@ -302,7 +306,10 @@ private fun ProfileScreenContent(
     onRetryPreferenceSave: () -> Unit,
     onRetryAdminAccess: () -> Unit,
     onRetryBusinessInfo: () -> Unit,
-    onProfilePhotoUrlChange: (String) -> Unit,
+    onProfilePhotoChange: (ByteArray, String) -> Unit,
+    onRemoveProfilePhoto: () -> Unit,
+    onRetryProfilePhoto: () -> Unit,
+    onDismissProfilePhotoError: () -> Unit,
     onMarketingOptInChange: (Boolean) -> Unit,
     onAppointmentReminderOptInChange: (Boolean) -> Unit,
     onOpenPersonalData: () -> Unit = {},
@@ -325,25 +332,23 @@ private fun ProfileScreenContent(
     val isRestoringSession = sessionState == AuthSessionState.Restoring
     val restoreFailedMessage = (sessionState as? AuthSessionState.RestoreFailed)?.error?.message
     val uriHandler = LocalUriHandler.current
-    var editingProfilePhoto by rememberSaveable { mutableStateOf(false) }
-    var profilePhotoDraft by rememberSaveable { mutableStateOf("") }
-    var profilePhotoSavePending by rememberSaveable { mutableStateOf(false) }
-    val profilePhotoSaving = profilePhotoSavePending && preferencesState is ProfilePreferencesUiState.Saving
-    val profilePhotoSaveError = if (profilePhotoSavePending) {
-        (preferencesState as? ProfilePreferencesUiState.SaveError)?.message
-    } else {
-        null
-    }
-
-    LaunchedEffect(preferencesState, profilePhotoSavePending, profilePhotoDraft) {
-        if (!profilePhotoSavePending) return@LaunchedEffect
-        val savedPhotoUrl = (preferencesState as? ProfilePreferencesUiState.Saved)
-            ?.preferences
-            ?.photoUrl
-            ?.trim()
-        if (savedPhotoUrl != null && savedPhotoUrl == profilePhotoDraft.trim()) {
-            profilePhotoSavePending = false
-            editingProfilePhoto = false
+    var pendingCropImage by remember { mutableStateOf<PickedProfileImage?>(null) }
+    var showProfilePhotoActions by remember { mutableStateOf(false) }
+    var localProfilePhotoError by remember { mutableStateOf<String?>(null) }
+    val profilePhotoSaving = profilePhotoState is ProfilePhotoUiState.Saving
+    val profileImagePicker = rememberProfileImagePicker(
+        onImagePicked = { pickedImage ->
+            showProfilePhotoActions = false
+            pendingCropImage = pickedImage
+        },
+        onImagePickFailed = { message ->
+            showProfilePhotoActions = false
+            localProfilePhotoError = message
+        },
+    )
+    val launchProfileImagePicker = {
+        if (!profileImagePicker.launch()) {
+            localProfilePhotoError = "Não foi possível abrir a galeria."
         }
     }
 
@@ -359,13 +364,10 @@ private fun ProfileScreenContent(
                 user = authenticatedUser,
                 statsState = statsState,
                 preferencesState = preferencesState,
+                profilePhotoState = profilePhotoState,
                 onRetryStats = onRetryStats,
                 onOpenRewards = onOpenRewards,
-                onEditPhoto = { currentPhotoUrl ->
-                    profilePhotoDraft = currentPhotoUrl
-                    profilePhotoSavePending = false
-                    editingProfilePhoto = true
-                },
+                onEditPhoto = { showProfilePhotoActions = true },
             )
         } else if (isRestoringSession) {
             RestoringProfileHeader()
@@ -434,29 +436,44 @@ private fun ProfileScreenContent(
         }
     }
 
-    if (editingProfilePhoto) {
-        ProfilePhotoUrlDialog(
-            photoUrl = profilePhotoDraft,
+    if (showProfilePhotoActions) {
+        ProfilePhotoActionsDialog(
+            hasPhoto = profilePhotoState.hasPhotoOverride() ?: preferencesState.photoUrlOrBlank().isNotBlank(),
             saving = profilePhotoSaving,
-            errorMessage = profilePhotoSaveError,
-            onPhotoUrlChange = {
-                profilePhotoDraft = it.take(MaxProfilePhotoUrlLength)
-                profilePhotoSavePending = false
-            },
-            onDismiss = {
-                if (!profilePhotoSaving) {
-                    profilePhotoSavePending = false
-                    editingProfilePhoto = false
-                }
-            },
-            onSave = {
-                profilePhotoSavePending = true
-                onProfilePhotoUrlChange(profilePhotoDraft)
-            },
+            onChooseFromGallery = launchProfileImagePicker,
             onRemove = {
-                profilePhotoDraft = ""
-                profilePhotoSavePending = true
-                onProfilePhotoUrlChange("")
+                showProfilePhotoActions = false
+                onRemoveProfilePhoto()
+            },
+            onDismiss = { if (!profilePhotoSaving) showProfilePhotoActions = false },
+        )
+    }
+
+    pendingCropImage?.let { sourceImage ->
+        ProfileAvatarCropDialog(
+            sourceImage = sourceImage,
+            onDismissRequest = { pendingCropImage = null },
+            onCropApplied = { croppedBytes ->
+                pendingCropImage = null
+                onProfilePhotoChange(croppedBytes, "image/jpeg")
+            },
+            onCropFailed = { message ->
+                pendingCropImage = null
+                localProfilePhotoError = message
+            },
+        )
+    }
+
+    val remotePhotoError = profilePhotoState as? ProfilePhotoUiState.Error
+    val photoErrorMessage = localProfilePhotoError ?: remotePhotoError?.message
+    if (photoErrorMessage != null) {
+        ProfilePhotoErrorDialog(
+            message = photoErrorMessage,
+            retryable = localProfilePhotoError == null && remotePhotoError?.retryable == true,
+            onRetry = onRetryProfilePhoto,
+            onDismiss = {
+                localProfilePhotoError = null
+                onDismissProfilePhotoError()
             },
         )
     }
@@ -467,12 +484,17 @@ private fun ProfileHeader(
     user: AuthUser,
     statsState: ProfileStatsUiState,
     preferencesState: ProfilePreferencesUiState,
+    profilePhotoState: ProfilePhotoUiState,
     onRetryStats: () -> Unit,
     onOpenRewards: () -> Unit,
-    onEditPhoto: (String) -> Unit,
+    onEditPhoto: () -> Unit,
 ) {
     val displayName = preferencesState.displayNameOrNull() ?: user.resolvedDisplayName
     val photoUrl = preferencesState.photoUrlOrBlank()
+    val previewImageBytes = profilePhotoState.previewImageBytesOrNull()
+    val hidesStoredPhoto = profilePhotoState.hidesStoredPhoto()
+    val photoModel: Any? = previewImageBytes ?: photoUrl.takeIf { !hidesStoredPhoto && it.isNotBlank() }
+    val photoSaving = profilePhotoState is ProfilePhotoUiState.Saving
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -494,7 +516,7 @@ private fun ProfileHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Box(modifier = Modifier.size(88.dp)) {
+            Box(modifier = Modifier.size(96.dp)) {
                 Surface(
                     modifier = Modifier
                         .size(80.dp)
@@ -504,9 +526,9 @@ private fun ProfileHeader(
                     contentColor = MaterialTheme.colorScheme.onTertiary,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        if (photoUrl.isNotBlank()) {
+                        if (photoModel != null) {
                             AsyncImage(
-                                model = photoUrl,
+                                model = photoModel,
                                 contentDescription = "Foto de perfil",
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
@@ -522,7 +544,7 @@ private fun ProfileHeader(
                 }
                 Surface(
                     modifier = Modifier
-                        .size(34.dp)
+                        .size(48.dp)
                         .align(Alignment.BottomEnd),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -530,14 +552,22 @@ private fun ProfileHeader(
                     shadowElevation = 4.dp,
                 ) {
                     IconButton(
-                        onClick = { onEditPhoto(photoUrl) },
+                        onClick = onEditPhoto,
+                        enabled = !photoSaving,
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Alterar foto",
-                            modifier = Modifier.size(18.dp),
-                        )
+                        if (photoSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = "Alterar foto de perfil",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -1124,23 +1154,13 @@ private fun ProfileRewardBanner(
 }
 
 @Composable
-private fun ProfilePhotoUrlDialog(
-    photoUrl: String,
+private fun ProfilePhotoActionsDialog(
+    hasPhoto: Boolean,
     saving: Boolean,
-    errorMessage: String?,
-    onPhotoUrlChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onSave: () -> Unit,
+    onChooseFromGallery: () -> Unit,
     onRemove: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    val trimmedPhotoUrl = photoUrl.trim()
-    val validationError = if (trimmedPhotoUrl.isNotBlank() && !trimmedPhotoUrl.isValidEditableProfilePhotoUrl()) {
-        "Indique uma URL http:// ou https://."
-    } else {
-        null
-    }
-    val fieldMessage = validationError ?: errorMessage ?: "http:// ou https://"
-    val canSave = !saving && validationError == null
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1151,49 +1171,19 @@ private fun ProfilePhotoUrlDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (trimmedPhotoUrl.isNotBlank()) {
-                    Surface(
-                        modifier = Modifier
-                            .size(112.dp)
-                            .align(Alignment.CenterHorizontally),
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        AsyncImage(
-                            model = trimmedPhotoUrl,
-                            contentDescription = "Pré-visualização da foto",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = photoUrl,
-                    onValueChange = onPhotoUrlChange,
-                    enabled = !saving,
-                    isError = validationError != null || errorMessage != null,
-                    label = { Text("URL da imagem") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    supportingText = {
-                        Text(fieldMessage)
-                    },
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Escolhe uma imagem da galeria e ajusta o enquadramento antes de guardar.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (trimmedPhotoUrl.isNotBlank()) {
+                if (hasPhoto) {
                     OutlinedButton(
                         onClick = onRemove,
                         enabled = !saving,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
                         Text("Remover foto")
                     }
                 }
@@ -1201,8 +1191,8 @@ private fun ProfilePhotoUrlDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = onSave,
-                enabled = canSave,
+                onClick = onChooseFromGallery,
+                enabled = !saving,
             ) {
                 if (saving) {
                     CircularProgressIndicator(
@@ -1211,7 +1201,7 @@ private fun ProfilePhotoUrlDialog(
                     )
                     Spacer(Modifier.width(8.dp))
                 }
-                Text("Guardar", fontWeight = FontWeight.Bold)
+                Text("Escolher da galeria", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -1225,12 +1215,79 @@ private fun ProfilePhotoUrlDialog(
     )
 }
 
+@Composable
+private fun ProfilePhotoErrorDialog(
+    message: String,
+    retryable: Boolean,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Não foi possível alterar a foto",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = { Text(message) },
+        confirmButton = {
+            if (retryable) {
+                TextButton(onClick = onRetry) {
+                    Text("Tentar novamente", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("Fechar", fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = if (retryable) {
+            {
+                TextButton(onClick = onDismiss) {
+                    Text("Fechar")
+                }
+            }
+        } else {
+            null
+        },
+    )
+}
+
 private fun ProfilePreferencesUiState.displayNameOrNull(): String? {
     return preferencesOrNull()?.displayName?.takeIf { it.isNotBlank() }
 }
 
 private fun ProfilePreferencesUiState.photoUrlOrBlank(): String {
     return preferencesOrNull()?.photoUrl?.trim().orEmpty()
+}
+
+private fun ProfilePhotoUiState.previewImageBytesOrNull(): ByteArray? {
+    return when (this) {
+        is ProfilePhotoUiState.Saving -> previewImageBytes
+        is ProfilePhotoUiState.Saved -> previewImageBytes
+        ProfilePhotoUiState.Idle,
+        is ProfilePhotoUiState.Error -> null
+    }
+}
+
+private fun ProfilePhotoUiState.hidesStoredPhoto(): Boolean {
+    return when (this) {
+        is ProfilePhotoUiState.Saving -> hidesStoredPhoto
+        is ProfilePhotoUiState.Saved -> hidesStoredPhoto
+        ProfilePhotoUiState.Idle,
+        is ProfilePhotoUiState.Error -> false
+    }
+}
+
+private fun ProfilePhotoUiState.hasPhotoOverride(): Boolean? {
+    return when (this) {
+        is ProfilePhotoUiState.Saving -> if (hidesStoredPhoto) false else previewImageBytes != null
+        is ProfilePhotoUiState.Saved -> if (hidesStoredPhoto) false else previewImageBytes != null
+        ProfilePhotoUiState.Idle,
+        is ProfilePhotoUiState.Error -> null
+    }
 }
 
 private fun ProfilePreferencesUiState.preferencesOrNull(): ProfilePreferencesUi? {
@@ -1254,16 +1311,6 @@ private fun AuthUser.initials(profileDisplayName: String = displayName): String 
         .take(2)
         .joinToString(separator = "") { it.first().uppercaseChar().toString() }
         .ifBlank { "SS" }
-}
-
-private const val MaxProfilePhotoUrlLength = 2048
-
-private fun String.isValidEditableProfilePhotoUrl(): Boolean {
-    val value = trim()
-    if (value.length !in 1..MaxProfilePhotoUrlLength) return false
-    if (value.any { it.isWhitespace() || it.isISOControl() }) return false
-    return value.startsWith("https://", ignoreCase = true) ||
-        value.startsWith("http://", ignoreCase = true)
 }
 
 @Composable

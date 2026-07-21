@@ -7,3 +7,12 @@ interface ProfileFunctionsApi {
         idToken: String,
     ): UserProfileMutationResult
 }
+
+interface ProfilePhotoFunctionsApi {
+    suspend fun updateMyProfilePhoto(
+        request: UserProfilePhotoSaveRequest,
+        idToken: String,
+    ): UserProfileMutationResult
+
+    suspend fun removeMyProfilePhoto(idToken: String): UserProfileMutationResult
+}

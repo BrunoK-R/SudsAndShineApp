@@ -6,7 +6,8 @@ class FirebaseUserProfileRepository(
     private val api: ProfileFunctionsApi,
     private val authRepository: AuthRepository,
     private val profileChangeNotifier: MutableUserProfileChangeNotifier = MutableUserProfileChangeNotifier(),
-) : UserProfileRepository {
+    private val photoApi: ProfilePhotoFunctionsApi? = api as? ProfilePhotoFunctionsApi,
+) : UserProfileRepository, UserProfilePhotoRepository {
     override suspend fun getMyProfile(): UserProfileResult {
         val idToken = currentIdTokenOrNull()
             ?: return UserProfileResult.Failure(unauthenticatedError())
@@ -31,6 +32,38 @@ class FirebaseUserProfileRepository(
             }
     }
 
+    override suspend fun updateMyProfilePhoto(
+        request: UserProfilePhotoSaveRequest,
+    ): UserProfileMutationResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return UserProfileMutationResult.Failure(unauthenticatedError())
+        val resolvedPhotoApi = photoApi
+            ?: return UserProfileMutationResult.Failure(
+                UserProfileError.Unavailable("A atualização da foto de perfil está indisponível."),
+            )
+        val validationError = validatePhoto(request)
+        if (validationError != null) {
+            return UserProfileMutationResult.Failure(validationError)
+        }
+
+        return resolvedPhotoApi.updateMyProfilePhoto(
+            request = request.copy(mimeType = request.mimeType.trim().lowercase()),
+            idToken = idToken,
+        ).notifyProfileChangedOnSuccess()
+    }
+
+    override suspend fun removeMyProfilePhoto(): UserProfileMutationResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return UserProfileMutationResult.Failure(unauthenticatedError())
+        val resolvedPhotoApi = photoApi
+            ?: return UserProfileMutationResult.Failure(
+                UserProfileError.Unavailable("A atualização da foto de perfil está indisponível."),
+            )
+
+        return resolvedPhotoApi.removeMyProfilePhoto(idToken)
+            .notifyProfileChangedOnSuccess()
+    }
+
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken
 
     private fun validate(request: UserProfileSaveRequest): UserProfileError.Validation? {
@@ -50,6 +83,25 @@ class FirebaseUserProfileRepository(
         }
     }
 
+    private fun validatePhoto(request: UserProfilePhotoSaveRequest): UserProfileError.Validation? {
+        return when {
+            request.imageBytes.isEmpty() ->
+                UserProfileError.Validation("Escolha uma imagem para a foto de perfil.")
+            request.imageBytes.size > MaxProfilePhotoBytes ->
+                UserProfileError.Validation("A foto de perfil é demasiado grande.")
+            request.mimeType.trim().lowercase() != ProfilePhotoMimeType ->
+                UserProfileError.Validation("O formato da foto de perfil não é suportado.")
+            else -> null
+        }
+    }
+
+    private fun UserProfileMutationResult.notifyProfileChangedOnSuccess(): UserProfileMutationResult {
+        if (this is UserProfileMutationResult.Success) {
+            profileChangeNotifier.notifyProfileChanged()
+        }
+        return this
+    }
+
     private fun UserProfileSaveRequest.normalized(): UserProfileSaveRequest = copy(
         displayName = displayName.trim(),
         phoneNumber = phoneNumber.trim(),
@@ -60,6 +112,8 @@ class FirebaseUserProfileRepository(
 private const val MaxDisplayNameLength = 100
 private const val MaxPhoneLength = 32
 private const val MaxProfilePhotoUrlLength = 2048
+private const val MaxProfilePhotoBytes = 1_000_000
+private const val ProfilePhotoMimeType = "image/jpeg"
 private val phoneSeparators = setOf('+', '-', '(', ')', '.', ' ')
 
 private fun String.isValidProfilePhotoUrl(): Boolean {
