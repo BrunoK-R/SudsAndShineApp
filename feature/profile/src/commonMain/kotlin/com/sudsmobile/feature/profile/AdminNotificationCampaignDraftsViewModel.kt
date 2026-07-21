@@ -50,7 +50,7 @@ internal data class AdminNotificationCampaignDraftForm(
     val campaignId: String = "",
     val title: String = "",
     val body: String = "",
-    val targetAudience: String = "all_users",
+    val targetAudience: String = "marketing_opt_in_users",
     val scheduledAtIso: String = "",
     val notes: String = "",
     val pushEnabled: Boolean = true,
@@ -569,7 +569,6 @@ private sealed interface ParsedCampaignDraftRequest {
     data class Invalid(val message: String) : ParsedCampaignDraftRequest
 }
 
-private const val CampaignDraftSendBlockedReason = "campaign-send-not-implemented"
 private const val CampaignDraftSendState = "ready"
 
 private fun List<AdminNotificationCampaignDraft>.toCampaignDraftsState(): AdminNotificationCampaignDraftsUiState {
@@ -585,12 +584,10 @@ private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraf
     val normalizedStatus = status.ifBlank { "draft" }
     val archived = normalizedStatus == "archived"
     val sent = normalizedStatus == "sent"
-    val normalizedSendBlockedReason = sendBlockedReason.trim().ifBlank {
-        when (normalizedStatus) {
-            "archived" -> CampaignDraftSendBlockedReason
-            "sent" -> "campaign-already-sent"
-            else -> ""
-        }
+    val normalizedSendBlockedReason = when (normalizedStatus) {
+        "archived" -> "campaign-archived"
+        "sent" -> "campaign-already-sent"
+        else -> sendBlockedReason.trim()
     }
     val normalizedSendState = sendState.trim().ifBlank {
         when (normalizedStatus) {
@@ -599,12 +596,16 @@ private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraf
             else -> CampaignDraftSendState
         }
     }
+    val normalizedAudience = when (targetAudience.trim()) {
+        "test_users" -> "test_users"
+        else -> "marketing_opt_in_users"
+    }
     return AdminNotificationCampaignDraftUi(
         campaignId = campaignId,
         title = title.ifBlank { "Campanha sem título" },
         body = body,
-        targetAudience = targetAudience.ifBlank { "all_users" },
-        targetAudienceLabel = targetAudience.toCampaignAudienceLabel(),
+        targetAudience = normalizedAudience,
+        targetAudienceLabel = normalizedAudience.toCampaignAudienceLabel(),
         status = normalizedStatus,
         statusLabel = normalizedStatus.toCampaignStatusLabel(),
         scheduledAtIso = scheduledAtIso,
@@ -706,7 +707,6 @@ private fun AuthError.isRetryable(): Boolean {
 
 private fun String.toCampaignAudienceLabel(): String {
     return when (trim()) {
-        "all_users" -> "Todos os utilizadores"
         "marketing_opt_in_users" -> "Clientes com opt-in marketing"
         else -> "Utilizadores de teste"
     }
@@ -733,6 +733,7 @@ private fun String.toCampaignSendStateLabel(): String {
 private fun String.toCampaignBlockedMessage(): String {
     return when (trim()) {
         "" -> ""
+        "campaign-archived" -> "Esta notificação foi arquivada."
         "campaign-send-not-implemented" -> "O envio para clientes ainda não está disponível nesta versão."
         "campaign-already-sent" -> "Esta notificação já foi enviada."
         else -> "Esta notificação não pode ser enviada neste momento."
@@ -767,4 +768,4 @@ private fun String.isValidCampaignScheduleIso(): Boolean {
     return Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$").matches(this)
 }
 
-internal val CampaignDraftAudienceKeys = setOf("all_users", "test_users", "marketing_opt_in_users")
+internal val CampaignDraftAudienceKeys = setOf("test_users", "marketing_opt_in_users")

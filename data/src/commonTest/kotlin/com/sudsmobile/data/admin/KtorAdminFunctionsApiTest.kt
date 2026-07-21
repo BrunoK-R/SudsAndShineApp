@@ -824,7 +824,7 @@ class KtorAdminFunctionsApiTest {
                         "campaignId": "summer-test",
                         "title": "Oferta verão",
                         "body": "Campanha apenas em rascunho",
-                        "targetAudience": "test_users",
+                        "targetAudience": "all_users",
                         "channels": ["push"],
                         "marketingConsentRequired": false,
                         "status": "draft",
@@ -857,6 +857,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("firestore", success.config.source)
         assertEquals("summer-test", draft.campaignId)
         assertEquals("push", draft.channels.single())
+        assertEquals("marketing_opt_in_users", draft.targetAudience)
+        assertEquals(true, draft.marketingConsentRequired)
         assertEquals(false, draft.sendBlocked)
         assertEquals("", draft.sendBlockedReason)
         assertEquals(false, draft.deliveryLocked)

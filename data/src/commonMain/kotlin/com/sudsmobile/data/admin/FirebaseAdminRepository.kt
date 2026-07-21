@@ -818,7 +818,9 @@ class FirebaseAdminRepository(
         campaignId = campaignId.trim(),
         title = title.normalizeAdminText(),
         body = body.normalizeAdminText(),
-        targetAudience = targetAudience.trim(),
+        targetAudience = targetAudience.trim().let { audience ->
+            if (audience == "all_users" || audience.isBlank()) "marketing_opt_in_users" else audience
+        },
         scheduledAtIso = scheduledAtIso.trim(),
         notes = notes.normalizeAdminText(),
         pushEnabled = pushEnabled,
@@ -894,7 +896,7 @@ private val UtcInstantIsoRegex = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{
 private val AvailabilityTimeRangeRegex = Regex("([0-2]?\\d):([0-5]\\d)\\D+([0-2]?\\d):([0-5]\\d)")
 private val AdminTimeRegex = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
 private val NotificationTimeZoneRegex = Regex("^[A-Za-z_]+(/[A-Za-z0-9_+\\-]+)*$")
-private val NotificationCampaignTargetAudiences = setOf("all_users", "test_users", "marketing_opt_in_users")
+private val NotificationCampaignTargetAudiences = setOf("test_users", "marketing_opt_in_users")
 
 private fun unauthenticatedError(): AdminError.Unauthenticated {
     return AdminError.Unauthenticated("Inicie sessão para gerir a área administrativa.")

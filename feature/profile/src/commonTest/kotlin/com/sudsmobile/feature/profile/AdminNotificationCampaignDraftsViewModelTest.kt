@@ -230,7 +230,7 @@ class AdminNotificationCampaignDraftsViewModelTest {
         viewModel.loadDrafts()
         runCurrent()
         viewModel.startCreate()
-        viewModel.updateForm(campaignForm(campaignId = "../bad", targetAudience = "all_users"))
+        viewModel.updateForm(campaignForm(campaignId = "../bad", targetAudience = "marketing_opt_in_users"))
         viewModel.save()
         runCurrent()
 
@@ -264,7 +264,27 @@ class AdminNotificationCampaignDraftsViewModelTest {
         assertEquals("", request.campaignId)
         assertEquals("Oferta verão", request.title)
         assertEquals("Campanha para clientes", request.body)
-        assertEquals("all_users", request.targetAudience)
+        assertEquals("marketing_opt_in_users", request.targetAudience)
+    }
+
+    @Test
+    fun loadSafelyScopesLegacyAllUsersDraftsToMarketingOptIn() = runTest {
+        val repository = FakeCampaignDraftsAdminRepository(
+            loadResult = AdminNotificationCampaignDraftsResult.Success(
+                campaignDraftsConfig(targetAudience = "all_users"),
+            ),
+        )
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+
+        val loaded = assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("marketing_opt_in_users", loaded.drafts.single().targetAudience)
+        assertEquals("Clientes com opt-in marketing", loaded.drafts.single().targetAudienceLabel)
     }
 
     @Test
@@ -776,7 +796,7 @@ private fun campaignForm(
     campaignId: String = "summer-test",
     title: String = "Oferta verão",
     body: String = "Campanha apenas em rascunho",
-    targetAudience: String = "all_users",
+    targetAudience: String = "marketing_opt_in_users",
     scheduledAtIso: String = "",
 ): AdminNotificationCampaignDraftForm = AdminNotificationCampaignDraftForm(
     campaignId = campaignId,
@@ -856,6 +876,7 @@ private fun campaignBroadcastSuccess(campaignId: String): AdminNotificationCampa
 private fun campaignDraftsConfig(
     sendBlocked: Boolean = false,
     sendBlockedReason: String = "",
+    targetAudience: String = "test_users",
 ): AdminNotificationCampaignDraftsConfig = AdminNotificationCampaignDraftsConfig(
     source = "firestore",
     campaigns = listOf(
@@ -863,7 +884,7 @@ private fun campaignDraftsConfig(
             campaignId = "summer-test",
             title = "Oferta verão",
             body = "Campanha apenas em rascunho",
-            targetAudience = "test_users",
+            targetAudience = targetAudience,
             channels = listOf("push"),
             marketingConsentRequired = false,
             status = "draft",

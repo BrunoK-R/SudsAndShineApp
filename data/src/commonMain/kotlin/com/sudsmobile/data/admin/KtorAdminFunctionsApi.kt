@@ -1775,8 +1775,12 @@ private data class NotificationTestResultPayload(
 ) {
     fun toAdminNotificationTestReceipt(): AdminNotificationTestReceipt {
         val normalizedCampaignId = campaignId.trim()
-        val normalizedAudience = targetAudience.trim()
         val isCampaignReceipt = normalizedCampaignId.isNotBlank()
+        val normalizedAudience = if (isCampaignReceipt) {
+            targetAudience.toSafeCampaignAudience()
+        } else {
+            targetAudience.trim()
+        }
         val normalizedSendBlockedReason = if (isCampaignReceipt) {
             sendBlockedReason.trim().ifBlank { NotificationCampaignDraftSendBlockedReason }
         } else {
@@ -1797,7 +1801,8 @@ private data class NotificationTestResultPayload(
             testOnly = testOnly,
             message = message.trim(),
             targetAudience = normalizedAudience,
-            marketingConsentRequired = marketingConsentRequired || normalizedAudience == "marketing_opt_in_users",
+            marketingConsentRequired = marketingConsentRequired ||
+                (isCampaignReceipt && normalizedAudience != "test_users"),
             sendBlocked = if (isCampaignReceipt) true else sendBlocked,
             sendBlockedReason = normalizedSendBlockedReason,
             deliveryLocked = if (isCampaignReceipt) true else deliveryLocked,
@@ -1826,12 +1831,18 @@ private data class NotificationCampaignDraftsPayload(
 private const val NotificationCampaignDraftSendBlockedReason = "campaign-send-not-implemented"
 private const val NotificationCampaignDraftSendState = "ready"
 
+private fun String.toSafeCampaignAudience(): String = when (trim()) {
+    "test_users" -> "test_users"
+    "marketing_opt_in_users", "all_users", "" -> "marketing_opt_in_users"
+    else -> "test_users"
+}
+
 @Serializable
 private data class NotificationCampaignDraftPayload(
     val campaignId: String = "",
     val title: String = "",
     val body: String = "",
-    val targetAudience: String = "all_users",
+    val targetAudience: String = "marketing_opt_in_users",
     val channels: List<String> = emptyList(),
     val marketingConsentRequired: Boolean = false,
     val status: String = "draft",
@@ -1856,7 +1867,7 @@ private data class NotificationCampaignDraftPayload(
         val cleanTitle = title.trim()
         val cleanBody = body.trim()
         if (id.isBlank() || cleanTitle.isBlank() || cleanBody.isBlank()) return null
-        val normalizedAudience = targetAudience.trim().ifBlank { "all_users" }
+        val normalizedAudience = targetAudience.toSafeCampaignAudience()
         val normalizedStatus = status.trim().ifBlank { "draft" }
         val normalizedSendBlockedReason = sendBlockedReason.trim()
             .ifBlank {
@@ -1879,7 +1890,7 @@ private data class NotificationCampaignDraftPayload(
             body = cleanBody,
             targetAudience = normalizedAudience,
             channels = channels.map { it.trim() }.filter { it.isNotBlank() }.ifEmpty { listOf("push") },
-            marketingConsentRequired = marketingConsentRequired || normalizedAudience == "marketing_opt_in_users",
+            marketingConsentRequired = marketingConsentRequired || normalizedAudience != "test_users",
             status = normalizedStatus,
             scheduledAtIso = scheduledAtIso.trim(),
             notes = notes.trim(),
@@ -1937,7 +1948,7 @@ private data class NotificationCampaignDraftMutationResultPayload(
             campaignId = campaignId.trim(),
             status = normalizedStatus,
             created = created,
-            targetAudience = targetAudience.trim(),
+            targetAudience = targetAudience.toSafeCampaignAudience(),
             sendBlocked = locked,
             sendBlockedReason = if (locked) normalizedSendBlockedReason else "",
             deliveryLocked = locked,
@@ -1963,7 +1974,7 @@ private data class NotificationCampaignBroadcastResultPayload(
         return AdminNotificationCampaignBroadcastReceipt(
             campaignId = campaignId.trim(),
             status = status.trim(),
-            targetAudience = targetAudience.trim(),
+            targetAudience = targetAudience.toSafeCampaignAudience(),
             queuedCount = queuedCount.coerceAtLeast(0),
             skippedCount = skippedCount.coerceAtLeast(0),
             sentByUid = sentByUid.trim(),

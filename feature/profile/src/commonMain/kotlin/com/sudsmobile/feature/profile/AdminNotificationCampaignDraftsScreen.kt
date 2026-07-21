@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -43,9 +44,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -335,6 +340,43 @@ private fun AdminNotificationCampaignDraftsLoadedContent(
     onSave: () -> Unit,
 ) {
     val saving = mutationState == AdminNotificationCampaignDraftMutationState.Saving
+    var pendingBroadcastId by rememberSaveable { mutableStateOf<String?>(null) }
+    val pendingBroadcastDraft = state.drafts.firstOrNull { it.campaignId == pendingBroadcastId }
+
+    pendingBroadcastDraft?.let { draft ->
+        AlertDialog(
+            onDismissRequest = { pendingBroadcastId = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Security,
+                    contentDescription = null,
+                )
+            },
+            title = { Text("Enviar notificação?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Esta mensagem será enviada para: ${draft.targetAudienceLabel}.")
+                    Text("Confirme o título e a mensagem. O envio não pode ser anulado.")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingBroadcastId = null
+                        onBroadcast(draft.campaignId)
+                    },
+                ) {
+                    Text("Confirmar envio")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBroadcastId = null }) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
+
     state.form?.let { form ->
         AdminNotificationCampaignDraftFormCard(
             form = form,
@@ -376,7 +418,7 @@ private fun AdminNotificationCampaignDraftsLoadedContent(
             onEdit = { onEdit(draft.campaignId) },
             onArchive = { onArchive(draft.campaignId) },
             onSendTest = { onSendTest(draft.campaignId) },
-            onBroadcast = { onBroadcast(draft.campaignId) },
+            onBroadcast = { pendingBroadcastId = draft.campaignId },
         )
     }
 }
@@ -418,6 +460,35 @@ private fun AdminNotificationCampaignDraftFormCard(
                 enabled = !saving,
                 minLines = 3,
             )
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "Público: " + if (form.targetAudience == "test_users") {
+                            "Utilizadores de teste"
+                        } else {
+                            "Clientes com opt-in marketing"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = if (form.targetAudience == "test_users") {
+                            "O envio de teste fica limitado à conta administrativa atual."
+                        } else {
+                            "Só serão considerados dispositivos ativos de clientes que aceitaram marketing."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = onCancel,
@@ -519,6 +590,18 @@ private fun AdminNotificationCampaignDraftCard(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+            ) {
+                Text(
+                    text = "Público: ${draft.targetAudienceLabel}",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             if (draft.deliveryLocked || draft.sendBlocked || sent) {
                 CampaignDeliveryLockPanel(draft = draft)
             }
@@ -579,7 +662,11 @@ private fun AdminNotificationCampaignDraftCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = if (broadcasting) "A enviar" else "Enviar para clientes",
+                    text = when {
+                        broadcasting -> "A enviar"
+                        draft.targetAudience == "test_users" -> "Enviar campanha de teste"
+                        else -> "Enviar para clientes"
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )

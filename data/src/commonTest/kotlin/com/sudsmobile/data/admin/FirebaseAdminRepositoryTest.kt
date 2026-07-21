@@ -739,6 +739,29 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun upsertNotificationCampaignDraftScopesLegacyAllUsersAudienceToMarketingOptIn() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        repository.upsertNotificationCampaignDraft(
+            AdminNotificationCampaignDraftMutationRequest(
+                campaignId = "summer-test",
+                title = "Oferta verão",
+                body = "Campanha para clientes",
+                targetAudience = "all_users",
+            ),
+        )
+
+        assertEquals(
+            "marketing_opt_in_users",
+            api.upsertNotificationCampaignDraftRequests.single().targetAudience,
+        )
+    }
+
+    @Test
     fun archiveNotificationCampaignDraftNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
