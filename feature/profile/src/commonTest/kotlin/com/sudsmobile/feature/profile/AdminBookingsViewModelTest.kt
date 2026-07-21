@@ -384,6 +384,65 @@ class AdminBookingsViewModelTest {
     }
 
     @Test
+    fun loadRequestsPrioritizesInProgressOverdueAndTodayWork() = runTest {
+        val repository = FakeAdminRepository(
+            requestsResult = AdminBookingRequestsResult.Success(
+                listOf(adminBookingRequest(id = "pending-1")),
+            ),
+            acceptedRequestsResult = AdminBookingRequestsResult.Success(
+                listOf(
+                    adminBookingRequest(
+                        id = "future-later",
+                        status = "confirmed",
+                        canStart = true,
+                        slotStartIso = "2026-06-01T10:00:00.000Z",
+                    ),
+                    adminBookingRequest(
+                        id = "today-1",
+                        status = "confirmed",
+                        canStart = true,
+                        slotStartIso = "2026-05-30T11:00:00.000Z",
+                    ),
+                    adminBookingRequest(
+                        id = "future-1",
+                        status = "confirmed",
+                        canStart = true,
+                        slotStartIso = "2026-05-31T10:00:00.000Z",
+                    ),
+                    adminBookingRequest(
+                        id = "overdue-1",
+                        status = "confirmed",
+                        canStart = true,
+                        slotStartIso = "2026-05-29T10:00:00.000Z",
+                    ),
+                    adminBookingRequest(
+                        id = "active-1",
+                        status = "in_progress",
+                        canComplete = true,
+                        slotStartIso = "2026-05-30T09:00:00.000Z",
+                    ),
+                ),
+            ),
+        )
+        val viewModel = AdminBookingsViewModel(
+            authRepository = FakeAdminAuthRepository(authenticated = true),
+            adminRepository = repository,
+            businessDateKeyProvider = { "2026-05-30" },
+        )
+
+        viewModel.loadRequests()
+        runCurrent()
+
+        val loaded = assertIs<AdminBookingsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("30 de maio, 2026", loaded.businessDateLabel)
+        assertEquals(listOf("active-1", "overdue-1", "today-1"), loaded.operationalRequests.map { it.id })
+        assertEquals(listOf("future-1", "future-later"), loaded.upcomingRequests.map { it.id })
+        assertEquals(1, loaded.inProgressCount)
+        assertEquals(1, loaded.overdueCount)
+        assertEquals(AdminBookingTiming.Today, loaded.operationalRequests.last().timing)
+    }
+
+    @Test
     fun refreshForSessionReloadsWhenSameUserSessionTokenChanges() = runTest {
         val authRepository = FakeAdminAuthRepository(authenticated = true)
         val repository = FakeAdminRepository(
@@ -847,6 +906,7 @@ private fun adminBookingRequest(
     acceptedByUid: String = "",
     startedAtIso: String? = null,
     startedByUid: String = "",
+    slotStartIso: String = "2026-05-30T10:00:00.000Z",
 ): AdminBookingRequest = AdminBookingRequest(
     id = id,
     reservationCode = "SS-0001",
@@ -855,7 +915,7 @@ private fun adminBookingRequest(
     customerPhone = "+351 900 000 000",
     serviceId = "premium",
     serviceName = "Lavagem Premium",
-    slotStartIso = "2026-05-30T10:00:00.000Z",
+    slotStartIso = slotStartIso,
     slotEndIso = "2026-05-30T11:00:00.000Z",
     status = status,
     paymentStatus = "pending",

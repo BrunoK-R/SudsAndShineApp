@@ -21,7 +21,13 @@ val profileModule = module {
     }
     viewModelOf(::ProfileHistoryViewModel)
     viewModelOf(::AdminAccessViewModel)
-    viewModelOf(::AdminBookingsViewModel)
+    viewModel {
+        AdminBookingsViewModel(
+            authRepository = get(),
+            adminRepository = get(),
+            bookingChangeNotifier = get(),
+        )
+    }
     viewModelOf(::AdminAvailabilityViewModel)
     viewModelOf(::AdminBookingPolicyViewModel)
     viewModelOf(::AdminLoyaltySettingsViewModel)

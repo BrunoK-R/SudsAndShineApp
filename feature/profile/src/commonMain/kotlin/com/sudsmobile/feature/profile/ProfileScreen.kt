@@ -106,7 +106,7 @@ private enum class ProfileMenuAction {
 
 private val adminMenuItem = ProfileMenuItem(
     icon = Icons.Filled.Security,
-    label = "Gestão de marcações",
+    label = "Operação de hoje",
     action = ProfileMenuAction.AdminBookings,
 )
 

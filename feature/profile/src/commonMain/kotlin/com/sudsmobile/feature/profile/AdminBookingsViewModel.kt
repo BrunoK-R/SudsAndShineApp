@@ -51,12 +51,22 @@ internal data class AdminBookingRequestUi(
     val canStart: Boolean,
     val canComplete: Boolean,
     val auditLabels: List<String>,
+    val timing: AdminBookingTiming,
+    val slotStartSortKey: String,
 )
 
 internal data class AdminBookingExtraUi(
     val name: String,
     val price: String,
 )
+
+internal enum class AdminBookingTiming {
+    InProgress,
+    Overdue,
+    Today,
+    Upcoming,
+    NeedsReview,
+}
 
 internal sealed interface AdminBookingsUiState {
     data object Idle : AdminBookingsUiState
@@ -67,6 +77,11 @@ internal sealed interface AdminBookingsUiState {
     data class Loaded(
         val pendingRequests: List<AdminBookingRequestUi>,
         val acceptedRequests: List<AdminBookingRequestUi>,
+        val operationalRequests: List<AdminBookingRequestUi>,
+        val upcomingRequests: List<AdminBookingRequestUi>,
+        val businessDateLabel: String,
+        val inProgressCount: Int,
+        val overdueCount: Int,
     ) : AdminBookingsUiState
     data class Error(val message: String, val retryable: Boolean) : AdminBookingsUiState
 }
@@ -219,6 +234,7 @@ internal class AdminBookingsViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
     private val bookingChangeNotifier: BookingChangeNotifier = MutableBookingChangeNotifier(),
+    private val businessDateKeyProvider: () -> String = ::currentAdminBusinessDateKey,
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
@@ -314,6 +330,7 @@ internal class AdminBookingsViewModel(
                             is AdminBookingRequestsResult.Success -> toAdminBookingsState(
                                 pendingRequests = pendingResult.requests,
                                 acceptedRequests = acceptedResult.requests,
+                                businessDateKey = currentBusinessDateKey(),
                             )
                             is AdminBookingRequestsResult.Failure -> acceptedResult.error.toAdminBookingsState()
                         }
@@ -472,6 +489,14 @@ internal class AdminBookingsViewModel(
             ?.session
             ?.toAdminSessionSnapshot()
     }
+
+    private fun currentBusinessDateKey(): String {
+        return runCatching(businessDateKeyProvider)
+            .getOrDefault("")
+            .trim()
+            .takeIf(AdminBusinessDateRegex::matches)
+            .orEmpty()
+    }
 }
 
 private fun com.sudsmobile.data.auth.AuthSession.toAdminSessionSnapshot(): AdminSessionSnapshot {
@@ -484,20 +509,34 @@ private fun com.sudsmobile.data.auth.AuthSession.toAdminSessionSnapshot(): Admin
 private fun toAdminBookingsState(
     pendingRequests: List<AdminBookingRequest>,
     acceptedRequests: List<AdminBookingRequest>,
+    businessDateKey: String,
 ): AdminBookingsUiState {
-    val pending = pendingRequests.map { it.toUi() }
-    val accepted = acceptedRequests.map { it.toUi() }
+    val pending = pendingRequests.map { it.toUi(businessDateKey) }
+    val accepted = acceptedRequests.map { it.toUi(businessDateKey) }
     return if (pending.isEmpty() && accepted.isEmpty()) {
         AdminBookingsUiState.Empty
     } else {
+        val operational = accepted
+            .filter { it.timing != AdminBookingTiming.Upcoming }
+            .sortedWith(
+                compareBy<AdminBookingRequestUi> { it.timing.operationalPriority() }
+                    .thenBy { it.slotStartSortKey },
+            )
         AdminBookingsUiState.Loaded(
             pendingRequests = pending,
             acceptedRequests = accepted,
+            operationalRequests = operational,
+            upcomingRequests = accepted
+                .filter { it.timing == AdminBookingTiming.Upcoming }
+                .sortedBy { it.slotStartSortKey },
+            businessDateLabel = businessDateKey.toBusinessDateLabel(),
+            inProgressCount = accepted.count { it.timing == AdminBookingTiming.InProgress },
+            overdueCount = accepted.count { it.timing == AdminBookingTiming.Overdue },
         )
     }
 }
 
-private fun AdminBookingRequest.toUi(): AdminBookingRequestUi = AdminBookingRequestUi(
+private fun AdminBookingRequest.toUi(businessDateKey: String): AdminBookingRequestUi = AdminBookingRequestUi(
     id = id,
     reference = reservationCode.ifBlank { id },
     customerName = customerName.ifBlank { "Cliente" },
@@ -523,7 +562,37 @@ private fun AdminBookingRequest.toUi(): AdminBookingRequestUi = AdminBookingRequ
     canStart = canStart,
     canComplete = canComplete,
     auditLabels = decisionAuditLabels(),
+    timing = operationalTiming(businessDateKey),
+    slotStartSortKey = slotStartIso,
 )
+
+private fun AdminBookingRequest.operationalTiming(businessDateKey: String): AdminBookingTiming {
+    val normalizedStatus = status.trim()
+        .lowercase()
+        .replace("-", "_")
+        .replace(" ", "_")
+    if (canComplete || normalizedStatus in InProgressStatusValues) {
+        return AdminBookingTiming.InProgress
+    }
+
+    val slotDateKey = slotStartIso.toBusinessDateKey()
+    if (slotDateKey.isBlank() || businessDateKey.isBlank()) {
+        return AdminBookingTiming.NeedsReview
+    }
+    return when {
+        slotDateKey < businessDateKey -> AdminBookingTiming.Overdue
+        slotDateKey == businessDateKey -> AdminBookingTiming.Today
+        else -> AdminBookingTiming.Upcoming
+    }
+}
+
+private fun AdminBookingTiming.operationalPriority(): Int = when (this) {
+    AdminBookingTiming.InProgress -> 0
+    AdminBookingTiming.Overdue -> 1
+    AdminBookingTiming.Today -> 2
+    AdminBookingTiming.NeedsReview -> 3
+    AdminBookingTiming.Upcoming -> 4
+}
 
 private fun List<BookingReservationExtra>.toAdminExtraUi(): List<AdminBookingExtraUi> {
     return mapNotNull { extra ->
@@ -673,6 +742,20 @@ private fun String.toDateLabel(): String {
     return "$day de $month, $year"
 }
 
+private fun String.toBusinessDateKey(): String {
+    return substringBefore("T")
+        .trim()
+        .takeIf(AdminBusinessDateRegex::matches)
+        .orEmpty()
+}
+
+private fun String.toBusinessDateLabel(): String {
+    return takeIf(AdminBusinessDateRegex::matches)
+        ?.toDateLabel()
+        ?.replaceFirstChar { it.titlecase() }
+        ?: "Data de hoje"
+}
+
 private fun String.toTimeLabel(): String {
     val time = substringAfter("T", missingDelimiterValue = "")
     return time.takeIf { it.length >= 5 }?.take(5) ?: "Hora a confirmar"
@@ -705,3 +788,6 @@ private val monthNames = listOf(
     "novembro",
     "dezembro",
 )
+
+private val AdminBusinessDateRegex = Regex("^\\d{4}-\\d{2}-\\d{2}$")
+private val InProgressStatusValues = setOf("in_progress", "em_execucao", "em_execução")

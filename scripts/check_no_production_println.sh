@@ -6,7 +6,15 @@ if ! command -v rg >/dev/null 2>&1; then
   exit 1
 fi
 
-matches="$(rg --line-number --glob '!**/build/**' 'println\\(' . || true)"
+matches="$(
+  rg \
+    --line-number \
+    --glob '!**/build/**' \
+    --glob '**/src/*Main/**/*.kt' \
+    'println\(' \
+    composeApp data di feature navigation shared \
+    || true
+)"
 if [[ -n "$matches" ]]; then
   echo "Found println() calls:" >&2
   echo "$matches" >&2
