@@ -680,11 +680,18 @@ private data class MyReservationItem(
     val rejectedAt: String? = null,
     val rejectionReason: String = "",
     val acceptedAt: String? = null,
+    val startedAt: String? = null,
+    val completedAt: String? = null,
+    val paymentConfirmedAt: String? = null,
     val pendingExpiresAt: String? = null,
     val rescheduledAt: String? = null,
     val previousSlotStart: String? = null,
     val previousSlotEnd: String? = null,
     val rescheduleCount: Int = 0,
+    val loyaltyRewardApplied: Boolean = false,
+    val loyaltyRewardCode: String = "",
+    val loyaltyRewardDescription: String = "",
+    val loyaltyStampGranted: Boolean? = null,
 ) {
     fun toReservation(): BookingHistoryReservation = BookingHistoryReservation(
         id = id,
@@ -710,11 +717,18 @@ private data class MyReservationItem(
         rejectedAtIso = rejectedAt,
         rejectionReason = rejectionReason,
         acceptedAtIso = acceptedAt,
+        startedAtIso = startedAt,
+        completedAtIso = completedAt,
+        paymentConfirmedAtIso = paymentConfirmedAt,
         pendingExpiresAtIso = pendingExpiresAt,
         rescheduledAtIso = rescheduledAt,
         previousSlotStartIso = previousSlotStart,
         previousSlotEndIso = previousSlotEnd,
         rescheduleCount = rescheduleCount.coerceAtLeast(0),
+        loyaltyRewardApplied = loyaltyRewardApplied,
+        loyaltyRewardCode = loyaltyRewardCode,
+        loyaltyRewardDescription = loyaltyRewardDescription,
+        loyaltyStampGranted = loyaltyStampGranted,
     )
 }
 

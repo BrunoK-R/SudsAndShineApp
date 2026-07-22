@@ -230,19 +230,109 @@ class CartBookingsViewModelTest {
         val loaded = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
         assertEquals(
             listOf(
-                "Pedido recebido. A equipa vai confirmar ou recusar a lavagem.",
-                "Marcação aceite. A lavagem ainda não começou.",
-                "Lavagem a decorrer. Avisamos quando estiver concluída.",
+                "Não precisa de fazer nada. A equipa vai validar o pedido e enviaremos uma atualização.",
+                "A marcação está garantida. Compareça no horário indicado ou altere-a abaixo.",
+                "A lavagem está em curso. Avisaremos quando o veículo estiver pronto.",
             ),
             loaded.upcoming.map { it.statusDescription },
         )
         assertEquals(
             listOf(
-                "Lavagem concluída e guardada no histórico.",
-                "Pedido recusado pela equipa.",
+                "A lavagem terminou. Pode avaliar o serviço abaixo.",
+                "Escolha outro horário para enviar um novo pedido.",
             ),
             loaded.completed.map { it.statusDescription },
         )
+    }
+
+    @Test
+    fun loadBookingsBuildsFactualPaymentAndLoyaltyTimeline() = runTest {
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "rewarded-1",
+                                slotStartIso = "2026-05-18T10:00:00.000Z",
+                                slotEndIso = "2026-05-18T10:45:00.000Z",
+                                upcoming = false,
+                                priceCents = 0,
+                                status = "completed",
+                                paymentStatus = "covered_by_loyalty",
+                                createdAtIso = "2026-05-16T09:00:00.000Z",
+                                acceptedAtIso = "2026-05-16T10:00:00.000Z",
+                                startedAtIso = "2026-05-18T10:02:00.000Z",
+                                completedAtIso = "2026-05-18T10:43:00.000Z",
+                                paymentConfirmedAtIso = "2026-05-18T10:43:00.000Z",
+                                loyaltyRewardApplied = true,
+                                loyaltyRewardCode = "SS-FREE-0001",
+                                loyaltyRewardDescription = "1 lavagem grátis",
+                                loyaltyStampGranted = false,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.loadBookings()
+        runCurrent()
+
+        val booking = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value).completed.single()
+        assertEquals("SS-rewarded-1", booking.reference)
+        assertEquals(
+            listOf("Pedido enviado", "Pedido aceite", "Lavagem concluída", "Recompensa aplicada"),
+            booking.timeline.map { it.title },
+        )
+        assertEquals(BookingTimelineStepStateUi.Completed, booking.timeline.last().state)
+        assertEquals("18 de maio, 2026 às 11:43", booking.timeline.last().timestamp)
+        assertEquals("1 lavagem grátis · Código SS-FREE-0001", booking.timeline.last().detail)
+    }
+
+    @Test
+    fun loadBookingsShowsReleasedRewardAfterCancellation() = runTest {
+        val viewModel = CartBookingsViewModel(
+            bookingRepository = FakeBookingRepository(
+                BookingHistoryResult.Success(
+                    BookingHistory(
+                        reservations = listOf(
+                            historyReservation(
+                                id = "cancelled-reward",
+                                slotStartIso = "2026-05-22T10:00:00.000Z",
+                                slotEndIso = "2026-05-22T10:45:00.000Z",
+                                upcoming = false,
+                                priceCents = 0,
+                                status = "cancelled",
+                                paymentStatus = "covered_by_loyalty",
+                                acceptedAtIso = "2026-05-20T10:00:00.000Z",
+                                cancelledAtIso = "2026-05-21T16:30:00.000Z",
+                                loyaltyRewardApplied = true,
+                                loyaltyRewardCode = "SS-FREE-0002",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            authRepository = FakeCartAuthRepository(authenticated = true),
+            businessInfoRepository = FakeBusinessInfoRepository(),
+        )
+
+        viewModel.loadBookings()
+        runCurrent()
+
+        val timeline = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value)
+            .completed
+            .single()
+            .timeline
+        assertEquals(
+            listOf("Pedido enviado", "Pedido aceite", "Marcação cancelada", "Recompensa libertada"),
+            timeline.map { it.title },
+        )
+        assertEquals(BookingTimelineStepStateUi.Warning, timeline[2].state)
+        assertEquals("A recompensa SS-FREE-0002 voltou a ficar disponível.", timeline.last().detail)
     }
 
     @Test
@@ -1145,11 +1235,23 @@ private fun historyReservation(
     reviewComment: String = "",
     status: String = if (upcoming) "pending" else "completed",
     paymentStatus: String = "",
+    createdAtIso: String = "",
     cancelledAtIso: String? = null,
+    rejectedAtIso: String? = null,
+    rejectionReason: String = "",
+    acceptedAtIso: String? = null,
+    startedAtIso: String? = null,
+    completedAtIso: String? = null,
+    paymentConfirmedAtIso: String? = null,
+    pendingExpiresAtIso: String? = null,
     rescheduledAtIso: String? = null,
     previousSlotStartIso: String? = null,
     previousSlotEndIso: String? = null,
     rescheduleCount: Int = 0,
+    loyaltyRewardApplied: Boolean = false,
+    loyaltyRewardCode: String = "",
+    loyaltyRewardDescription: String = "",
+    loyaltyStampGranted: Boolean? = null,
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -1167,11 +1269,23 @@ private fun historyReservation(
     reviewRating = reviewRating,
     reviewTags = reviewTags,
     reviewComment = reviewComment,
+    createdAtIso = createdAtIso,
     cancelledAtIso = cancelledAtIso,
+    rejectedAtIso = rejectedAtIso,
+    rejectionReason = rejectionReason,
+    acceptedAtIso = acceptedAtIso,
+    startedAtIso = startedAtIso,
+    completedAtIso = completedAtIso,
+    paymentConfirmedAtIso = paymentConfirmedAtIso,
+    pendingExpiresAtIso = pendingExpiresAtIso,
     rescheduledAtIso = rescheduledAtIso,
     previousSlotStartIso = previousSlotStartIso,
     previousSlotEndIso = previousSlotEndIso,
     rescheduleCount = rescheduleCount,
+    loyaltyRewardApplied = loyaltyRewardApplied,
+    loyaltyRewardCode = loyaltyRewardCode,
+    loyaltyRewardDescription = loyaltyRewardDescription,
+    loyaltyStampGranted = loyaltyStampGranted,
 )
 
 private fun businessInfo(

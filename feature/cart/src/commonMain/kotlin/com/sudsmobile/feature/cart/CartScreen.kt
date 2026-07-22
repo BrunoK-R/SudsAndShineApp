@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,7 +38,6 @@ import androidx.compose.material.icons.filled.Recommend
 import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
@@ -64,6 +67,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
@@ -145,20 +154,23 @@ fun CartScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+            .background(MaterialTheme.colorScheme.background),
     ) {
         BookingsHeader()
 
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 16.dp),
+                .weight(1f),
+            contentPadding = PaddingValues(
+                start = 24.dp,
+                top = 16.dp,
+                end = 24.dp,
+                bottom = contentPadding.calculateBottomPadding() + 24.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            BookingsContent(
+            bookingsContent(
                 uiState = uiState,
                 businessInfoState = businessInfoState,
                 cancellationState = cancellationState,
@@ -278,6 +290,7 @@ private fun BookingsHeader() {
     ) {
         Text(
             text = "Marcações",
+            modifier = Modifier.semantics { heading() },
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.inverseOnSurface,
             fontWeight = FontWeight.Bold,
@@ -322,7 +335,11 @@ private fun BookingsSegmentedTabs(
                                 MaterialTheme.colorScheme.surfaceContainerLowest
                             },
                         )
-                        .clickable { onTabSelected(tab) },
+                        .clickable(role = Role.Tab) { onTabSelected(tab) }
+                        .semantics {
+                            this.selected = selected
+                            stateDescription = if (selected) "Selecionado" else "Não selecionado"
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -341,8 +358,7 @@ private fun BookingsSegmentedTabs(
     }
 }
 
-@Composable
-private fun BookingsContent(
+private fun LazyListScope.bookingsContent(
     uiState: CartBookingsUiState,
     businessInfoState: CartBusinessInfoUiState,
     cancellationState: BookingCancellationUiState,
@@ -375,32 +391,43 @@ private fun BookingsContent(
 ) {
     when (uiState) {
         CartBookingsUiState.Idle,
-        CartBookingsUiState.Loading -> BookingsStatusCard(
-            title = "A carregar marcações",
-            body = "Estamos a consultar as suas reservas em tempo real.",
-            loading = true,
-        )
+        CartBookingsUiState.Loading -> item(key = "bookings-loading", contentType = "status") {
+            BookingsStatusCard(
+                title = "A carregar marcações",
+                body = "Estamos a consultar as suas reservas em tempo real.",
+                loading = true,
+            )
+        }
 
-        CartBookingsUiState.Unauthenticated -> BookingsStatusCard(
-            title = "Sessão necessária",
-            body = "Entre na sua conta para ver marcações associadas ao seu perfil.",
-            actionLabel = "Entrar ou criar conta",
-            onAction = onRequestSignIn,
-        )
+        CartBookingsUiState.Unauthenticated -> item(
+            key = "bookings-unauthenticated",
+            contentType = "status",
+        ) {
+            BookingsStatusCard(
+                title = "Sessão necessária",
+                body = "Entre na sua conta para ver marcações associadas ao seu perfil.",
+                actionLabel = "Entrar ou criar conta",
+                onAction = onRequestSignIn,
+            )
+        }
 
-        CartBookingsUiState.Empty -> BookingsStatusCard(
-            title = "Sem marcações",
-            body = "As suas próximas marcações e lavagens concluídas aparecem aqui.",
-            actionLabel = "Atualizar",
-            onAction = onRetry,
-        )
+        CartBookingsUiState.Empty -> item(key = "bookings-empty", contentType = "status") {
+            BookingsStatusCard(
+                title = "Sem marcações",
+                body = "As suas próximas marcações e lavagens concluídas aparecem aqui.",
+                actionLabel = "Atualizar",
+                onAction = onRetry,
+            )
+        }
 
-        is CartBookingsUiState.Error -> BookingsStatusCard(
-            title = "Não foi possível carregar",
-            body = uiState.message,
-            actionLabel = if (uiState.retryable) "Tentar novamente" else null,
-            onAction = if (uiState.retryable) onRetry else null,
-        )
+        is CartBookingsUiState.Error -> item(key = "bookings-error", contentType = "status") {
+            BookingsStatusCard(
+                title = "Não foi possível carregar",
+                body = uiState.message,
+                actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+                onAction = if (uiState.retryable) onRetry else null,
+            )
+        }
 
         is CartBookingsUiState.Loaded -> {
             val bookings = when (selectedTab) {
@@ -408,68 +435,74 @@ private fun BookingsContent(
                 BookingsTab.Completed -> uiState.completed
             }
 
-            BookingsSegmentedTabs(
-                selectedTab = selectedTab,
-                onTabSelected = onTabSelected,
-            )
+            item(key = "bookings-tabs", contentType = "tabs") {
+                BookingsSegmentedTabs(
+                    selectedTab = selectedTab,
+                    onTabSelected = onTabSelected,
+                )
+            }
 
             if (bookings.isEmpty()) {
-                BookingsStatusCard(
-                    title = if (selectedTab == BookingsTab.Upcoming) {
-                        "Sem próximas marcações"
-                    } else {
-                        "Sem lavagens concluídas"
-                    },
-                    body = if (selectedTab == BookingsTab.Upcoming) {
-                        "Quando marcar uma lavagem, ela aparece nesta lista."
-                    } else {
-                        "As lavagens finalizadas ficam guardadas neste histórico."
-                    },
-                    actionLabel = "Atualizar",
-                    onAction = onRetry,
-                )
+                item(key = "bookings-tab-empty-${selectedTab.name}", contentType = "status") {
+                    BookingsStatusCard(
+                        title = if (selectedTab == BookingsTab.Upcoming) {
+                            "Sem próximas marcações"
+                        } else {
+                            "Sem lavagens concluídas"
+                        },
+                        body = if (selectedTab == BookingsTab.Upcoming) {
+                            "Quando marcar uma lavagem, ela aparece nesta lista."
+                        } else {
+                            "As lavagens finalizadas ficam guardadas neste histórico."
+                        },
+                        actionLabel = "Atualizar",
+                        onAction = onRetry,
+                    )
+                }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    bookings.forEach { booking ->
-                        BookingSummaryCard(
-                            booking = booking,
-                            showRatingAction = selectedTab == BookingsTab.Completed &&
-                                booking.reviewable &&
-                                !booking.reviewed,
-                            showCancelAction = selectedTab == BookingsTab.Upcoming &&
-                                booking.cancelable,
-                            showRescheduleAction = selectedTab == BookingsTab.Upcoming &&
-                                booking.cancelable,
-                            businessInfoState = businessInfoState,
-                            cancellationState = cancellationState.forReservation(booking.id),
-                            cancellationConfirmationVisible = pendingCancellationId == booking.id,
-                            rescheduleAvailabilityState = if (pendingRescheduleId == booking.id) {
-                                rescheduleAvailabilityState
-                            } else {
-                                BookingRescheduleAvailabilityUiState.Idle
-                            },
-                            rescheduleState = rescheduleState.forReservation(booking.id),
-                            rescheduleVisible = pendingRescheduleId == booking.id,
-                            selectedRescheduleDateId = selectedRescheduleDateId,
-                            selectedRescheduleTime = selectedRescheduleTime,
-                            rescheduleAnchorDate = rescheduleAnchorDate,
-                            minimumRescheduleMonthAnchor = minimumRescheduleMonthAnchor,
-                            onRetryBusinessInfo = onRetryBusinessInfo,
-                            onOpenPayment = { onOpenPayment(booking.id) },
-                            onRateService = { onRateService(booking.id) },
-                            onRequestReschedule = { onRequestReschedule(booking) },
-                            onDismissReschedule = { onDismissReschedule(booking.id) },
-                            onSelectRescheduleDate = onSelectRescheduleDate,
-                            onSelectRescheduleTime = onSelectRescheduleTime,
-                            onRescheduleMonthChanged = { anchorDate -> onRescheduleMonthChanged(booking, anchorDate) },
-                            onMinimumRescheduleMonthResolved = onMinimumRescheduleMonthResolved,
-                            onRetryRescheduleAvailability = { onRetryRescheduleAvailability(booking) },
-                            onConfirmReschedule = { onConfirmReschedule(booking) },
-                            onRequestCancellation = { onRequestCancellation(booking.id) },
-                            onDismissCancellation = { onDismissCancellation(booking.id) },
-                            onConfirmCancellation = { onConfirmCancellation(booking.id) },
-                        )
-                    }
+                items(
+                    items = bookings,
+                    key = { "booking-${selectedTab.name}-${it.id}" },
+                    contentType = { "booking-card" },
+                ) { booking ->
+                    BookingSummaryCard(
+                        booking = booking,
+                        showRatingAction = selectedTab == BookingsTab.Completed &&
+                            booking.reviewable &&
+                            !booking.reviewed,
+                        showCancelAction = selectedTab == BookingsTab.Upcoming &&
+                            booking.cancelable,
+                        showRescheduleAction = selectedTab == BookingsTab.Upcoming &&
+                            booking.cancelable,
+                        businessInfoState = businessInfoState,
+                        cancellationState = cancellationState.forReservation(booking.id),
+                        cancellationConfirmationVisible = pendingCancellationId == booking.id,
+                        rescheduleAvailabilityState = if (pendingRescheduleId == booking.id) {
+                            rescheduleAvailabilityState
+                        } else {
+                            BookingRescheduleAvailabilityUiState.Idle
+                        },
+                        rescheduleState = rescheduleState.forReservation(booking.id),
+                        rescheduleVisible = pendingRescheduleId == booking.id,
+                        selectedRescheduleDateId = selectedRescheduleDateId,
+                        selectedRescheduleTime = selectedRescheduleTime,
+                        rescheduleAnchorDate = rescheduleAnchorDate,
+                        minimumRescheduleMonthAnchor = minimumRescheduleMonthAnchor,
+                        onRetryBusinessInfo = onRetryBusinessInfo,
+                        onOpenPayment = { onOpenPayment(booking.id) },
+                        onRateService = { onRateService(booking.id) },
+                        onRequestReschedule = { onRequestReschedule(booking) },
+                        onDismissReschedule = { onDismissReschedule(booking.id) },
+                        onSelectRescheduleDate = onSelectRescheduleDate,
+                        onSelectRescheduleTime = onSelectRescheduleTime,
+                        onRescheduleMonthChanged = { anchorDate -> onRescheduleMonthChanged(booking, anchorDate) },
+                        onMinimumRescheduleMonthResolved = onMinimumRescheduleMonthResolved,
+                        onRetryRescheduleAvailability = { onRetryRescheduleAvailability(booking) },
+                        onConfirmReschedule = { onConfirmReschedule(booking) },
+                        onRequestCancellation = { onRequestCancellation(booking.id) },
+                        onDismissCancellation = { onDismissCancellation(booking.id) },
+                        onConfirmCancellation = { onConfirmCancellation(booking.id) },
+                    )
                 }
             }
         }
@@ -599,29 +632,24 @@ private fun BookingSummaryCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    BookingStatusBadge(status = booking.status)
-                    BookingLifecycleMessage(
-                        status = booking.status,
-                        message = booking.statusDescription,
-                    )
-                }
-                IconButton(
-                    onClick = {},
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "Mais opções",
-                        tint = MaterialTheme.colorScheme.outline,
-                    )
-                }
+                BookingStatusBadge(status = booking.status)
+                Text(
+                    text = "Ref. ${booking.reference}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.End,
+                )
             }
+
+            Spacer(Modifier.height(10.dp))
+
+            BookingLifecycleMessage(
+                status = booking.status,
+                message = booking.statusDescription,
+            )
 
             Spacer(Modifier.height(12.dp))
 
@@ -683,10 +711,12 @@ private fun BookingSummaryCard(
                 }
             }
 
-            if (booking.auditNotes.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                BookingAuditNotes(notes = booking.auditNotes)
-            }
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            BookingTimeline(
+                steps = booking.timeline,
+                modifier = Modifier.padding(top = 14.dp),
+            )
 
             if (booking.reviewed) {
                 Spacer(Modifier.height(16.dp))
@@ -808,68 +838,129 @@ private fun BookingLifecycleMessage(
                     MaterialTheme.colorScheme.tertiary
                 },
             )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "O que acontece agora",
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun BookingAuditNotes(
-    notes: List<BookingAuditNoteUi>,
+private fun BookingTimeline(
+    steps: List<BookingTimelineStepUi>,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { isTraversalGroup = true },
     ) {
-        notes.forEach { note ->
-            val warning = note.tone == BookingAuditToneUi.Warning
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = if (warning) {
-                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.44f)
-                } else {
-                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.28f)
-                },
-                contentColor = if (warning) {
-                    MaterialTheme.colorScheme.onErrorContainer
-                } else {
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                },
-                shape = RoundedCornerShape(14.dp),
+        Text(
+            text = "Percurso da marcação",
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        steps.forEachIndexed { index, step ->
+            val containerColor = when (step.state) {
+                BookingTimelineStepStateUi.Completed -> MaterialTheme.colorScheme.primaryContainer
+                BookingTimelineStepStateUi.Current -> MaterialTheme.colorScheme.tertiaryContainer
+                BookingTimelineStepStateUi.Upcoming -> MaterialTheme.colorScheme.surfaceContainerHigh
+                BookingTimelineStepStateUi.Warning -> MaterialTheme.colorScheme.errorContainer
+            }
+            val contentColor = when (step.state) {
+                BookingTimelineStepStateUi.Completed -> MaterialTheme.colorScheme.onPrimaryContainer
+                BookingTimelineStepStateUi.Current -> MaterialTheme.colorScheme.onTertiaryContainer
+                BookingTimelineStepStateUi.Upcoming -> MaterialTheme.colorScheme.onSurfaceVariant
+                BookingTimelineStepStateUi.Warning -> MaterialTheme.colorScheme.onErrorContainer
+            }
+            val stepStateDescription = when (step.state) {
+                BookingTimelineStepStateUi.Completed -> "Concluído"
+                BookingTimelineStepStateUi.Current -> "Estado atual"
+                BookingTimelineStepStateUi.Upcoming -> "Próximo passo"
+                BookingTimelineStepStateUi.Warning -> "Atenção"
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics(mergeDescendants = true) {
+                        stateDescription = stepStateDescription
+                    },
+                verticalAlignment = Alignment.Top,
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.Top,
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = if (warning) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.tertiary
-                        },
-                    )
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    Surface(
+                        modifier = Modifier.size(30.dp),
+                        color = containerColor,
+                        contentColor = contentColor,
+                        shape = CircleShape,
                     ) {
-                        Text(
-                            text = note.title,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = note.body,
-                            style = MaterialTheme.typography.bodySmall,
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = when (step.state) {
+                                    BookingTimelineStepStateUi.Completed -> Icons.Filled.CheckCircle
+                                    BookingTimelineStepStateUi.Current -> Icons.Filled.AccessTime
+                                    BookingTimelineStepStateUi.Upcoming -> Icons.Filled.RadioButtonUnchecked
+                                    BookingTimelineStepStateUi.Warning -> Icons.Filled.Info
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    if (index < steps.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .width(2.dp)
+                                .height(48.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant),
                         )
                     }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp, bottom = if (index < steps.lastIndex) 10.dp else 0.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = step.title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    step.timestamp?.let { timestamp ->
+                        Text(
+                            text = timestamp,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Text(
+                        text = step.detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

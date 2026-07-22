@@ -57,6 +57,7 @@ internal enum class BookingStatusUi(val label: String) {
 
 internal data class BookingSummaryUi(
     val id: String,
+    val reference: String,
     val service: String,
     val date: String,
     val time: String,
@@ -77,7 +78,22 @@ internal data class BookingSummaryUi(
     val cancelable: Boolean,
     val paymentLabel: String,
     val requiresPayment: Boolean,
+    val timeline: List<BookingTimelineStepUi>,
     val auditNotes: List<BookingAuditNoteUi>,
+)
+
+internal enum class BookingTimelineStepStateUi {
+    Completed,
+    Current,
+    Upcoming,
+    Warning,
+}
+
+internal data class BookingTimelineStepUi(
+    val title: String,
+    val detail: String,
+    val timestamp: String? = null,
+    val state: BookingTimelineStepStateUi,
 )
 
 internal enum class BookingAuditToneUi {
@@ -598,6 +614,7 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
 
     return BookingSummaryUi(
         id = id,
+        reference = reservationCode.trim().ifBlank { id }.take(MaxBookingReferenceLength),
         service = serviceLabelWithExtras(),
         date = slotStartIso.toDateLabel(),
         time = slotStartIso.toTimeLabel(),
@@ -618,6 +635,7 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         cancelable = isCancelableReservation(),
         paymentLabel = bookingPaymentStatus().toPaymentLabel(),
         requiresPayment = requiresPayment(),
+        timeline = bookingTimeline(),
         auditNotes = auditNotes(),
     )
 }
@@ -710,6 +728,276 @@ private fun BookingPaymentStatus.toPaymentLabel(): String = when (this) {
     BookingPaymentStatus.Unknown -> "Pagamento a confirmar"
 }
 
+private fun BookingHistoryReservation.bookingTimeline(): List<BookingTimelineStepUi> {
+    val reservationStatus = status.toBookingReservationStatus()
+    val timeline = mutableListOf(
+        BookingTimelineStepUi(
+            title = "Pedido enviado",
+            detail = "Recebemos o pedido para ${slotStartIso.toDateLabel()} às ${slotStartIso.toTimeLabel()}.",
+            timestamp = createdAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        ),
+    )
+
+    when (reservationStatus) {
+        BookingReservationStatus.Pending -> timeline += BookingTimelineStepUi(
+            title = "A aguardar validação",
+            detail = pendingExpiresAtIso.toTimelineTimestamp()
+                ?.let { "A equipa vai responder. O pedido fica reservado até $it." }
+                ?: "A equipa vai confirmar ou recusar o pedido.",
+            state = BookingTimelineStepStateUi.Current,
+        )
+
+        BookingReservationStatus.Confirmed,
+        BookingReservationStatus.InProgress,
+        BookingReservationStatus.Completed -> timeline += BookingTimelineStepUi(
+            title = "Pedido aceite",
+            detail = "A equipa confirmou a marcação.",
+            timestamp = acceptedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        )
+
+        BookingReservationStatus.Rejected -> {
+            timeline += BookingTimelineStepUi(
+                title = "Pedido recusado",
+                detail = rejectionReason.trim()
+                    .takeIf { it.isNotBlank() }
+                    ?.let { "Motivo: $it" }
+                    ?: "A equipa não conseguiu aceitar este pedido.",
+                timestamp = rejectedAtIso.toTimelineTimestamp(),
+                state = BookingTimelineStepStateUi.Warning,
+            )
+            terminalSettlementTimelineStep()?.let(timeline::add)
+            return timeline
+        }
+
+        BookingReservationStatus.Expired -> {
+            timeline += BookingTimelineStepUi(
+                title = "Pedido expirado",
+                detail = "O prazo de validação terminou antes da confirmação.",
+                timestamp = pendingExpiresAtIso.toTimelineTimestamp(),
+                state = BookingTimelineStepStateUi.Warning,
+            )
+            terminalSettlementTimelineStep()?.let(timeline::add)
+            return timeline
+        }
+
+        BookingReservationStatus.Cancelled -> {
+            if (!acceptedAtIso.isNullOrBlank()) {
+                timeline += BookingTimelineStepUi(
+                    title = "Pedido aceite",
+                    detail = "A equipa tinha confirmado a marcação.",
+                    timestamp = acceptedAtIso.toTimelineTimestamp(),
+                    state = BookingTimelineStepStateUi.Completed,
+                )
+            }
+            timeline += BookingTimelineStepUi(
+                title = "Marcação cancelada",
+                detail = "A lavagem não será realizada neste horário.",
+                timestamp = cancelledAtIso.toTimelineTimestamp(),
+                state = BookingTimelineStepStateUi.Warning,
+            )
+            terminalSettlementTimelineStep()?.let(timeline::add)
+            return timeline
+        }
+
+        BookingReservationStatus.Unknown -> {
+            timeline += BookingTimelineStepUi(
+                title = "Estado em atualização",
+                detail = "Atualize a lista dentro de momentos para ver o próximo passo.",
+                timestamp = updatedAtIso.toTimelineTimestamp(),
+                state = BookingTimelineStepStateUi.Current,
+            )
+            return timeline
+        }
+    }
+
+    rescheduleTimelineStep()?.let(timeline::add)
+
+    val serviceStep = when (reservationStatus) {
+        BookingReservationStatus.Pending -> BookingTimelineStepUi(
+            title = "Lavagem agendada",
+            detail = "Fica confirmada assim que a equipa aceitar o pedido.",
+            timestamp = slotStartIso.toDateTimeLabel(),
+            state = BookingTimelineStepStateUi.Upcoming,
+        )
+
+        BookingReservationStatus.Confirmed -> BookingTimelineStepUi(
+            title = "Lavagem agendada",
+            detail = "A marcação está garantida para o horário indicado.",
+            timestamp = slotStartIso.toDateTimeLabel(),
+            state = BookingTimelineStepStateUi.Current,
+        )
+
+        BookingReservationStatus.InProgress -> BookingTimelineStepUi(
+            title = "Lavagem a decorrer",
+            detail = "O veículo está a ser tratado. Avisaremos quando estiver pronto.",
+            timestamp = startedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Current,
+        )
+
+        BookingReservationStatus.Completed -> BookingTimelineStepUi(
+            title = "Lavagem concluída",
+            detail = "O serviço foi terminado e guardado no histórico.",
+            timestamp = completedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        )
+
+        BookingReservationStatus.Cancelled,
+        BookingReservationStatus.Rejected,
+        BookingReservationStatus.Expired,
+        BookingReservationStatus.Unknown -> null
+    }
+    serviceStep?.let(timeline::add)
+
+    timeline += paymentTimelineStep(reservationStatus)
+    if (reservationStatus == BookingReservationStatus.Completed && loyaltyStampGranted == true) {
+        timeline += BookingTimelineStepUi(
+            title = "Progresso de fidelização atualizado",
+            detail = "Esta lavagem conta para a próxima recompensa.",
+            timestamp = completedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        )
+    }
+    return timeline
+}
+
+private fun BookingHistoryReservation.rescheduleTimelineStep(): BookingTimelineStepUi? {
+    if (rescheduleCount <= 0 && previousSlotStartIso.isNullOrBlank()) return null
+
+    val previousSlot = previousSlotStartIso?.toDateTimeLabel()
+    val detail = previousSlot?.let {
+        "Alterada de $it para ${slotStartIso.toDateTimeLabel() ?: "o novo horário"}."
+    } ?: "A data ou hora desta marcação foi alterada."
+    val title = if (rescheduleCount > 1) {
+        "Horário alterado $rescheduleCount vezes"
+    } else {
+        "Horário alterado"
+    }
+    return BookingTimelineStepUi(
+        title = title,
+        detail = detail,
+        timestamp = rescheduledAtIso.toTimelineTimestamp(),
+        state = BookingTimelineStepStateUi.Completed,
+    )
+}
+
+private fun BookingHistoryReservation.paymentTimelineStep(
+    reservationStatus: BookingReservationStatus,
+): BookingTimelineStepUi {
+    val paymentStatus = bookingPaymentStatus()
+    if (paymentStatus == BookingPaymentStatus.CoveredByLoyalty || loyaltyRewardApplied) {
+        val applied = reservationStatus == BookingReservationStatus.Completed
+        return BookingTimelineStepUi(
+            title = if (applied) "Recompensa aplicada" else "Recompensa reservada",
+            detail = loyaltyRewardTimelineDetail(),
+            timestamp = if (applied) paymentConfirmedAtIso.toTimelineTimestamp() else null,
+            state = if (applied) BookingTimelineStepStateUi.Completed else BookingTimelineStepStateUi.Current,
+        )
+    }
+
+    return when (paymentStatus) {
+        BookingPaymentStatus.Paid -> BookingTimelineStepUi(
+            title = "Pagamento confirmado",
+            detail = "O pagamento de ${priceCents?.toEuroLabel() ?: "valor acordado"} ficou registado.",
+            timestamp = paymentConfirmedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        )
+
+        BookingPaymentStatus.Refunded -> BookingTimelineStepUi(
+            title = "Pagamento reembolsado",
+            detail = "O valor desta marcação foi devolvido.",
+            timestamp = paymentConfirmedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        )
+
+        BookingPaymentStatus.Failed -> BookingTimelineStepUi(
+            title = "Pagamento por resolver",
+            detail = "O pagamento falhou. Fale com a equipa para concluir o processo.",
+            timestamp = paymentConfirmedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Warning,
+        )
+
+        BookingPaymentStatus.Pending -> BookingTimelineStepUi(
+            title = if (reservationStatus == BookingReservationStatus.Completed) {
+                "Pagamento por confirmar"
+            } else {
+                "Pagamento no final"
+            },
+            detail = if (reservationStatus == BookingReservationStatus.Completed) {
+                "A equipa ainda está a confirmar o pagamento desta lavagem."
+            } else {
+                "O valor de ${priceCents?.toEuroLabel() ?: "serviço"} será confirmado no fim da lavagem."
+            },
+            state = if (reservationStatus == BookingReservationStatus.Completed) {
+                BookingTimelineStepStateUi.Current
+            } else {
+                BookingTimelineStepStateUi.Upcoming
+            },
+        )
+
+        BookingPaymentStatus.Unknown -> BookingTimelineStepUi(
+            title = "Pagamento em atualização",
+            detail = "Atualize a lista dentro de momentos para confirmar o pagamento.",
+            state = BookingTimelineStepStateUi.Current,
+        )
+
+        BookingPaymentStatus.CoveredByLoyalty -> error("Handled before payment status branching")
+    }
+}
+
+private fun BookingHistoryReservation.terminalSettlementTimelineStep(): BookingTimelineStepUi? {
+    if (loyaltyRewardApplied) {
+        val code = loyaltyRewardCode.trim().takeIf { it.isNotBlank() }
+        return BookingTimelineStepUi(
+            title = "Recompensa libertada",
+            detail = code?.let { "A recompensa $it voltou a ficar disponível." }
+                ?: "A recompensa voltou a ficar disponível.",
+            timestamp = (cancelledAtIso ?: rejectedAtIso ?: pendingExpiresAtIso).toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        )
+    }
+
+    return when (bookingPaymentStatus()) {
+        BookingPaymentStatus.Refunded -> BookingTimelineStepUi(
+            title = "Pagamento reembolsado",
+            detail = "O valor desta marcação foi devolvido.",
+            timestamp = paymentConfirmedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Completed,
+        )
+
+        BookingPaymentStatus.Paid -> BookingTimelineStepUi(
+            title = "Pagamento requer confirmação",
+            detail = "A marcação terminou, mas o pagamento continua registado como confirmado. Contacte a equipa.",
+            timestamp = paymentConfirmedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Warning,
+        )
+
+        BookingPaymentStatus.Failed -> BookingTimelineStepUi(
+            title = "Pagamento não concluído",
+            detail = "Não foi registado um pagamento concluído para esta marcação.",
+            timestamp = paymentConfirmedAtIso.toTimelineTimestamp(),
+            state = BookingTimelineStepStateUi.Warning,
+        )
+
+        BookingPaymentStatus.Pending,
+        BookingPaymentStatus.CoveredByLoyalty,
+        BookingPaymentStatus.Unknown -> null
+    }
+}
+
+private fun BookingHistoryReservation.loyaltyRewardTimelineDetail(): String {
+    val description = loyaltyRewardDescription.trim()
+        .takeIf { it.isNotBlank() }
+        ?: "Lavagem coberta por recompensa"
+    val code = loyaltyRewardCode.trim().takeIf { it.isNotBlank() }
+    return code?.let { "$description · Código $it" } ?: description
+}
+
+private fun String?.toTimelineTimestamp(): String? {
+    return this?.let(::formatBookingAuditTimestamp)
+}
+
 private fun BookingHistoryReservation.serviceLabelWithExtras(): String {
     val baseLabel = serviceName.ifBlank { "Serviço" }
     if (extras.isEmpty()) return baseLabel
@@ -742,14 +1030,22 @@ private fun String.toStatusUi(): BookingStatusUi {
 
 private fun String.toStatusDescription(): String {
     return when (toBookingReservationStatus()) {
-        BookingReservationStatus.Pending -> "Pedido recebido. A equipa vai confirmar ou recusar a lavagem."
-        BookingReservationStatus.Confirmed -> "Marcação aceite. A lavagem ainda não começou."
-        BookingReservationStatus.InProgress -> "Lavagem a decorrer. Avisamos quando estiver concluída."
-        BookingReservationStatus.Completed -> "Lavagem concluída e guardada no histórico."
-        BookingReservationStatus.Cancelled -> "Marcação cancelada."
-        BookingReservationStatus.Rejected -> "Pedido recusado pela equipa."
-        BookingReservationStatus.Expired -> "O prazo de validação deste pedido terminou."
-        BookingReservationStatus.Unknown -> "Estado em atualização."
+        BookingReservationStatus.Pending ->
+            "Não precisa de fazer nada. A equipa vai validar o pedido e enviaremos uma atualização."
+        BookingReservationStatus.Confirmed ->
+            "A marcação está garantida. Compareça no horário indicado ou altere-a abaixo."
+        BookingReservationStatus.InProgress ->
+            "A lavagem está em curso. Avisaremos quando o veículo estiver pronto."
+        BookingReservationStatus.Completed ->
+            "A lavagem terminou. Pode avaliar o serviço abaixo."
+        BookingReservationStatus.Cancelled ->
+            "Esta marcação terminou. Faça um novo pedido quando quiser."
+        BookingReservationStatus.Rejected ->
+            "Escolha outro horário para enviar um novo pedido."
+        BookingReservationStatus.Expired ->
+            "Envie um novo pedido para reservar outro horário."
+        BookingReservationStatus.Unknown ->
+            "Atualize a lista dentro de momentos."
     }
 }
 
@@ -817,6 +1113,8 @@ private val monthNames = listOf(
     "novembro",
     "dezembro",
 )
+
+private const val MaxBookingReferenceLength = 40
 
 internal fun BookingRescheduleDraft.toRescheduleRequest(): BookingRescheduleRequest? {
     val slotStartIso = buildSlotIso(dateId = dateId, time = time) ?: return null

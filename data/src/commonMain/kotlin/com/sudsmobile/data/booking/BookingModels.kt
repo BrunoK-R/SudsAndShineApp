@@ -105,11 +105,18 @@ data class BookingHistoryReservation(
     val rejectedAtIso: String? = null,
     val rejectionReason: String = "",
     val acceptedAtIso: String? = null,
+    val startedAtIso: String? = null,
+    val completedAtIso: String? = null,
+    val paymentConfirmedAtIso: String? = null,
     val pendingExpiresAtIso: String? = null,
     val rescheduledAtIso: String? = null,
     val previousSlotStartIso: String? = null,
     val previousSlotEndIso: String? = null,
     val rescheduleCount: Int = 0,
+    val loyaltyRewardApplied: Boolean = false,
+    val loyaltyRewardCode: String = "",
+    val loyaltyRewardDescription: String = "",
+    val loyaltyStampGranted: Boolean? = null,
 )
 
 enum class BookingReservationStatus {
