@@ -48,6 +48,15 @@ class PushNotificationRoutingTest {
     }
 
     @Test
+    fun waitlistAvailabilityRoutesToBookingFlow() {
+        val route = PushNotificationRouting.routeForPayload(
+            mapOf(PushNotificationDataKeys.TemplateKey to "waitlist_available"),
+        )
+
+        assertEquals(Routes.Products, route)
+    }
+
+    @Test
     fun campaignDraftSelfTestRoutesToCampaignDrafts() {
         val route = PushNotificationRouting.routeForPayload(
             mapOf(

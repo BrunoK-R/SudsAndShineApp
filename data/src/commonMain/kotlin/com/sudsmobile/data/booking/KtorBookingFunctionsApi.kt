@@ -79,6 +79,97 @@ class KtorBookingFunctionsApi(
         }
     }
 
+    override suspend fun getMyWaitlist(idToken: String): BookingWaitlistListResult {
+        return try {
+            val response = httpClient.post(config.getMyWaitlistUrl) {
+                callableHeaders(idToken)
+                setBody(CallableMyWaitlistRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableMyWaitlistResponse>()
+            when {
+                body.error != null -> BookingWaitlistListResult.Failure(body.error.toWaitlistError())
+                body.result != null -> BookingWaitlistListResult.Success(
+                    body.result.entries.map { it.toWaitlistEntry() },
+                )
+                else -> BookingWaitlistListResult.Failure(
+                    BookingWaitlistError.Backend("A resposta dos avisos de vaga veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingWaitlistListResult.Failure(
+                BookingWaitlistError.Unavailable("Não foi possível carregar os avisos de vaga."),
+            )
+        }
+    }
+
+    override suspend fun joinMyWaitlist(
+        request: BookingWaitlistJoinRequest,
+        idToken: String,
+    ): BookingWaitlistActionResult {
+        return try {
+            val response = httpClient.post(config.joinMyWaitlistUrl) {
+                callableHeaders(idToken)
+                setBody(CallableJoinWaitlistRequest(WaitlistJoinPayload.from(request)))
+            }
+            val body = response.body<CallableWaitlistActionResponse>()
+            when {
+                body.error != null -> BookingWaitlistActionResult.Failure(body.error.toWaitlistError())
+                body.result != null -> {
+                    val entry = body.result.toWaitlistEntryOrNull()
+                    BookingWaitlistActionResult.Success(
+                        BookingWaitlistActionReceipt(
+                            waitlistId = body.result.waitlistId,
+                            status = body.result.status,
+                            entry = entry,
+                        ),
+                    )
+                }
+                else -> BookingWaitlistActionResult.Failure(
+                    BookingWaitlistError.Backend("A resposta do aviso de vaga veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingWaitlistActionResult.Failure(
+                BookingWaitlistError.Unavailable("Não foi possível ativar o aviso de vaga."),
+            )
+        }
+    }
+
+    override suspend fun cancelMyWaitlist(
+        waitlistId: String,
+        idToken: String,
+    ): BookingWaitlistActionResult {
+        return try {
+            val response = httpClient.post(config.cancelMyWaitlistUrl) {
+                callableHeaders(idToken)
+                setBody(CallableCancelWaitlistRequest(WaitlistCancelPayload(waitlistId)))
+            }
+            val body = response.body<CallableWaitlistActionResponse>()
+            when {
+                body.error != null -> BookingWaitlistActionResult.Failure(body.error.toWaitlistError())
+                body.result != null -> BookingWaitlistActionResult.Success(
+                    BookingWaitlistActionReceipt(
+                        waitlistId = body.result.waitlistId,
+                        status = body.result.status,
+                    ),
+                )
+                else -> BookingWaitlistActionResult.Failure(
+                    BookingWaitlistError.Backend("A resposta do cancelamento veio sem confirmação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingWaitlistActionResult.Failure(
+                BookingWaitlistError.Unavailable("Não foi possível cancelar o aviso de vaga."),
+            )
+        }
+    }
+
     override suspend fun getMyReservations(idToken: String): BookingHistoryResult {
         return try {
             val response = httpClient.post(config.getMyReservationsUrl) {
@@ -291,6 +382,21 @@ private data class CallableMyLoyaltyRequest(
 )
 
 @Serializable
+private data class CallableMyWaitlistRequest(
+    val data: Map<String, String>,
+)
+
+@Serializable
+private data class CallableJoinWaitlistRequest(
+    val data: WaitlistJoinPayload,
+)
+
+@Serializable
+private data class CallableCancelWaitlistRequest(
+    val data: WaitlistCancelPayload,
+)
+
+@Serializable
 private data class CallableReviewRequest(
     val data: ReviewPayload,
 )
@@ -406,6 +512,28 @@ private data class ReschedulePayload(
 }
 
 @Serializable
+private data class WaitlistJoinPayload(
+    val date: String,
+    val serviceId: String,
+    val serviceName: String,
+    val serviceDurationMinutes: Int,
+) {
+    companion object {
+        fun from(request: BookingWaitlistJoinRequest): WaitlistJoinPayload = WaitlistJoinPayload(
+            date = request.dateId,
+            serviceId = request.serviceId,
+            serviceName = request.serviceName,
+            serviceDurationMinutes = request.serviceDurationMinutes,
+        )
+    }
+}
+
+@Serializable
+private data class WaitlistCancelPayload(
+    val waitlistId: String,
+)
+
+@Serializable
 private data class CallableGetAvailabilityResponse(
     val result: GetAvailabilityResult? = null,
     val error: CallableError? = null,
@@ -426,6 +554,18 @@ private data class CallableMyReservationsResponse(
 @Serializable
 private data class CallableMyLoyaltyResponse(
     val result: LoyaltyPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableMyWaitlistResponse(
+    val result: MyWaitlistResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableWaitlistActionResponse(
+    val result: WaitlistActionResult? = null,
     val error: CallableError? = null,
 )
 
@@ -473,6 +613,7 @@ private data class GetAvailabilityDay(
     val dateLabel: String,
     val summaryLabel: String,
     val available: Boolean,
+    val waitlistEligible: Boolean = false,
     val slots: List<GetAvailabilitySlot>,
 ) {
     fun toAvailabilityDay(): BookingAvailabilityDay = BookingAvailabilityDay(
@@ -481,8 +622,62 @@ private data class GetAvailabilityDay(
         dateLabel = dateLabel,
         summaryLabel = summaryLabel,
         available = available,
+        waitlistEligible = waitlistEligible,
         slots = slots.map { it.toAvailabilitySlot() },
     )
+}
+
+@Serializable
+private data class MyWaitlistResult(
+    val entries: List<WaitlistEntryPayload> = emptyList(),
+)
+
+@Serializable
+private data class WaitlistEntryPayload(
+    val id: String,
+    val date: String,
+    val serviceId: String,
+    val serviceName: String,
+    val serviceDurationMinutes: Int,
+    val status: String = "active",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+    val notifiedAt: String? = null,
+) {
+    fun toWaitlistEntry(): BookingWaitlistEntry = BookingWaitlistEntry(
+        id = id,
+        dateId = date,
+        serviceId = serviceId,
+        serviceName = serviceName,
+        serviceDurationMinutes = serviceDurationMinutes,
+        status = status,
+        createdAtIso = createdAt,
+        updatedAtIso = updatedAt,
+        notifiedAtIso = notifiedAt,
+    )
+}
+
+@Serializable
+private data class WaitlistActionResult(
+    val ok: Boolean = false,
+    val waitlistId: String,
+    val date: String = "",
+    val serviceId: String = "",
+    val serviceName: String = "",
+    val serviceDurationMinutes: Int = 0,
+    val status: String = "active",
+) {
+    fun toWaitlistEntryOrNull(): BookingWaitlistEntry? {
+        if (date.isBlank() || serviceId.isBlank() || serviceName.isBlank() || serviceDurationMinutes <= 0) return null
+        return BookingWaitlistEntry(
+            id = waitlistId,
+            dateId = date,
+            serviceId = serviceId,
+            serviceName = serviceName,
+            serviceDurationMinutes = serviceDurationMinutes,
+            status = status,
+        )
+    }
 }
 
 @Serializable
@@ -773,6 +968,19 @@ private data class CallableError(
             "UNAUTHENTICATED" -> BookingHistoryError.Unauthenticated("Inicie sessão para ver as suas marcações.")
             "UNAVAILABLE" -> BookingHistoryError.Unavailable("O serviço de marcações está indisponível.")
             else -> BookingHistoryError.Backend(fallbackMessage)
+        }
+    }
+
+    fun toWaitlistError(): BookingWaitlistError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível gerir o aviso de vaga."
+        return when (normalizedCode) {
+            "INVALID_ARGUMENT", "FAILED_PRECONDITION" -> BookingWaitlistError.Validation(fallbackMessage)
+            "PERMISSION_DENIED" -> BookingWaitlistError.Permission("Este aviso não pertence à sessão atual.")
+            "UNAUTHENTICATED" -> BookingWaitlistError.Unauthenticated("Inicie sessão para gerir avisos de vaga.")
+            "NOT_FOUND" -> BookingWaitlistError.NotFound("O aviso de vaga já não existe.")
+            "UNAVAILABLE" -> BookingWaitlistError.Unavailable("O serviço de avisos de vaga está indisponível.")
+            else -> BookingWaitlistError.Backend(fallbackMessage)
         }
     }
 

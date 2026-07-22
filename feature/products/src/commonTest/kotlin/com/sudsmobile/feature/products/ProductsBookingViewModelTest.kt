@@ -17,6 +17,11 @@ import com.sudsmobile.data.booking.BookingLoyaltyResult
 import com.sudsmobile.data.booking.BookingLoyaltyStamp
 import com.sudsmobile.data.booking.BookingLoyaltySummary
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.BookingWaitlistActionReceipt
+import com.sudsmobile.data.booking.BookingWaitlistActionResult
+import com.sudsmobile.data.booking.BookingWaitlistEntry
+import com.sudsmobile.data.booking.BookingWaitlistJoinRequest
+import com.sudsmobile.data.booking.BookingWaitlistListResult
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.business.BusinessFaq
 import com.sudsmobile.data.business.BusinessInfo
@@ -1078,6 +1083,83 @@ class ProductsBookingViewModelTest {
         assertEquals(BookingSubmitResolution.SignIn, error.resolution)
         assertEquals(false, error.retryable)
     }
+
+    @Test
+    fun refreshWaitlistLoadsAlertsForAuthenticatedCustomer() = runTest {
+        val entry = bookingWaitlistEntry()
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            waitlistListResult = BookingWaitlistListResult.Success(listOf(entry)),
+        )
+        val viewModel = productsBookingViewModel(bookingRepository = repository)
+
+        viewModel.refreshWaitlistForSession()
+        runCurrent()
+
+        assertEquals(1, repository.waitlistListCalls)
+        assertEquals(listOf(entry), viewModel.waitlistState.value.entries)
+        assertEquals(false, viewModel.waitlistState.value.isLoading)
+    }
+
+    @Test
+    fun joinAndCancelWaitlistUpdatesTheSelectedDateImmediately() = runTest {
+        val entry = bookingWaitlistEntry()
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            waitlistJoinResult = BookingWaitlistActionResult.Success(
+                BookingWaitlistActionReceipt(
+                    waitlistId = entry.id,
+                    status = entry.status,
+                    entry = entry,
+                ),
+            ),
+            waitlistCancelResult = BookingWaitlistActionResult.Success(
+                BookingWaitlistActionReceipt(waitlistId = entry.id, status = "cancelled"),
+            ),
+        )
+        val viewModel = productsBookingViewModel(bookingRepository = repository)
+
+        viewModel.joinWaitlist(
+            BookingWaitlistJoinRequest(
+                dateId = entry.dateId,
+                serviceId = entry.serviceId,
+                serviceName = entry.serviceName,
+                serviceDurationMinutes = entry.serviceDurationMinutes,
+            ),
+        )
+        runCurrent()
+
+        assertEquals(listOf(entry), viewModel.waitlistState.value.entries)
+        assertEquals(entry.dateId, repository.lastWaitlistJoinRequest?.dateId)
+
+        viewModel.cancelWaitlist(entry)
+        runCurrent()
+
+        assertEquals(emptyList(), viewModel.waitlistState.value.entries)
+        assertEquals(entry.id, repository.lastCancelledWaitlistId)
+    }
+
+    @Test
+    fun waitlistIsClearedWhenCustomerSignsOut() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            waitlistListResult = BookingWaitlistListResult.Success(listOf(bookingWaitlistEntry())),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+        )
+        viewModel.refreshWaitlistForSession()
+        runCurrent()
+        assertEquals(1, viewModel.waitlistState.value.entries.size)
+
+        authRepository.signOut()
+        viewModel.refreshWaitlistForSession()
+
+        assertEquals(emptyList(), viewModel.waitlistState.value.entries)
+        assertEquals(true, viewModel.waitlistState.value.isUnauthenticated)
+    }
 }
 
 private fun productsBookingViewModel(
@@ -1115,12 +1197,25 @@ private class FakeBookingRepository(
         ),
     ),
     private val loyaltyResult: BookingLoyaltyResult = BookingLoyaltyResult.Success(bookingLoyalty()),
+    private val waitlistListResult: BookingWaitlistListResult = BookingWaitlistListResult.Success(emptyList()),
+    private val waitlistJoinResult: BookingWaitlistActionResult = BookingWaitlistActionResult.Failure(
+        com.sudsmobile.data.booking.BookingWaitlistError.Unavailable("Not configured"),
+    ),
+    private val waitlistCancelResult: BookingWaitlistActionResult = BookingWaitlistActionResult.Failure(
+        com.sudsmobile.data.booking.BookingWaitlistError.Unavailable("Not configured"),
+    ),
 ) : BookingRepository {
     var lastAvailabilityRequest: BookingAvailabilityRequest? = null
         private set
     var loyaltyCalls: Int = 0
         private set
     var createCalls: Int = 0
+        private set
+    var waitlistListCalls: Int = 0
+        private set
+    var lastWaitlistJoinRequest: BookingWaitlistJoinRequest? = null
+        private set
+    var lastCancelledWaitlistId: String? = null
         private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
@@ -1140,6 +1235,21 @@ private class FakeBookingRepository(
     override suspend fun getMyLoyalty(): BookingLoyaltyResult {
         loyaltyCalls += 1
         return loyaltyResult
+    }
+
+    override suspend fun getMyWaitlist(): BookingWaitlistListResult {
+        waitlistListCalls += 1
+        return waitlistListResult
+    }
+
+    override suspend fun joinWaitlist(request: BookingWaitlistJoinRequest): BookingWaitlistActionResult {
+        lastWaitlistJoinRequest = request
+        return waitlistJoinResult
+    }
+
+    override suspend fun cancelWaitlist(waitlistId: String): BookingWaitlistActionResult {
+        lastCancelledWaitlistId = waitlistId
+        return waitlistCancelResult
     }
 }
 
@@ -1383,6 +1493,15 @@ private fun availabilityDay(
         slots = slots,
     )
 }
+
+private fun bookingWaitlistEntry(): BookingWaitlistEntry = BookingWaitlistEntry(
+    id = "waitlist-1",
+    dateId = "2026-08-14",
+    serviceId = "premium",
+    serviceName = "Lavagem Premium",
+    serviceDurationMinutes = 45,
+    status = "active",
+)
 
 private fun userVehicle(
     id: String = "vehicle-1",

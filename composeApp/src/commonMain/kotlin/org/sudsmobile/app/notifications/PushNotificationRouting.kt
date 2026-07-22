@@ -65,6 +65,9 @@ object PushNotificationRouting {
             templateKey == "loyalty_reward" || type == "loyalty_reward" ->
                 Routes.Loyalty
 
+            templateKey == "waitlist_available" || type == "waitlist_available" ->
+                Routes.Products
+
             templateKey == "campaign_draft" && data.isCampaignAdminSelfTest() ->
                 Routes.AdminNotificationCampaignDrafts
             templateKey == "campaign_draft" ->

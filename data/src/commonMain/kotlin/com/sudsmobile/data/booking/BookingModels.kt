@@ -199,6 +199,7 @@ data class BookingAvailabilityDay(
     val dateLabel: String,
     val summaryLabel: String,
     val available: Boolean,
+    val waitlistEligible: Boolean = false,
     val slots: List<BookingAvailabilitySlot>,
 )
 
@@ -207,6 +208,52 @@ data class BookingAvailabilitySlot(
     val available: Boolean,
     val remainingCapacity: Int,
 )
+
+data class BookingWaitlistJoinRequest(
+    val dateId: String,
+    val serviceId: String,
+    val serviceName: String,
+    val serviceDurationMinutes: Int,
+)
+
+data class BookingWaitlistEntry(
+    val id: String,
+    val dateId: String,
+    val serviceId: String,
+    val serviceName: String,
+    val serviceDurationMinutes: Int,
+    val status: String,
+    val createdAtIso: String = "",
+    val updatedAtIso: String = "",
+    val notifiedAtIso: String? = null,
+)
+
+data class BookingWaitlistActionReceipt(
+    val waitlistId: String,
+    val status: String,
+    val entry: BookingWaitlistEntry? = null,
+)
+
+sealed interface BookingWaitlistListResult {
+    data class Success(val entries: List<BookingWaitlistEntry>) : BookingWaitlistListResult
+    data class Failure(val error: BookingWaitlistError) : BookingWaitlistListResult
+}
+
+sealed interface BookingWaitlistActionResult {
+    data class Success(val receipt: BookingWaitlistActionReceipt) : BookingWaitlistActionResult
+    data class Failure(val error: BookingWaitlistError) : BookingWaitlistActionResult
+}
+
+sealed interface BookingWaitlistError {
+    val message: String
+
+    data class Validation(override val message: String) : BookingWaitlistError
+    data class Permission(override val message: String) : BookingWaitlistError
+    data class Unauthenticated(override val message: String) : BookingWaitlistError
+    data class NotFound(override val message: String) : BookingWaitlistError
+    data class Unavailable(override val message: String) : BookingWaitlistError
+    data class Backend(override val message: String) : BookingWaitlistError
+}
 
 sealed interface BookingCreateResult {
     data class Success(val receipt: BookingReceipt) : BookingCreateResult
@@ -338,6 +385,23 @@ sealed interface BookingRewardRedemptionError {
 interface BookingRepository {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult
+    suspend fun getMyWaitlist(): BookingWaitlistListResult {
+        return BookingWaitlistListResult.Failure(
+            BookingWaitlistError.Unavailable("Os avisos de vaga ainda não estão disponíveis."),
+        )
+    }
+
+    suspend fun joinWaitlist(request: BookingWaitlistJoinRequest): BookingWaitlistActionResult {
+        return BookingWaitlistActionResult.Failure(
+            BookingWaitlistError.Unavailable("Os avisos de vaga ainda não estão disponíveis."),
+        )
+    }
+
+    suspend fun cancelWaitlist(waitlistId: String): BookingWaitlistActionResult {
+        return BookingWaitlistActionResult.Failure(
+            BookingWaitlistError.Unavailable("Os avisos de vaga ainda não estão disponíveis."),
+        )
+    }
     suspend fun getMyBookings(): BookingHistoryResult
     suspend fun getMyLoyalty(): BookingLoyaltyResult {
         return BookingLoyaltyResult.Failure(

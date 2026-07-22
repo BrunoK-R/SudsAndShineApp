@@ -3,6 +3,26 @@ package com.sudsmobile.data.booking
 interface BookingFunctionsApi {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createReservation(request: BookingCreateRequest, idToken: String?): BookingCreateResult
+    suspend fun getMyWaitlist(idToken: String): BookingWaitlistListResult {
+        return BookingWaitlistListResult.Failure(
+            BookingWaitlistError.Unavailable("O serviço de avisos de vaga está indisponível."),
+        )
+    }
+
+    suspend fun joinMyWaitlist(
+        request: BookingWaitlistJoinRequest,
+        idToken: String,
+    ): BookingWaitlistActionResult {
+        return BookingWaitlistActionResult.Failure(
+            BookingWaitlistError.Unavailable("O serviço de avisos de vaga está indisponível."),
+        )
+    }
+
+    suspend fun cancelMyWaitlist(waitlistId: String, idToken: String): BookingWaitlistActionResult {
+        return BookingWaitlistActionResult.Failure(
+            BookingWaitlistError.Unavailable("O serviço de avisos de vaga está indisponível."),
+        )
+    }
     suspend fun getMyReservations(idToken: String): BookingHistoryResult
     suspend fun getMyLoyalty(idToken: String): BookingLoyaltyResult {
         return BookingLoyaltyResult.Failure(

@@ -47,6 +47,44 @@ class FirebaseBookingRepository(
             }
     }
 
+    override suspend fun getMyWaitlist(): BookingWaitlistListResult {
+        val session = authRepository.currentSession()
+            ?: return BookingWaitlistListResult.Failure(
+                BookingWaitlistError.Unauthenticated("Inicie sessão para gerir avisos de vaga."),
+            )
+        return api.getMyWaitlist(session.idToken)
+    }
+
+    override suspend fun joinWaitlist(request: BookingWaitlistJoinRequest): BookingWaitlistActionResult {
+        val normalized = request.copy(
+            dateId = request.dateId.trim(),
+            serviceId = request.serviceId.trim(),
+            serviceName = request.serviceName.trim(),
+        )
+        validate(normalized)?.let { error ->
+            return BookingWaitlistActionResult.Failure(error)
+        }
+        val session = authRepository.currentSession()
+            ?: return BookingWaitlistActionResult.Failure(
+                BookingWaitlistError.Unauthenticated("Inicie sessão para receber avisos de vaga."),
+            )
+        return api.joinMyWaitlist(normalized, session.idToken)
+    }
+
+    override suspend fun cancelWaitlist(waitlistId: String): BookingWaitlistActionResult {
+        val normalizedId = waitlistId.trim()
+        if (normalizedId.isBlank() || normalizedId.contains("/") || normalizedId.length > 160) {
+            return BookingWaitlistActionResult.Failure(
+                BookingWaitlistError.Validation("O aviso de vaga selecionado é inválido."),
+            )
+        }
+        val session = authRepository.currentSession()
+            ?: return BookingWaitlistActionResult.Failure(
+                BookingWaitlistError.Unauthenticated("Inicie sessão para cancelar este aviso."),
+            )
+        return api.cancelMyWaitlist(normalizedId, session.idToken)
+    }
+
     override suspend fun getMyBookings(): BookingHistoryResult {
         val session = authRepository.currentSession()
             ?: return BookingHistoryResult.Failure(
@@ -169,6 +207,19 @@ class FirebaseBookingRepository(
             request.extraIds.any { it.isBlank() || it.contains("/") || it.length > 120 } ->
                 BookingCreateError.Validation("Escolha extras válidos para esta marcação.")
             !request.gdprConsent -> BookingCreateError.Validation("Aceite a política de privacidade para continuar.")
+            else -> null
+        }
+    }
+
+    private fun validate(request: BookingWaitlistJoinRequest): BookingWaitlistError? {
+        return when {
+            !isValidDateId(request.dateId) -> BookingWaitlistError.Validation("Escolha uma data válida para o aviso.")
+            request.serviceId.isBlank() || request.serviceId.contains("/") || request.serviceId.length > 120 ->
+                BookingWaitlistError.Validation("Escolha um serviço válido para o aviso.")
+            request.serviceName.isBlank() || request.serviceName.length > 160 ->
+                BookingWaitlistError.Validation("Escolha um serviço válido para o aviso.")
+            request.serviceDurationMinutes !in 5..480 ->
+                BookingWaitlistError.Validation("A duração do serviço é inválida.")
             else -> null
         }
     }

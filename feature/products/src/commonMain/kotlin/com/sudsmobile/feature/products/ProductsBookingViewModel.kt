@@ -19,6 +19,10 @@ import com.sudsmobile.data.booking.BookingLoyaltyError
 import com.sudsmobile.data.booking.BookingLoyaltyRedemption
 import com.sudsmobile.data.booking.BookingLoyaltyResult
 import com.sudsmobile.data.booking.BookingRepository
+import com.sudsmobile.data.booking.BookingWaitlistActionResult
+import com.sudsmobile.data.booking.BookingWaitlistEntry
+import com.sudsmobile.data.booking.BookingWaitlistJoinRequest
+import com.sudsmobile.data.booking.BookingWaitlistListResult
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.business.BusinessInfo
 import com.sudsmobile.data.business.BusinessInfoError
@@ -160,6 +164,14 @@ sealed interface BookingRewardsUiState {
     data class Error(val message: String, val retryable: Boolean) : BookingRewardsUiState
 }
 
+data class BookingWaitlistUiState(
+    val entries: List<BookingWaitlistEntry> = emptyList(),
+    val isLoading: Boolean = false,
+    val busyDateId: String? = null,
+    val errorMessage: String? = null,
+    val isUnauthenticated: Boolean = false,
+)
+
 class ProductsBookingViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
@@ -204,6 +216,12 @@ class ProductsBookingViewModel(
     private var loadedRewardsUid: String? = null
     private var loadedRewardsRevision: Long? = null
     private var rewardsRequestInFlight: Boolean = false
+
+    private val _waitlistState = MutableStateFlow(BookingWaitlistUiState())
+    val waitlistState: StateFlow<BookingWaitlistUiState> = _waitlistState.asStateFlow()
+    private var loadedWaitlistUid: String? = null
+    private var waitlistRequestSequence: Long = 0
+    private var waitlistRequestInFlight: Boolean = false
 
     fun loadBusinessInfo(force: Boolean = false) {
         if (!force && _businessInfoState.value is BookingBusinessInfoUiState.Loading) return
@@ -533,6 +551,171 @@ class ProductsBookingViewModel(
         }
     }
 
+    fun refreshWaitlistForSession() {
+        when (val currentSessionState = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                invalidateWaitlistRequest()
+                _waitlistState.value = BookingWaitlistUiState(isLoading = true)
+            }
+            is AuthSessionState.RestoreFailed -> {
+                invalidateWaitlistRequest()
+                _waitlistState.value = BookingWaitlistUiState(errorMessage = currentSessionState.error.message)
+            }
+            AuthSessionState.Unauthenticated -> {
+                invalidateWaitlistRequest()
+                _waitlistState.value = BookingWaitlistUiState(isUnauthenticated = true)
+            }
+            is AuthSessionState.Authenticated -> {
+                if (loadedWaitlistUid != currentSessionState.session.user.uid) {
+                    loadWaitlist()
+                }
+            }
+        }
+    }
+
+    fun loadWaitlist() {
+        val session = (authRepository.sessionState.value as? AuthSessionState.Authenticated)?.session
+        if (session == null) {
+            invalidateWaitlistRequest()
+            _waitlistState.value = BookingWaitlistUiState(isUnauthenticated = true)
+            return
+        }
+        if (waitlistRequestInFlight) return
+
+        val expectedUid = session.user.uid
+        val requestSequence = ++waitlistRequestSequence
+        waitlistRequestInFlight = true
+        _waitlistState.value = _waitlistState.value.copy(isLoading = true, errorMessage = null)
+        viewModelScope.launch {
+            try {
+                val result = bookingRepository.getMyWaitlist()
+                if (requestSequence != waitlistRequestSequence) return@launch
+                val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)
+                    ?.session
+                    ?.user
+                    ?.uid
+                if (currentUid != expectedUid) {
+                    loadedWaitlistUid = null
+                    _waitlistState.value = BookingWaitlistUiState(isUnauthenticated = currentUid == null)
+                    return@launch
+                }
+                _waitlistState.value = when (result) {
+                    is BookingWaitlistListResult.Success -> {
+                        loadedWaitlistUid = expectedUid
+                        BookingWaitlistUiState(entries = result.entries)
+                    }
+                    is BookingWaitlistListResult.Failure -> BookingWaitlistUiState(
+                        errorMessage = result.error.message,
+                    )
+                }
+            } finally {
+                if (requestSequence == waitlistRequestSequence) {
+                    waitlistRequestInFlight = false
+                }
+            }
+        }
+    }
+
+    fun joinWaitlist(request: BookingWaitlistJoinRequest) {
+        if (_waitlistState.value.busyDateId != null) return
+        val expectedUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.user
+            ?.uid
+        if (expectedUid == null) {
+            _waitlistState.value = _waitlistState.value.copy(
+                errorMessage = null,
+                isUnauthenticated = true,
+            )
+            return
+        }
+
+        _waitlistState.value = _waitlistState.value.copy(
+            busyDateId = request.dateId,
+            errorMessage = null,
+            isUnauthenticated = false,
+        )
+        viewModelScope.launch {
+            val result = bookingRepository.joinWaitlist(request)
+            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)
+                ?.session
+                ?.user
+                ?.uid
+            if (currentUid != expectedUid) {
+                invalidateWaitlistRequest()
+                _waitlistState.value = BookingWaitlistUiState(
+                    isUnauthenticated = currentUid == null,
+                )
+                return@launch
+            }
+            _waitlistState.value = when (result) {
+                is BookingWaitlistActionResult.Success -> {
+                    val entry = result.receipt.entry
+                    if (entry == null) {
+                        _waitlistState.value.copy(busyDateId = null)
+                    } else {
+                        _waitlistState.value.copy(
+                            entries = (_waitlistState.value.entries.filterNot { it.id == entry.id } + entry)
+                                .sortedBy { it.dateId },
+                            busyDateId = null,
+                            errorMessage = null,
+                        )
+                    }
+                }
+                is BookingWaitlistActionResult.Failure -> _waitlistState.value.copy(
+                    busyDateId = null,
+                    errorMessage = result.error.message,
+                )
+            }
+            if (result is BookingWaitlistActionResult.Success && result.receipt.entry == null) {
+                loadedWaitlistUid = null
+                loadWaitlist()
+            }
+        }
+    }
+
+    fun cancelWaitlist(entry: BookingWaitlistEntry) {
+        if (_waitlistState.value.busyDateId != null) return
+        val expectedUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)
+            ?.session
+            ?.user
+            ?.uid
+        if (expectedUid == null) {
+            _waitlistState.value = _waitlistState.value.copy(isUnauthenticated = true)
+            return
+        }
+
+        _waitlistState.value = _waitlistState.value.copy(
+            busyDateId = entry.dateId,
+            errorMessage = null,
+        )
+        viewModelScope.launch {
+            val result = bookingRepository.cancelWaitlist(entry.id)
+            val currentUid = (authRepository.sessionState.value as? AuthSessionState.Authenticated)
+                ?.session
+                ?.user
+                ?.uid
+            if (currentUid != expectedUid) {
+                invalidateWaitlistRequest()
+                _waitlistState.value = BookingWaitlistUiState(
+                    isUnauthenticated = currentUid == null,
+                )
+                return@launch
+            }
+            _waitlistState.value = when (result) {
+                is BookingWaitlistActionResult.Success -> _waitlistState.value.copy(
+                    entries = _waitlistState.value.entries.filterNot { it.id == entry.id },
+                    busyDateId = null,
+                    errorMessage = null,
+                )
+                is BookingWaitlistActionResult.Failure -> _waitlistState.value.copy(
+                    busyDateId = null,
+                    errorMessage = result.error.message,
+                )
+            }
+        }
+    }
+
     fun submitBooking(draft: ProductsBookingDraft?) {
         if (submitRequestInFlight) return
 
@@ -769,6 +952,12 @@ class ProductsBookingViewModel(
     private fun clearLoadedVehicles() {
         loadedVehiclesUid = null
         loadedVehiclesRevision = null
+    }
+
+    private fun invalidateWaitlistRequest() {
+        waitlistRequestSequence += 1
+        waitlistRequestInFlight = false
+        loadedWaitlistUid = null
     }
 }
 

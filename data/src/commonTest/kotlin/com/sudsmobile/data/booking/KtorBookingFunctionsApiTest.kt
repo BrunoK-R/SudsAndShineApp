@@ -33,6 +33,7 @@ class KtorBookingFunctionsApiTest {
                         "dateLabel": "20 mai",
                         "summaryLabel": "20 de maio, 2026",
                         "available": true,
+                        "waitlistEligible": true,
                         "slots": [
                           {
                             "time": "10:00",
@@ -55,6 +56,7 @@ class KtorBookingFunctionsApiTest {
         assertEquals("maio 2026", success.month.monthTitle)
         assertEquals(4, success.month.leadingEmptyCells)
         assertEquals("2026-05-20", success.month.days.first().id)
+        assertEquals(true, success.month.days.first().waitlistEligible)
         assertEquals("10:00", success.month.days.first().slots.first().time)
     }
 
@@ -599,6 +601,117 @@ class KtorBookingFunctionsApiTest {
         val failure = assertIs<BookingRewardRedemptionResult.Failure>(result)
         assertIs<BookingRewardRedemptionError.NotAvailable>(failure.error)
         assertEquals("Ainda não tem uma recompensa disponível.", failure.error.message)
+    }
+
+    @Test
+    fun mapsAuthenticatedWaitlistEntries() = runTest {
+        var requestedPath = ""
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "entries": [
+                      {
+                        "id": "waitlist-1",
+                        "date": "2026-08-14",
+                        "serviceId": "premium",
+                        "serviceName": "Lavagem Premium",
+                        "serviceDurationMinutes": 45,
+                        "status": "active",
+                        "createdAt": "2026-07-22T10:00:00.000Z",
+                        "updatedAt": "2026-07-22T10:00:00.000Z"
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getMyWaitlist(idToken = "id-token-1")
+
+        val success = assertIs<BookingWaitlistListResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getMyWaitlist", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("waitlist-1", success.entries.single().id)
+        assertEquals("2026-08-14", success.entries.single().dateId)
+        assertEquals("Lavagem Premium", success.entries.single().serviceName)
+    }
+
+    @Test
+    fun mapsWaitlistActivationReceipt() = runTest {
+        var requestedPath = ""
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "waitlistId": "waitlist-1",
+                    "date": "2026-08-14",
+                    "serviceId": "premium",
+                    "serviceName": "Lavagem Premium",
+                    "serviceDurationMinutes": 45,
+                    "status": "active"
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.joinMyWaitlist(
+            request = BookingWaitlistJoinRequest(
+                dateId = "2026-08-14",
+                serviceId = "premium",
+                serviceName = "Lavagem Premium",
+                serviceDurationMinutes = 45,
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<BookingWaitlistActionResult.Success>(result)
+        assertEquals("/test-project/europe-west1/joinMyWaitlist", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("waitlist-1", success.receipt.waitlistId)
+        assertEquals("active", success.receipt.status)
+        assertEquals("2026-08-14", success.receipt.entry?.dateId)
+    }
+
+    @Test
+    fun mapsWaitlistCancellationReceipt() = runTest {
+        var requestedPath = ""
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "waitlistId": "waitlist-1",
+                    "status": "cancelled"
+                  }
+                }
+                """.trimIndent(),
+            ) { request -> requestedPath = request.url.fullPath },
+            config = testConfig(),
+        )
+
+        val result = api.cancelMyWaitlist(waitlistId = "waitlist-1", idToken = "id-token-1")
+
+        val success = assertIs<BookingWaitlistActionResult.Success>(result)
+        assertEquals("/test-project/europe-west1/cancelMyWaitlist", requestedPath)
+        assertEquals("waitlist-1", success.receipt.waitlistId)
+        assertEquals("cancelled", success.receipt.status)
     }
 }
 

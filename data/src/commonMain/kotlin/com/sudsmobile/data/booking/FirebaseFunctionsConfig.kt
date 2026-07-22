@@ -20,6 +20,15 @@ data class FirebaseFunctionsConfig(
             "https://$region-$projectId.cloudfunctions.net/getAvailability"
         }
 
+    val getMyWaitlistUrl: String
+        get() = functionUrl("getMyWaitlist")
+
+    val joinMyWaitlistUrl: String
+        get() = functionUrl("joinMyWaitlist")
+
+    val cancelMyWaitlistUrl: String
+        get() = functionUrl("cancelMyWaitlist")
+
     val getServiceCatalogUrl: String
         get() = if (useEmulator) {
             "http://$emulatorHost:5001/$projectId/$region/getServiceCatalog"

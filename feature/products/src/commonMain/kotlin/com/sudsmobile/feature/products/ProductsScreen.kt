@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
@@ -76,6 +77,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -90,6 +94,8 @@ import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import com.sudsmobile.data.booking.BookingPaymentStatus
 import com.sudsmobile.data.booking.BookingReservationStatus
+import com.sudsmobile.data.booking.BookingWaitlistEntry
+import com.sudsmobile.data.booking.BookingWaitlistJoinRequest
 import com.sudsmobile.data.booking.toBookingPaymentStatus
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import org.koin.compose.viewmodel.koinViewModel
@@ -146,6 +152,7 @@ fun ProductsScreen(
     val contactProfileState by viewModel.contactProfileState.collectAsStateWithLifecycle()
     val businessInfoState by viewModel.businessInfoState.collectAsStateWithLifecycle()
     val rewardsState by viewModel.rewardsState.collectAsStateWithLifecycle()
+    val waitlistState by viewModel.waitlistState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
@@ -164,6 +171,7 @@ fun ProductsScreen(
         contactProfileState = contactProfileState,
         businessInfoState = businessInfoState,
         rewardsState = rewardsState,
+        waitlistState = waitlistState,
         sessionState = sessionState,
         availabilityState = availabilityState,
         submitState = submitState,
@@ -175,11 +183,14 @@ fun ProductsScreen(
         onLoadBusinessInfo = viewModel::loadBusinessInfo,
         onLoadRewards = viewModel::loadRewards,
         onRefreshRewardsForSession = viewModel::refreshRewardsForSession,
+        onRefreshWaitlistForSession = viewModel::refreshWaitlistForSession,
         onLoadAvailability = viewModel::loadAvailability,
         onSubmitBooking = viewModel::submitBooking,
         onRefreshSubmitForSession = viewModel::refreshSubmitForSession,
         onClearSubmitError = viewModel::clearSubmitError,
         onSubmitSuccessConsumed = viewModel::consumeSuccess,
+        onJoinWaitlist = viewModel::joinWaitlist,
+        onCancelWaitlist = viewModel::cancelWaitlist,
         onBack = onBack,
         onViewBooking = onViewBooking,
         onHome = onHome,
@@ -201,6 +212,7 @@ private fun ProductsScreenContent(
     contactProfileState: BookingContactProfileUiState,
     businessInfoState: BookingBusinessInfoUiState,
     rewardsState: BookingRewardsUiState,
+    waitlistState: BookingWaitlistUiState,
     sessionState: AuthSessionState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
@@ -212,11 +224,14 @@ private fun ProductsScreenContent(
     onLoadBusinessInfo: (Boolean) -> Unit,
     onLoadRewards: () -> Unit,
     onRefreshRewardsForSession: () -> Unit,
+    onRefreshWaitlistForSession: () -> Unit,
     onLoadAvailability: (Int, String?) -> Unit,
     onSubmitBooking: (ProductsBookingDraft?) -> Unit,
     onRefreshSubmitForSession: () -> Unit,
     onClearSubmitError: () -> Unit,
     onSubmitSuccessConsumed: () -> Unit,
+    onJoinWaitlist: (BookingWaitlistJoinRequest) -> Unit,
+    onCancelWaitlist: (BookingWaitlistEntry) -> Unit,
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
@@ -359,6 +374,12 @@ private fun ProductsScreenContent(
         }
     }
 
+    LaunchedEffect(currentStep, sessionState) {
+        if (currentStep == BookingStep.DateTime) {
+            onRefreshWaitlistForSession()
+        }
+    }
+
     LaunchedEffect(catalogState, selectedServiceId) {
         if (catalogState is ProductCatalogUiState.Loaded &&
             selectedServiceId != null &&
@@ -417,10 +438,10 @@ private fun ProductsScreenContent(
             minimumAvailabilityMonthAnchor = availabilityMonth?.monthAnchorDate()
         }
 
-        val selectedDateStillAvailable = days.any { day ->
-            day.id == selectedDateId && day.available
+        val selectedDateStillEligible = days.any { day ->
+            day.id == selectedDateId && (day.available || day.waitlistEligible)
         }
-        if (!selectedDateStillAvailable) {
+        if (!selectedDateStillEligible) {
             selectedDateId = days.firstOrNull { it.available }?.id
             selectedTime = null
         }
@@ -527,6 +548,10 @@ private fun ProductsScreenContent(
 
                     DateTimeStepContent(
                         availabilityState = availabilityState,
+                        waitlistState = waitlistState,
+                        serviceId = selectedService?.id.orEmpty(),
+                        serviceName = selectedService?.name.orEmpty(),
+                        serviceDurationMinutes = selectedService?.durationMinutes ?: 0,
                         selectedDateId = selectedDateId,
                         selectedTime = selectedTime,
                         onDateSelected = { dateId ->
@@ -543,6 +568,20 @@ private fun ProductsScreenContent(
                                 onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
                             }
                         },
+                        onJoinWaitlist = { dateId ->
+                            selectedService?.let { service ->
+                                onJoinWaitlist(
+                                    BookingWaitlistJoinRequest(
+                                        dateId = dateId,
+                                        serviceId = service.id,
+                                        serviceName = service.name,
+                                        serviceDurationMinutes = service.durationMinutes,
+                                    ),
+                                )
+                            }
+                        },
+                        onCancelWaitlist = onCancelWaitlist,
+                        onRequestSignIn = onRequestSignIn,
                         minimumMonthAnchor = minimumAvailabilityMonthAnchor,
                         onPreviousMonth = {
                             val currentAnchor = availabilityMonth?.monthAnchorDate()
@@ -2575,11 +2614,18 @@ private fun BookingContactField(
 @Composable
 private fun DateTimeStepContent(
     availabilityState: BookingAvailabilityUiState,
+    waitlistState: BookingWaitlistUiState,
+    serviceId: String,
+    serviceName: String,
+    serviceDurationMinutes: Int,
     selectedDateId: String?,
     selectedTime: String?,
     onDateSelected: (String) -> Unit,
     onTimeSelected: (String) -> Unit,
     onRetryAvailability: () -> Unit,
+    onJoinWaitlist: (String) -> Unit,
+    onCancelWaitlist: (BookingWaitlistEntry) -> Unit,
+    onRequestSignIn: () -> Unit,
     minimumMonthAnchor: String?,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
@@ -2590,6 +2636,12 @@ private fun DateTimeStepContent(
         else -> null
     }
     val selectedDay = month?.days?.firstOrNull { it.id == selectedDateId }
+    val activeWaitlistEntry = waitlistState.entries.firstOrNull { entry ->
+        entry.status.equals("active", ignoreCase = true) &&
+            entry.dateId == selectedDateId &&
+            entry.serviceId == serviceId &&
+            entry.serviceDurationMinutes == serviceDurationMinutes
+    }
     val currentMonthAnchor = month?.monthAnchorDate()
     val canNavigatePrevious = currentMonthAnchor != null &&
         minimumMonthAnchor != null &&
@@ -2622,6 +2674,18 @@ private fun DateTimeStepContent(
                     selectedTime = selectedTime,
                     onTimeSelected = onTimeSelected,
                 )
+
+                if (selectedDay?.available == false && selectedDay.waitlistEligible) {
+                    WaitlistAlertCard(
+                        dateLabel = selectedDay.summaryLabel,
+                        serviceName = serviceName,
+                        state = waitlistState,
+                        activeEntry = activeWaitlistEntry,
+                        onJoin = { onJoinWaitlist(selectedDay.id) },
+                        onCancel = onCancelWaitlist,
+                        onRequestSignIn = onRequestSignIn,
+                    )
+                }
             }
 
             is BookingAvailabilityUiState.Empty -> {
@@ -2634,11 +2698,23 @@ private fun DateTimeStepContent(
                     onDateSelected = onDateSelected,
                 )
 
-                AvailabilityStatusCard(
-                    title = "Sem horários disponíveis",
-                    body = "Não há vagas abertas para ${availabilityState.month.monthTitle}.",
-                    onRetry = onRetryAvailability,
-                )
+                if (selectedDay?.waitlistEligible == true) {
+                    WaitlistAlertCard(
+                        dateLabel = selectedDay.summaryLabel,
+                        serviceName = serviceName,
+                        state = waitlistState,
+                        activeEntry = activeWaitlistEntry,
+                        onJoin = { onJoinWaitlist(selectedDay.id) },
+                        onCancel = onCancelWaitlist,
+                        onRequestSignIn = onRequestSignIn,
+                    )
+                } else {
+                    AvailabilityStatusCard(
+                        title = "Sem horários disponíveis",
+                        body = "Escolha um dia útil para receber um aviso se surgir uma vaga em ${availabilityState.month.monthTitle}.",
+                        onRetry = onRetryAvailability,
+                    )
+                }
             }
 
             is BookingAvailabilityUiState.Error -> AvailabilityStatusCard(
@@ -2741,6 +2817,155 @@ private fun AvailabilityStatusCard(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text("Tentar novamente", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WaitlistAlertCard(
+    dateLabel: String,
+    serviceName: String,
+    state: BookingWaitlistUiState,
+    activeEntry: BookingWaitlistEntry?,
+    onJoin: () -> Unit,
+    onCancel: (BookingWaitlistEntry) -> Unit,
+    onRequestSignIn: () -> Unit,
+) {
+    val busy = state.busyDateId == activeEntry?.dateId ||
+        (activeEntry == null && state.busyDateId != null)
+    val active = activeEntry != null
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (active) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLowest
+            },
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (active) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    },
+                ) {
+                    Icon(
+                        imageVector = if (active) Icons.Filled.Check else Icons.Filled.NotificationsActive,
+                        contentDescription = null,
+                        tint = if (active) {
+                            MaterialTheme.colorScheme.onTertiary
+                        } else {
+                            MaterialTheme.colorScheme.onTertiaryContainer
+                        },
+                        modifier = Modifier.padding(10.dp).size(22.dp),
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (active) "Aviso de vaga ativo" else "Avise-me se surgir uma vaga",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (active) {
+                            MaterialTheme.colorScheme.onTertiaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                    Text(
+                        text = if (active) {
+                            "Enviaremos uma notificação quando houver um horário para $serviceName em $dateLabel. O aviso é enviado uma vez."
+                        } else {
+                            "Ative um aviso para $dateLabel. Se surgir um horário para $serviceName, recebe uma notificação para reservar na app."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (active) {
+                            MaterialTheme.colorScheme.onTertiaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+
+            state.errorMessage?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
+            when {
+                state.isLoading -> Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                    Text(
+                        text = "A confirmar os seus avisos",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+
+                state.isUnauthenticated -> Button(
+                    onClick = onRequestSignIn,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Iniciar sessão para ativar")
+                }
+
+                active -> OutlinedButton(
+                    onClick = { onCancel(requireNotNull(activeEntry)) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
+                ) {
+                    if (busy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (busy) "A cancelar" else "Cancelar aviso")
+                }
+
+                else -> Button(
+                    onClick = onJoin,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    if (busy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (busy) "A ativar" else "Ativar aviso de vaga")
+                }
             }
         }
     }
@@ -2896,20 +3121,31 @@ private fun CalendarDayCell(
     onSelected: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val selectable = dateOption.available || dateOption.waitlistEligible
+    val availabilityDescription = when {
+        dateOption.available -> "Horários disponíveis"
+        dateOption.waitlistEligible -> "Sem vagas; aviso disponível"
+        else -> "Indisponível"
+    }
     Surface(
         modifier = modifier
             .height(44.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = dateOption.available, onClick = onSelected),
+            .semantics {
+                stateDescription = availabilityDescription
+            }
+            .clickable(enabled = selectable, role = Role.Button, onClick = onSelected),
         shape = RoundedCornerShape(12.dp),
         color = when {
             selected -> MaterialTheme.colorScheme.tertiary
             dateOption.available -> MaterialTheme.colorScheme.surfaceContainerLow
+            dateOption.waitlistEligible -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.58f)
             else -> MaterialTheme.colorScheme.surfaceContainerHigh
         },
         contentColor = when {
             selected -> MaterialTheme.colorScheme.onTertiary
             dateOption.available -> MaterialTheme.colorScheme.onSurface
+            dateOption.waitlistEligible -> MaterialTheme.colorScheme.onTertiaryContainer
             else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f)
         },
     ) {
