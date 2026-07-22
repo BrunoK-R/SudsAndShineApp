@@ -23,6 +23,8 @@ npm run test:consumer-contract
 
 Crashlytics collection is disabled in debug builds and enabled in release builds. This keeps local testing out of production crash reports while preserving launch observability.
 
+The current release recommendation, external account gates, manual smoke matrix, and operational launch tasks are tracked in [the production launch checklist](docs/PRODUCTION_LAUNCH_CHECKLIST.md).
+
 ## Android production bundle
 
 The release APK may be assembled unsigned for local verification. The Play Store App Bundle intentionally refuses to build until all four signing values are supplied as Gradle properties or environment variables:

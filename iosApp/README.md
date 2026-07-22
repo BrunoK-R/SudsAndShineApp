@@ -4,12 +4,12 @@ This folder contains the native iOS host for the Kotlin Multiplatform app.
 
 ## Google Sign-In setup
 
-The iOS Google button is intentionally hidden until the native Google OAuth
-configuration is present. The app currently has the Firebase web client ID, but
-still needs the iOS client values for bundle id `org.sudsandshine.app`.
+The iOS Google button is hidden if the native Google OAuth configuration is not
+present. The Firebase web, iOS, and reversed iOS client values are currently set
+for bundle id `org.sudsandshine.app` in `Configuration/Config.xcconfig`.
 
-Create or open the Firebase iOS app for that bundle id, then download
-`GoogleService-Info.plist`. Copy these two values into
+If the Firebase iOS app or bundle id changes, download its
+`GoogleService-Info.plist` and replace these two values in
 `Configuration/Config.xcconfig`:
 
 ```xcconfig
