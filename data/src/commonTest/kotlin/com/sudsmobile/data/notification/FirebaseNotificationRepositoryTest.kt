@@ -39,23 +39,24 @@ class FirebaseNotificationRepositoryTest {
     }
 
     @Test
-    fun normalizesTokenRegistrationWithCurrentToken() = runTest {
+    fun normalizesInstallationRegistrationWithCurrentToken() = runTest {
         val api = RecordingNotificationFunctionsApi()
         val repository = FirebaseNotificationRepository(api, FakeNotificationAuthRepository(authenticated = true))
 
         val result = repository.registerNotificationToken(
             NotificationTokenRegistrationRequest(
-                token = " test-token-for-current-device-1234567890 ",
                 platform = NotificationTokenPlatform.Android,
                 tokenId = "current-test-device",
                 deviceLabel = " Pixel   8 ",
                 appVersion = " debug-1 ",
+                fid = " test-firebase-installation-id-1234567890 ",
             ),
         )
 
         assertIs<NotificationTokenRegistrationResult.Success>(result)
         assertEquals("id-token-1", api.lastTokenIdToken)
-        assertEquals("test-token-for-current-device-1234567890", api.lastTokenRequest?.token)
+        assertEquals("", api.lastTokenRequest?.token)
+        assertEquals("test-firebase-installation-id-1234567890", api.lastTokenRequest?.fid)
         assertEquals("current-test-device", api.lastTokenRequest?.tokenId)
         assertEquals("Pixel 8", api.lastTokenRequest?.deviceLabel)
         assertEquals("debug-1", api.lastTokenRequest?.appVersion)
@@ -71,6 +72,24 @@ class FirebaseNotificationRepositoryTest {
                 token = "test-token-for-current-device-1234567890",
                 platform = NotificationTokenPlatform.Ios,
                 tokenId = "users/uid-2/token",
+            ),
+        )
+
+        assertIs<NotificationTokenRegistrationResult.Failure>(result)
+        assertIs<NotificationError.Validation>(result.error)
+        assertEquals(0, api.registerTokenCalls)
+    }
+
+    @Test
+    fun rejectsRegistrationContainingBothInstallationIdAndLegacyToken() = runTest {
+        val api = RecordingNotificationFunctionsApi()
+        val repository = FirebaseNotificationRepository(api, FakeNotificationAuthRepository(authenticated = true))
+
+        val result = repository.registerNotificationToken(
+            NotificationTokenRegistrationRequest(
+                token = "test-token-for-current-device-1234567890",
+                platform = NotificationTokenPlatform.Android,
+                fid = "test-firebase-installation-id-1234567890",
             ),
         )
 

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import com.google.firebase.installations.FirebaseInstallations
 import com.google.firebase.messaging.FirebaseMessaging
 import java.util.UUID
 import kotlin.coroutines.resume
@@ -14,6 +15,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 class AndroidNotificationDeviceRegistrar(
     context: Context,
     private val firebaseMessaging: FirebaseMessaging = FirebaseMessaging.getInstance(),
+    private val firebaseInstallations: FirebaseInstallations = FirebaseInstallations.getInstance(),
 ) : NotificationDeviceRegistrar {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
@@ -35,18 +37,21 @@ class AndroidNotificationDeviceRegistrar(
         }
 
         return try {
-            val token = firebaseMessaging.awaitToken()
-            buildRegistrationRequestForToken(token)
+            firebaseMessaging.awaitRegistration()
+            val installationId = firebaseInstallations.awaitId()
+            buildRegistrationRequestForInstallationId(installationId)
         } catch (cause: CancellationException) {
             throw cause
         } catch (cause: Throwable) {
             NotificationDeviceRegistrationRequestResult.Failure(
-                "Não foi possível obter o token de notificações deste dispositivo.",
+                "Não foi possível registar este dispositivo para notificações.",
             )
         }
     }
 
-    fun buildRegistrationRequestForToken(token: String): NotificationDeviceRegistrationRequestResult {
+    fun buildRegistrationRequestForInstallationId(
+        installationId: String,
+    ): NotificationDeviceRegistrationRequestResult {
         val permissionStatus = currentPermissionStatus()
         if (permissionStatus == NotificationDevicePermissionStatus.RequiresPermission) {
             return NotificationDeviceRegistrationRequestResult.PermissionRequired(
@@ -54,20 +59,20 @@ class AndroidNotificationDeviceRegistrar(
             )
         }
 
-        val cleanToken = token.trim()
-        if (cleanToken.isBlank()) {
+        val cleanInstallationId = installationId.trim()
+        if (cleanInstallationId.isBlank()) {
             return NotificationDeviceRegistrationRequestResult.Failure(
-                "Não foi possível obter o token de notificações deste dispositivo.",
+                "Não foi possível obter o identificador de notificações deste dispositivo.",
             )
         }
 
         return NotificationDeviceRegistrationRequestResult.Success(
             NotificationTokenRegistrationRequest(
-                token = cleanToken,
                 platform = NotificationTokenPlatform.Android,
                 tokenId = currentTokenId(),
                 deviceLabel = deviceLabel(),
                 appVersion = appVersion(),
+                fid = cleanInstallationId,
             ),
         )
     }
@@ -140,15 +145,27 @@ class AndroidNotificationDeviceRegistrar(
     }
 }
 
-private suspend fun FirebaseMessaging.awaitToken(): String = suspendCancellableCoroutine { continuation ->
-    token.addOnCompleteListener { task ->
+private suspend fun FirebaseMessaging.awaitRegistration(): Unit = suspendCancellableCoroutine { continuation ->
+    register().addOnCompleteListener { task ->
+        if (!continuation.isActive) return@addOnCompleteListener
+
+        when {
+            task.isSuccessful -> continuation.resume(Unit)
+            task.exception != null -> continuation.resumeWithException(task.exception ?: IllegalStateException())
+            else -> continuation.resumeWithException(IllegalStateException("Firebase Messaging registration failed."))
+        }
+    }
+}
+
+private suspend fun FirebaseInstallations.awaitId(): String = suspendCancellableCoroutine { continuation ->
+    id.addOnCompleteListener { task ->
         if (!continuation.isActive) return@addOnCompleteListener
 
         val result = if (task.isSuccessful) task.result else null
         when {
             task.isSuccessful && !result.isNullOrBlank() -> continuation.resume(result)
             task.exception != null -> continuation.resumeWithException(task.exception ?: IllegalStateException())
-            else -> continuation.resumeWithException(IllegalStateException("Firebase Messaging token is empty."))
+            else -> continuation.resumeWithException(IllegalStateException("Firebase Installation ID is empty."))
         }
     }
 }

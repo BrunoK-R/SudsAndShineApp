@@ -30,9 +30,9 @@ class SudsFirebaseMessagingService : FirebaseMessagingService() {
         showForegroundNotification(message)
     }
 
-    override fun onNewToken(token: String) {
+    override fun onRegistered(installationId: String) {
         serviceScope.launch {
-            registerRefreshedToken(token)
+            registerInstallationId(installationId)
         }
     }
 
@@ -85,7 +85,7 @@ class SudsFirebaseMessagingService : FirebaseMessagingService() {
         notificationManager.notify(notificationId(message), notification)
     }
 
-    private suspend fun registerRefreshedToken(token: String) {
+    private suspend fun registerInstallationId(installationId: String) {
         val koin = runCatching { GlobalContext.get() }.getOrNull() ?: return
         val authRepository = runCatching { koin.get<AuthRepository>() }.getOrNull() ?: return
         val session = authRepository.currentSession() ?: return
@@ -95,7 +95,7 @@ class SudsFirebaseMessagingService : FirebaseMessagingService() {
             ) ?: return
         val notificationRepository = runCatching { koin.get<NotificationRepository>() }.getOrNull() ?: return
 
-        when (val requestResult = registrar.buildRegistrationRequestForToken(token)) {
+        when (val requestResult = registrar.buildRegistrationRequestForInstallationId(installationId)) {
             is NotificationDeviceRegistrationRequestResult.Success -> {
                 when (
                     val result = notificationRepository.registerNotificationToken(requestResult.request)

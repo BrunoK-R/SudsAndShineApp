@@ -62,9 +62,13 @@ class FirebaseNotificationRepository(
         request: NotificationTokenRegistrationRequest,
     ): NotificationError.Validation? {
         val token = request.token.trim()
+        val fid = request.fid.trim()
+        val registrationTarget = fid.ifBlank { token }
         return when {
-            token.length !in MinTokenLength..MaxTokenLength ->
-                NotificationError.Validation("O token de notificações é inválido.")
+            token.isNotBlank() == fid.isNotBlank() ->
+                NotificationError.Validation("O registo de notificações é inválido.")
+            registrationTarget.length !in MinRegistrationTargetLength..MaxRegistrationTargetLength ->
+                NotificationError.Validation("O registo de notificações é inválido.")
             request.tokenId.isNotBlank() && !request.tokenId.isSafeTokenId() ->
                 NotificationError.Validation("O identificador do dispositivo é inválido.")
             request.deviceLabel.length > MaxDeviceLabelLength ->
@@ -77,6 +81,7 @@ class FirebaseNotificationRepository(
 
     private fun NotificationTokenRegistrationRequest.normalized(): NotificationTokenRegistrationRequest = copy(
         token = token.trim(),
+        fid = fid.trim(),
         tokenId = tokenId.trim(),
         deviceLabel = deviceLabel.trim().replace(Regex("\\s+"), " "),
         appVersion = appVersion.trim(),
@@ -95,8 +100,8 @@ class FirebaseNotificationRepository(
     )
 }
 
-private const val MinTokenLength = 20
-private const val MaxTokenLength = 4096
+private const val MinRegistrationTargetLength = 20
+private const val MaxRegistrationTargetLength = 4096
 private const val MaxDeviceLabelLength = 120
 private const val MaxMetadataLength = 64
 private val TokenIdRegex = Regex("^[A-Za-z0-9_-]{8,128}$")

@@ -11,6 +11,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.fullPath
 import io.ktor.http.headersOf
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.content.TextContent
 import io.ktor.serialization.kotlinx.json.json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,6 +98,7 @@ class KtorNotificationFunctionsApiTest {
     @Test
     fun mapsNotificationTokenRegistrationResponse() = runTest {
         var requestedPath: String? = null
+        var requestBody: String? = null
         val api = KtorNotificationFunctionsApi(
             httpClient = mockClient(
                 """
@@ -111,20 +114,23 @@ class KtorNotificationFunctionsApiTest {
                 """.trimIndent(),
             ) { request ->
                 requestedPath = request.url.fullPath
+                requestBody = request.bodyText()
             },
             config = testConfig(),
         )
 
         val result = api.registerNotificationToken(
             NotificationTokenRegistrationRequest(
-                token = "test-token-for-current-device-1234567890",
                 platform = NotificationTokenPlatform.Android,
+                fid = "test-firebase-installation-id-1234567890",
             ),
             idToken = "id-token-1",
         )
 
         val success = assertIs<NotificationTokenRegistrationResult.Success>(result)
         assertEquals("/test-project/europe-west1/registerNotificationToken", requestedPath)
+        assertEquals(true, requestBody?.contains("\"fid\":\"test-firebase-installation-id-1234567890\""))
+        assertEquals(false, requestBody?.contains("\"token\":"))
         assertEquals("token-id-1", success.tokenId)
         assertEquals(NotificationTokenPlatform.Android, success.platform)
         assertEquals(true, success.enabled)
@@ -214,6 +220,12 @@ private fun mockClient(
             )
         }
     }
+}
+
+private fun HttpRequestData.bodyText(): String = when (val content = body) {
+    is TextContent -> content.text
+    is OutgoingContent.ByteArrayContent -> content.bytes().decodeToString()
+    else -> error("Unsupported request body: ${content::class.simpleName}")
 }
 
 private fun testConfig(): FirebaseFunctionsConfig = FirebaseFunctionsConfig(

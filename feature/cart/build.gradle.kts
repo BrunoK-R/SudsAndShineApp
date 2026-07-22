@@ -8,6 +8,10 @@ plugins {
     alias(libs.plugins.serialization)
 }
 
+dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
+}
+
 kotlin {
     androidTarget {
         compilerOptions {
@@ -68,6 +72,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }

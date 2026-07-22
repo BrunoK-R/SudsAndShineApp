@@ -41,6 +41,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.ktor.android.client)
             implementation(project.dependencies.platform(libs.firebase.bom))
+            implementation(libs.firebase.installations)
             implementation(libs.firebase.messaging)
         }
         iosMain.dependencies {

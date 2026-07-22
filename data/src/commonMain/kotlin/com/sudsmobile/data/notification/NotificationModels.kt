@@ -17,11 +17,12 @@ data class NotificationPreferencesUpdateRequest(
 )
 
 data class NotificationTokenRegistrationRequest(
-    val token: String,
+    val token: String = "",
     val platform: NotificationTokenPlatform,
     val tokenId: String = "",
     val deviceLabel: String = "",
     val appVersion: String = "",
+    val fid: String = "",
 )
 
 data class NotificationTokenDeleteRequest(

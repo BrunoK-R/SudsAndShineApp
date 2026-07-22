@@ -178,7 +178,8 @@ private data class CallableNotificationTokenRegistrationRequest(
 
 @Serializable
 private data class NotificationTokenPayload(
-    val token: String,
+    val token: String = "",
+    val fid: String = "",
     val platform: String,
     val tokenId: String = "",
     val deviceLabel: String = "",
@@ -188,6 +189,7 @@ private data class NotificationTokenPayload(
         fun from(request: NotificationTokenRegistrationRequest): NotificationTokenPayload {
             return NotificationTokenPayload(
                 token = request.token,
+                fid = request.fid,
                 platform = request.platform.wireName,
                 tokenId = request.tokenId,
                 deviceLabel = request.deviceLabel,
