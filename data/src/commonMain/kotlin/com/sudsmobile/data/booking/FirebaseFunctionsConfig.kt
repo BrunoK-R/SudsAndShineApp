@@ -76,6 +76,21 @@ data class FirebaseFunctionsConfig(
     val claimMyReferralCodeUrl: String
         get() = functionUrl("claimMyReferralCode")
 
+    val getMyServiceEntitlementsUrl: String
+        get() = functionUrl("getMyServiceEntitlements")
+
+    val getAdminServiceEntitlementsUrl: String
+        get() = functionUrl("getAdminServiceEntitlements")
+
+    val issueAdminServiceEntitlementUrl: String
+        get() = functionUrl("issueAdminServiceEntitlement")
+
+    val adjustAdminServiceEntitlementUsageUrl: String
+        get() = functionUrl("adjustAdminServiceEntitlementUsage")
+
+    val revokeAdminServiceEntitlementUrl: String
+        get() = functionUrl("revokeAdminServiceEntitlement")
+
     val syncMyRoleUrl: String
         get() = functionUrl("syncMyRole")
 

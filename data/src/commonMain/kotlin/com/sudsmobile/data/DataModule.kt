@@ -25,6 +25,10 @@ import com.sudsmobile.data.catalog.CatalogFunctionsApi
 import com.sudsmobile.data.catalog.FirebaseServiceCatalogRepository
 import com.sudsmobile.data.catalog.KtorCatalogFunctionsApi
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
+import com.sudsmobile.data.entitlement.FirebaseServiceEntitlementRepository
+import com.sudsmobile.data.entitlement.KtorServiceEntitlementFunctionsApi
+import com.sudsmobile.data.entitlement.ServiceEntitlementFunctionsApi
+import com.sudsmobile.data.entitlement.ServiceEntitlementRepository
 import com.sudsmobile.data.network.createSudsHttpClient
 import com.sudsmobile.data.notification.FirebaseNotificationRepository
 import com.sudsmobile.data.notification.KtorNotificationFunctionsApi
@@ -75,6 +79,8 @@ val dataModule = module {
     single<BookingRepository> { FirebaseBookingRepository(get(), get(), get()) }
     single<ReferralFunctionsApi> { KtorReferralFunctionsApi(get(), get()) }
     single<ReferralRepository> { FirebaseReferralRepository(get(), get()) }
+    single<ServiceEntitlementFunctionsApi> { KtorServiceEntitlementFunctionsApi(get(), get()) }
+    single<ServiceEntitlementRepository> { FirebaseServiceEntitlementRepository(get(), get()) }
     single<AdminFunctionsApi> { KtorAdminFunctionsApi(get(), get()) }
     single<AdminRepository> { FirebaseAdminRepository(get(), get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }

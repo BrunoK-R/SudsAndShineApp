@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CardMembership
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
@@ -72,6 +73,8 @@ fun BlogScreen(
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
     val referralViewModel: ReferralViewModel = koinViewModel()
     val referralUiState by referralViewModel.uiState.collectAsStateWithLifecycle()
+    val entitlementsViewModel: ServiceEntitlementsViewModel = koinViewModel()
+    val entitlementsUiState by entitlementsViewModel.uiState.collectAsStateWithLifecycle()
     val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(sessionState, bookingRevision) {
@@ -79,6 +82,7 @@ fun BlogScreen(
     }
     LaunchedEffect(sessionState) {
         referralViewModel.refreshForSession()
+        entitlementsViewModel.refreshForSession()
     }
 
     Column(
@@ -100,9 +104,11 @@ fun BlogScreen(
             LoyaltyContent(
                 uiState = uiState,
                 referralUiState = referralUiState,
+                entitlementsUiState = entitlementsUiState,
                 onRetry = viewModel::loadRewards,
                 onRedeemReward = viewModel::redeemReward,
                 onRetryReferral = { referralViewModel.refreshForSession(force = true) },
+                onRetryEntitlements = { entitlementsViewModel.refreshForSession(force = true) },
                 onReferralCodeChange = referralViewModel::updateClaimCode,
                 onClaimReferral = referralViewModel::claimReferralCode,
                 onCopyReferral = { shareMessage ->
@@ -153,9 +159,11 @@ private fun LoyaltyHeader() {
 private fun LoyaltyContent(
     uiState: LoyaltyUiState,
     referralUiState: ReferralUiState,
+    entitlementsUiState: ServiceEntitlementsUiState,
     onRetry: () -> Unit,
     onRedeemReward: () -> Unit,
     onRetryReferral: () -> Unit,
+    onRetryEntitlements: () -> Unit,
     onReferralCodeChange: (String) -> Unit,
     onClaimReferral: () -> Unit,
     onCopyReferral: (String) -> Unit,
@@ -209,6 +217,7 @@ private fun LoyaltyContent(
                 onClaim = onClaimReferral,
                 onCopy = onCopyReferral,
             )
+            ServiceEntitlementsCard(uiState = entitlementsUiState, onRetry = onRetryEntitlements)
             StampGridCard(progress = uiState.progress)
             HowItWorksCard(stampsRequired = uiState.progress.targetWashes)
             StampHistoryCard(history = emptyList())
@@ -232,6 +241,7 @@ private fun LoyaltyContent(
                 onClaim = onClaimReferral,
                 onCopy = onCopyReferral,
             )
+            ServiceEntitlementsCard(uiState = entitlementsUiState, onRetry = onRetryEntitlements)
             StampGridCard(progress = uiState.progress)
             HowItWorksCard(stampsRequired = uiState.progress.targetWashes)
             StampHistoryCard(history = uiState.history)
@@ -467,6 +477,150 @@ private fun RewardCodeRow(rewardCode: LoyaltyRewardCodeUi) {
                 fontWeight = FontWeight.Bold,
             )
         }
+    }
+}
+
+@Composable
+private fun ServiceEntitlementsCard(
+    uiState: ServiceEntitlementsUiState,
+    onRetry: () -> Unit,
+) {
+    when (uiState) {
+        ServiceEntitlementsUiState.Idle,
+        ServiceEntitlementsUiState.Loading -> LoyaltyStatusCard(
+            title = "A carregar planos",
+            body = "Estamos a consultar pacotes e planos ativos.",
+            loading = true,
+            icon = Icons.Filled.CardMembership,
+        )
+        ServiceEntitlementsUiState.Unauthenticated -> Unit
+        is ServiceEntitlementsUiState.Error -> LoyaltyStatusCard(
+            title = "Planos indisponíveis",
+            body = uiState.message,
+            icon = Icons.Filled.CardMembership,
+            actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+            onAction = if (uiState.retryable) onRetry else null,
+        )
+        is ServiceEntitlementsUiState.Loaded -> ServiceEntitlementsLoadedCard(uiState.entitlements)
+    }
+}
+
+@Composable
+private fun ServiceEntitlementsLoadedCard(entitlements: List<ServiceEntitlementUi>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            SectionTitle(icon = Icons.Filled.CardMembership, title = "Planos e pacotes")
+            Text(
+                text = "São ativados pela equipa após compra no local. Esta app não faz cobranças nem renovações automáticas.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (entitlements.isEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Text(
+                        text = "Ainda não tem um pacote ou plano associado à conta.",
+                        modifier = Modifier.padding(14.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            } else {
+                entitlements.take(6).forEachIndexed { index, entitlement ->
+                    ServiceEntitlementRow(entitlement)
+                    if (index < entitlements.take(6).lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServiceEntitlementRow(entitlement: ServiceEntitlementUi) {
+    val active = entitlement.status == "active"
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = entitlement.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "${entitlement.kindLabel} · ${entitlement.code}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Surface(
+                color = if (active) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                },
+                contentColor = if (active) {
+                    MaterialTheme.colorScheme.onTertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                shape = CircleShape,
+            ) {
+                Text(
+                    text = entitlement.statusLabel,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        Text(
+            text = "${entitlement.remainingUses} de ${entitlement.totalUses} utilizações disponíveis",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+        )
+        LinearProgressIndicator(
+            progress = {
+                if (entitlement.totalUses > 0) {
+                    entitlement.usedUses.toFloat() / entitlement.totalUses.toFloat()
+                } else {
+                    0f
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape),
+            color = MaterialTheme.colorScheme.tertiary,
+            trackColor = MaterialTheme.colorScheme.surfaceContainer,
+        )
+        if (entitlement.eligibleServicesLabel.isNotBlank()) {
+            Text(
+                text = "Inclui: ${entitlement.eligibleServicesLabel}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = "Válido até ${entitlement.validUntilLabel}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

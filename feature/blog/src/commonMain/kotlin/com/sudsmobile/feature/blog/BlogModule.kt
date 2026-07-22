@@ -6,4 +6,5 @@ import org.koin.dsl.module
 val blogModule = module {
     viewModelOf(::LoyaltyViewModel)
     viewModelOf(::ReferralViewModel)
+    viewModelOf(::ServiceEntitlementsViewModel)
 }

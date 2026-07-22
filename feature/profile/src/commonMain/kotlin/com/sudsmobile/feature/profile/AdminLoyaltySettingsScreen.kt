@@ -68,9 +68,13 @@ fun AdminLoyaltySettingsScreen(
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
     val reportState by viewModel.reportState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
+    val entitlementViewModel: AdminServiceEntitlementsViewModel = koinViewModel()
+    val entitlementState by entitlementViewModel.uiState.collectAsStateWithLifecycle()
+    val entitlementActionState by entitlementViewModel.actionState.collectAsStateWithLifecycle()
 
     LaunchedEffect(sessionState) {
         viewModel.refreshForSession()
+        entitlementViewModel.refreshForSession()
     }
 
     AdminLoyaltySettingsScreenContent(
@@ -78,12 +82,23 @@ fun AdminLoyaltySettingsScreen(
         uiState = uiState,
         saveState = saveState,
         reportState = reportState,
+        entitlementState = entitlementState,
+        entitlementActionState = entitlementActionState,
         onBack = onBack,
         onRequestSignIn = onRequestSignIn,
         onRetry = { viewModel.loadConfiguration() },
         onFormChange = viewModel::updateForm,
         onSave = viewModel::save,
         onDismissSaveState = viewModel::clearSaveState,
+        onRetryEntitlements = { entitlementViewModel.refreshForSession(force = true) },
+        onEntitlementFormChange = entitlementViewModel::updateForm,
+        onFindEntitlementCustomer = entitlementViewModel::findCustomer,
+        onIssueEntitlement = entitlementViewModel::issue,
+        onAdjustEntitlementUsage = entitlementViewModel::adjustUsage,
+        onRequestEntitlementRevoke = entitlementViewModel::requestRevoke,
+        onCancelEntitlementRevoke = entitlementViewModel::cancelRevoke,
+        onConfirmEntitlementRevoke = entitlementViewModel::confirmRevoke,
+        onDismissEntitlementAction = entitlementViewModel::clearActionState,
     )
 }
 
@@ -93,12 +108,23 @@ private fun AdminLoyaltySettingsScreenContent(
     uiState: AdminLoyaltySettingsUiState,
     saveState: AdminLoyaltySettingsSaveState,
     reportState: AdminLoyaltyReportUiState,
+    entitlementState: AdminServiceEntitlementsUiState,
+    entitlementActionState: AdminServiceEntitlementActionState,
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
     onFormChange: (AdminLoyaltySettingsForm) -> Unit,
     onSave: () -> Unit,
     onDismissSaveState: () -> Unit,
+    onRetryEntitlements: () -> Unit,
+    onEntitlementFormChange: (AdminServiceEntitlementForm) -> Unit,
+    onFindEntitlementCustomer: () -> Unit,
+    onIssueEntitlement: () -> Unit,
+    onAdjustEntitlementUsage: (String, Int) -> Unit,
+    onRequestEntitlementRevoke: (String) -> Unit,
+    onCancelEntitlementRevoke: () -> Unit,
+    onConfirmEntitlementRevoke: () -> Unit,
+    onDismissEntitlementAction: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -162,6 +188,19 @@ private fun AdminLoyaltySettingsScreenContent(
                         saving = saveState == AdminLoyaltySettingsSaveState.Saving,
                         onFormChange = onFormChange,
                         onSave = onSave,
+                    )
+                    AdminServiceEntitlementsSection(
+                        uiState = entitlementState,
+                        actionState = entitlementActionState,
+                        onRetry = onRetryEntitlements,
+                        onFormChange = onEntitlementFormChange,
+                        onFindCustomer = onFindEntitlementCustomer,
+                        onIssue = onIssueEntitlement,
+                        onAdjustUsage = onAdjustEntitlementUsage,
+                        onRequestRevoke = onRequestEntitlementRevoke,
+                        onCancelRevoke = onCancelEntitlementRevoke,
+                        onConfirmRevoke = onConfirmEntitlementRevoke,
+                        onDismissAction = onDismissEntitlementAction,
                     )
                 }
             }

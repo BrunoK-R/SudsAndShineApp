@@ -134,8 +134,8 @@ Run these checks from store-distributed builds against production. Save account,
 These are useful retention/revenue features, but they should not block the first pilot unless the business makes them contractual launch requirements.
 
 - [x] **Referrals:** personal invite codes, a 30-day attribution window, first-paid-wash qualification, self/replacement controls, privacy-safe status, and ledger-backed stamps for both parties are implemented.
-- [ ] **Prepaid packages:** define included services, validity, transfer/refund rules, purchase/payment source, remaining uses, atomic redemption, and admin correction/audit.
-- [ ] **Memberships:** define tier/price/cadence, entitlements, renewal/failure/cancellation states, payment-provider webhooks, customer self-service, and revenue/support reporting.
+- [x] **Staff-issued packages and limited-use plans:** staff can record the counter sale, included active services, validity, amount paid, and an audit note; customers can see the balance; usage, correction, and revocation are atomic and audited. Transfer/refund decisions remain an offline operational policy.
+- [ ] **Recurring memberships:** define tier/price/cadence, renewal/failure/cancellation states, payment-provider webhooks, customer self-service, and revenue/support reporting before enabling online purchase or automatic renewal.
 
 Do not present packages or memberships as purchasable until a production payment provider and financial reconciliation process exist. If they are initially sold at the counter, label them as staff-issued and preserve an auditable admin assignment trail.
 
