@@ -16,6 +16,12 @@ import com.sudsmobile.data.booking.BookingLoyaltyRedemption
 import com.sudsmobile.data.booking.BookingLoyaltyResult
 import com.sudsmobile.data.booking.BookingLoyaltyStamp
 import com.sudsmobile.data.booking.BookingLoyaltySummary
+import com.sudsmobile.data.booking.BookingPreset
+import com.sudsmobile.data.booking.BookingPresetDeleteResult
+import com.sudsmobile.data.booking.BookingPresetList
+import com.sudsmobile.data.booking.BookingPresetListResult
+import com.sudsmobile.data.booking.BookingPresetSaveResult
+import com.sudsmobile.data.booking.BookingPresetUpsertRequest
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.BookingWaitlistActionReceipt
 import com.sudsmobile.data.booking.BookingWaitlistActionResult
@@ -1160,6 +1166,86 @@ class ProductsBookingViewModelTest {
         assertEquals(emptyList(), viewModel.waitlistState.value.entries)
         assertEquals(true, viewModel.waitlistState.value.isUnauthenticated)
     }
+
+    @Test
+    fun favoritePresetsLoadForAuthenticatedCustomer() = runTest {
+        val preset = bookingPreset()
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            presetListResult = BookingPresetListResult.Success(BookingPresetList(listOf(preset), maxPresets = 5)),
+        )
+        val viewModel = productsBookingViewModel(bookingRepository = repository)
+
+        viewModel.refreshPresetsForSession()
+        runCurrent()
+
+        val loaded = assertIs<BookingPresetsUiState.Loaded>(viewModel.presetsState.value)
+        assertEquals(listOf(preset), loaded.presets)
+        assertEquals(5, loaded.maxPresets)
+        assertEquals(1, repository.presetListCalls)
+    }
+
+    @Test
+    fun savingFavoriteUpdatesSyncedListWithoutDuplicate() = runTest {
+        val preset = bookingPreset(label = "Lavagem habitual")
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            presetListResult = BookingPresetListResult.Success(BookingPresetList(listOf(preset))),
+            presetSaveResult = BookingPresetSaveResult.Success(preset.copy(label = "BMW ao sábado")),
+        )
+        val viewModel = productsBookingViewModel(bookingRepository = repository)
+        viewModel.refreshPresetsForSession()
+        runCurrent()
+
+        viewModel.savePreset(bookingPresetRequest())
+        runCurrent()
+
+        val loaded = assertIs<BookingPresetsUiState.Loaded>(viewModel.presetsState.value)
+        assertEquals(1, loaded.presets.size)
+        assertEquals("BMW ao sábado", loaded.presets.single().label)
+        assertEquals(bookingPresetRequest(), repository.lastPresetSaveRequest)
+        assertIs<BookingPresetMutationUiState.Success>(viewModel.presetMutationState.value)
+    }
+
+    @Test
+    fun deletingLastFavoriteReturnsEmptyState() = runTest {
+        val preset = bookingPreset()
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            presetListResult = BookingPresetListResult.Success(BookingPresetList(listOf(preset))),
+            presetDeleteResult = BookingPresetDeleteResult.Success(preset.id),
+        )
+        val viewModel = productsBookingViewModel(bookingRepository = repository)
+        viewModel.refreshPresetsForSession()
+        runCurrent()
+
+        viewModel.deletePreset(preset.id)
+        runCurrent()
+
+        assertIs<BookingPresetsUiState.Empty>(viewModel.presetsState.value)
+        assertEquals(preset.id, repository.lastDeletedPresetId)
+    }
+
+    @Test
+    fun favoritePresetsAreClearedWhenCustomerSignsOut() = runTest {
+        val authRepository = FakeProductsAuthRepository(authenticated = true)
+        val repository = FakeBookingRepository(
+            availabilityResult = BookingAvailabilityResult.Success(availableMonth("maio 2026", "2026-05-01")),
+            presetListResult = BookingPresetListResult.Success(BookingPresetList(listOf(bookingPreset()))),
+        )
+        val viewModel = productsBookingViewModel(
+            bookingRepository = repository,
+            authRepository = authRepository,
+        )
+        viewModel.refreshPresetsForSession()
+        runCurrent()
+        assertIs<BookingPresetsUiState.Loaded>(viewModel.presetsState.value)
+
+        authRepository.signOut()
+        viewModel.refreshPresetsForSession()
+
+        assertIs<BookingPresetsUiState.Unauthenticated>(viewModel.presetsState.value)
+    }
 }
 
 private fun productsBookingViewModel(
@@ -1204,6 +1290,13 @@ private class FakeBookingRepository(
     private val waitlistCancelResult: BookingWaitlistActionResult = BookingWaitlistActionResult.Failure(
         com.sudsmobile.data.booking.BookingWaitlistError.Unavailable("Not configured"),
     ),
+    private val presetListResult: BookingPresetListResult = BookingPresetListResult.Success(BookingPresetList(emptyList())),
+    private val presetSaveResult: BookingPresetSaveResult = BookingPresetSaveResult.Failure(
+        com.sudsmobile.data.booking.BookingPresetError.Unavailable("Not configured"),
+    ),
+    private val presetDeleteResult: BookingPresetDeleteResult = BookingPresetDeleteResult.Failure(
+        com.sudsmobile.data.booking.BookingPresetError.Unavailable("Not configured"),
+    ),
 ) : BookingRepository {
     var lastAvailabilityRequest: BookingAvailabilityRequest? = null
         private set
@@ -1216,6 +1309,12 @@ private class FakeBookingRepository(
     var lastWaitlistJoinRequest: BookingWaitlistJoinRequest? = null
         private set
     var lastCancelledWaitlistId: String? = null
+        private set
+    var presetListCalls: Int = 0
+        private set
+    var lastPresetSaveRequest: BookingPresetUpsertRequest? = null
+        private set
+    var lastDeletedPresetId: String? = null
         private set
 
     override suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult {
@@ -1250,6 +1349,21 @@ private class FakeBookingRepository(
     override suspend fun cancelWaitlist(waitlistId: String): BookingWaitlistActionResult {
         lastCancelledWaitlistId = waitlistId
         return waitlistCancelResult
+    }
+
+    override suspend fun getMyBookingPresets(): BookingPresetListResult {
+        presetListCalls += 1
+        return presetListResult
+    }
+
+    override suspend fun saveBookingPreset(request: BookingPresetUpsertRequest): BookingPresetSaveResult {
+        lastPresetSaveRequest = request
+        return presetSaveResult
+    }
+
+    override suspend fun deleteBookingPreset(presetId: String): BookingPresetDeleteResult {
+        lastDeletedPresetId = presetId
+        return presetDeleteResult
     }
 }
 
@@ -1501,6 +1615,28 @@ private fun bookingWaitlistEntry(): BookingWaitlistEntry = BookingWaitlistEntry(
     serviceName = "Lavagem Premium",
     serviceDurationMinutes = 45,
     status = "active",
+)
+
+private fun bookingPreset(
+    id: String = "preset-1",
+    label: String = "BMW habitual",
+): BookingPreset = BookingPreset(
+    id = id,
+    label = label,
+    serviceId = "premium",
+    extraIds = listOf("wax", "vacuum"),
+    userVehicleId = "vehicle-1",
+    vehicleType = "passenger",
+    vehicleLabel = "BMW 320d",
+)
+
+private fun bookingPresetRequest(): BookingPresetUpsertRequest = BookingPresetUpsertRequest(
+    label = "BMW ao sábado",
+    serviceId = "premium",
+    extraIds = listOf("wax", "vacuum"),
+    userVehicleId = "vehicle-1",
+    vehicleType = "passenger",
+    vehicleLabel = "BMW 320d",
 )
 
 private fun userVehicle(

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.booking.BookingSelectionPreset
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -60,7 +61,7 @@ fun HistoryScreen(
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit = {},
     onRateService: (String) -> Unit = {},
-    onBookAgain: (String) -> Unit = {},
+    onBookAgain: (BookingSelectionPreset) -> Unit = {},
 ) {
     val viewModel: ProfileHistoryViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -90,7 +91,7 @@ private fun HistoryScreenContent(
     onRetry: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRateService: (String) -> Unit,
-    onBookAgain: (String) -> Unit,
+    onBookAgain: (BookingSelectionPreset) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier
@@ -185,8 +186,8 @@ private fun HistoryScreenContent(
                         HistoryItemCard(
                             item = item,
                             onRateService = { onRateService(item.id) },
-                            onBookAgain = item.rebookServiceId?.let { serviceId ->
-                                { onBookAgain(serviceId) }
+                            onBookAgain = item.rebookPreset?.let { preset ->
+                                { onBookAgain(preset) }
                             },
                         )
                     }

@@ -91,6 +91,7 @@ data class BookingHistoryReservation(
     val status: String,
     val paymentStatus: String = "",
     val vehicleType: String,
+    val userVehicleId: String? = null,
     val vehicleLabel: String? = null,
     val priceCents: Int?,
     val upcoming: Boolean,
@@ -233,6 +234,76 @@ data class BookingWaitlistActionReceipt(
     val status: String,
     val entry: BookingWaitlistEntry? = null,
 )
+
+data class BookingPreset(
+    val id: String,
+    val label: String,
+    val serviceId: String,
+    val extraIds: List<String>,
+    val userVehicleId: String? = null,
+    val vehicleType: String,
+    val vehicleLabel: String? = null,
+    val createdAtIso: String = "",
+    val updatedAtIso: String = "",
+)
+
+data class BookingSelectionPreset(
+    val serviceId: String,
+    val extraIds: List<String> = emptyList(),
+    val userVehicleId: String? = null,
+    val vehicleType: String = "passenger",
+    val vehicleLabel: String? = null,
+)
+
+fun BookingPreset.toSelectionPreset(): BookingSelectionPreset = BookingSelectionPreset(
+    serviceId = serviceId,
+    extraIds = extraIds,
+    userVehicleId = userVehicleId,
+    vehicleType = vehicleType,
+    vehicleLabel = vehicleLabel,
+)
+
+data class BookingPresetUpsertRequest(
+    val presetId: String? = null,
+    val label: String,
+    val serviceId: String,
+    val extraIds: List<String>,
+    val userVehicleId: String? = null,
+    val vehicleType: String,
+    val vehicleLabel: String? = null,
+)
+
+data class BookingPresetList(
+    val presets: List<BookingPreset>,
+    val maxPresets: Int = 5,
+)
+
+sealed interface BookingPresetListResult {
+    data class Success(val list: BookingPresetList) : BookingPresetListResult
+    data class Failure(val error: BookingPresetError) : BookingPresetListResult
+}
+
+sealed interface BookingPresetSaveResult {
+    data class Success(val preset: BookingPreset, val maxPresets: Int = 5) : BookingPresetSaveResult
+    data class Failure(val error: BookingPresetError) : BookingPresetSaveResult
+}
+
+sealed interface BookingPresetDeleteResult {
+    data class Success(val presetId: String) : BookingPresetDeleteResult
+    data class Failure(val error: BookingPresetError) : BookingPresetDeleteResult
+}
+
+sealed interface BookingPresetError {
+    val message: String
+
+    data class Validation(override val message: String) : BookingPresetError
+    data class Permission(override val message: String) : BookingPresetError
+    data class Unauthenticated(override val message: String) : BookingPresetError
+    data class NotFound(override val message: String) : BookingPresetError
+    data class LimitReached(override val message: String) : BookingPresetError
+    data class Unavailable(override val message: String) : BookingPresetError
+    data class Backend(override val message: String) : BookingPresetError
+}
 
 sealed interface BookingWaitlistListResult {
     data class Success(val entries: List<BookingWaitlistEntry>) : BookingWaitlistListResult
@@ -385,6 +456,19 @@ sealed interface BookingRewardRedemptionError {
 interface BookingRepository {
     suspend fun getAvailability(request: BookingAvailabilityRequest): BookingAvailabilityResult
     suspend fun createBooking(request: BookingCreateRequest): BookingCreateResult
+    suspend fun getMyBookingPresets(): BookingPresetListResult = BookingPresetListResult.Failure(
+        BookingPresetError.Unavailable("As marcações favoritas ainda não estão disponíveis."),
+    )
+
+    suspend fun saveBookingPreset(request: BookingPresetUpsertRequest): BookingPresetSaveResult =
+        BookingPresetSaveResult.Failure(
+            BookingPresetError.Unavailable("Não foi possível guardar esta marcação favorita."),
+        )
+
+    suspend fun deleteBookingPreset(presetId: String): BookingPresetDeleteResult =
+        BookingPresetDeleteResult.Failure(
+            BookingPresetError.Unavailable("Não foi possível eliminar esta marcação favorita."),
+        )
     suspend fun getMyWaitlist(): BookingWaitlistListResult {
         return BookingWaitlistListResult.Failure(
             BookingWaitlistError.Unavailable("Os avisos de vaga ainda não estão disponíveis."),

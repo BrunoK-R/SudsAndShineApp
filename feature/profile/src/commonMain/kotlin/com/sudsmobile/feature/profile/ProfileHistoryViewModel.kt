@@ -9,6 +9,7 @@ import com.sudsmobile.data.booking.BookingChangeNotifier
 import com.sudsmobile.data.booking.BookingHistory
 import com.sudsmobile.data.booking.BookingHistoryError
 import com.sudsmobile.data.booking.BookingHistoryReservation
+import com.sudsmobile.data.booking.BookingSelectionPreset
 import com.sudsmobile.data.booking.BookingHistoryResult
 import com.sudsmobile.data.booking.BookingPaymentStatus
 import com.sudsmobile.data.booking.BookingReservationStatus
@@ -50,7 +51,7 @@ internal data class ProfileHistoryItemUi(
     val paymentStatus: String,
     val extras: List<ProfileHistoryExtraUi>,
     val status: ProfileHistoryStatusUi,
-    val rebookServiceId: String?,
+    val rebookPreset: BookingSelectionPreset?,
     val reviewed: Boolean,
     val reviewable: Boolean,
     val reviewRating: Int?,
@@ -233,7 +234,7 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         paymentStatus = bookingPaymentStatus().toHistoryPaymentLabel(),
         extras = extras.toHistoryExtraUi(),
         status = status.toHistoryStatusUi(),
-        rebookServiceId = serviceId.normalizedRebookServiceId(),
+        rebookPreset = toRebookPresetOrNull(),
         reviewed = reviewed,
         reviewable = isReviewableReservation() && !reviewed,
         reviewRating = reviewRating?.takeIf { it in 1..5 },
@@ -250,7 +251,16 @@ private fun BookingHistoryReservation.isProfileHistoryReservation(): Boolean {
         status.toBookingReservationStatus() == BookingReservationStatus.Expired
 }
 
-private fun String.normalizedRebookServiceId(): String? = trim().takeIf { it.isNotBlank() }
+private fun BookingHistoryReservation.toRebookPresetOrNull(): BookingSelectionPreset? {
+    val cleanServiceId = serviceId.trim().takeIf { it.isNotBlank() } ?: return null
+    return BookingSelectionPreset(
+        serviceId = cleanServiceId,
+        extraIds = extras.map { it.id.trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase() },
+        userVehicleId = userVehicleId?.trim()?.takeIf { it.isNotBlank() },
+        vehicleType = if (vehicleType.trim().lowercase() == "suv") "suv" else "passenger",
+        vehicleLabel = vehicleLabel?.trim()?.takeIf { it.isNotBlank() },
+    )
+}
 
 private fun List<BookingReservationExtra>.toHistoryExtraUi(): List<ProfileHistoryExtraUi> {
     return mapNotNull { extra ->

@@ -468,6 +468,43 @@ class FirebaseBookingRepositoryTest {
         assertIs<BookingRewardRedemptionResult.Success>(result)
         assertEquals(1L, changeNotifier.revision.value)
     }
+
+    @Test
+    fun bookingPresetsRequireAuthentication() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository())
+
+        val result = repository.getMyBookingPresets()
+
+        val failure = assertIs<BookingPresetListResult.Failure>(result)
+        assertIs<BookingPresetError.Unauthenticated>(failure.error)
+        assertEquals(0, api.presetListCalls)
+    }
+
+    @Test
+    fun normalizesBookingPresetBeforeSavingWithIdToken() = runTest {
+        val api = RecordingBookingFunctionsApi()
+        val repository = FirebaseBookingRepository(api, FakeAuthRepository(authenticated = true))
+
+        val result = repository.saveBookingPreset(
+            BookingPresetUpsertRequest(
+                label = "  BMW habitual  ",
+                serviceId = " premium ",
+                extraIds = listOf(" wax ", "wax", " vacuum "),
+                userVehicleId = " vehicle-1 ",
+                vehicleType = " PASSAGEIROS ",
+                vehicleLabel = "  BMW 320d  ",
+            ),
+        )
+
+        assertIs<BookingPresetSaveResult.Success>(result)
+        assertEquals("BMW habitual", api.lastPresetRequest?.label)
+        assertEquals("premium", api.lastPresetRequest?.serviceId)
+        assertEquals(listOf("wax", "vacuum"), api.lastPresetRequest?.extraIds)
+        assertEquals("vehicle-1", api.lastPresetRequest?.userVehicleId)
+        assertEquals("passenger", api.lastPresetRequest?.vehicleType)
+        assertEquals("id-token-1", api.lastPresetIdToken)
+    }
 }
 
 private class RecordingBookingFunctionsApi : BookingFunctionsApi {
@@ -521,6 +558,12 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
         private set
     var lastRewardRedemptionIdToken: String? = null
         private set
+    var presetListCalls: Int = 0
+        private set
+    var lastPresetRequest: BookingPresetUpsertRequest? = null
+        private set
+    var lastPresetIdToken: String? = null
+        private set
 
     override suspend fun createReservation(request: BookingCreateRequest, idToken: String?): BookingCreateResult {
         calls += 1
@@ -558,6 +601,31 @@ private class RecordingBookingFunctionsApi : BookingFunctionsApi {
                 ),
                 stampHistory = emptyList(),
                 redemptions = emptyList(),
+            ),
+        )
+    }
+
+    override suspend fun getMyBookingPresets(idToken: String): BookingPresetListResult {
+        presetListCalls += 1
+        lastPresetIdToken = idToken
+        return BookingPresetListResult.Success(BookingPresetList(emptyList()))
+    }
+
+    override suspend fun upsertMyBookingPreset(
+        request: BookingPresetUpsertRequest,
+        idToken: String,
+    ): BookingPresetSaveResult {
+        lastPresetRequest = request
+        lastPresetIdToken = idToken
+        return BookingPresetSaveResult.Success(
+            BookingPreset(
+                id = "preset-1",
+                label = request.label,
+                serviceId = request.serviceId,
+                extraIds = request.extraIds,
+                userVehicleId = request.userVehicleId,
+                vehicleType = request.vehicleType,
+                vehicleLabel = request.vehicleLabel,
             ),
         )
     }

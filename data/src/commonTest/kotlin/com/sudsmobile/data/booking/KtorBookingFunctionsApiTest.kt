@@ -236,6 +236,7 @@ class KtorBookingFunctionsApiTest {
                         "status": "pending",
                         "paymentStatus": "pending",
                         "vehicleType": "suv",
+                        "userVehicleId": "vehicle-1",
                         "vehicleLabel": "BMW 320d",
                         "priceCents": 3400,
                         "extras": [
@@ -276,6 +277,7 @@ class KtorBookingFunctionsApiTest {
         val success = assertIs<BookingHistoryResult.Success>(result)
         assertEquals("/test-project/europe-west1/getMyReservations", requestedPath)
         assertEquals("reservation-1", success.history.reservations.first().id)
+        assertEquals("vehicle-1", success.history.reservations.first().userVehicleId)
         assertEquals("BMW 320d", success.history.reservations.first().vehicleLabel)
         assertEquals(3400, success.history.reservations.first().priceCents)
         assertEquals("pending", success.history.reservations.first().paymentStatus)
@@ -712,6 +714,119 @@ class KtorBookingFunctionsApiTest {
         assertEquals("/test-project/europe-west1/cancelMyWaitlist", requestedPath)
         assertEquals("waitlist-1", success.receipt.waitlistId)
         assertEquals("cancelled", success.receipt.status)
+    }
+
+    @Test
+    fun mapsSyncedBookingPresets() = runTest {
+        var requestedPath = ""
+        var authorizationHeader: String? = null
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "maxPresets": 5,
+                    "presets": [{
+                      "id": "preset-1",
+                      "label": "BMW habitual",
+                      "serviceId": "premium",
+                      "extraIds": ["wax", "vacuum"],
+                      "userVehicleId": "vehicle-1",
+                      "vehicleType": "passenger",
+                      "vehicleLabel": "BMW 320d",
+                      "updatedAt": "2026-07-22T10:00:00.000Z"
+                    }]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getMyBookingPresets("id-token-1")
+
+        val success = assertIs<BookingPresetListResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getMyBookingPresets", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals(5, success.list.maxPresets)
+        assertEquals(listOf("wax", "vacuum"), success.list.presets.single().extraIds)
+        assertEquals("vehicle-1", success.list.presets.single().userVehicleId)
+    }
+
+    @Test
+    fun mapsBookingPresetSaveReceipt() = runTest {
+        var requestedPath = ""
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "maxPresets": 5,
+                    "preset": {
+                      "id": "preset-1",
+                      "label": "BMW habitual",
+                      "serviceId": "premium",
+                      "extraIds": ["wax"],
+                      "userVehicleId": "vehicle-1",
+                      "vehicleType": "passenger",
+                      "vehicleLabel": "BMW 320d"
+                    }
+                  }
+                }
+                """.trimIndent(),
+            ) { request -> requestedPath = request.url.fullPath },
+            config = testConfig(),
+        )
+
+        val result = api.upsertMyBookingPreset(
+            BookingPresetUpsertRequest(
+                label = "BMW habitual",
+                serviceId = "premium",
+                extraIds = listOf("wax"),
+                userVehicleId = "vehicle-1",
+                vehicleType = "passenger",
+                vehicleLabel = "BMW 320d",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<BookingPresetSaveResult.Success>(result)
+        assertEquals("/test-project/europe-west1/upsertMyBookingPreset", requestedPath)
+        assertEquals("preset-1", success.preset.id)
+        assertEquals(5, success.maxPresets)
+    }
+
+    @Test
+    fun mapsBookingPresetLimitError() = runTest {
+        val api = KtorBookingFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "FAILED_PRECONDITION",
+                    "message": "A maximum of 5 presets is allowed"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.upsertMyBookingPreset(
+            BookingPresetUpsertRequest(
+                label = "BMW habitual",
+                serviceId = "premium",
+                extraIds = emptyList(),
+                vehicleType = "passenger",
+            ),
+            idToken = "id-token-1",
+        )
+
+        val failure = assertIs<BookingPresetSaveResult.Failure>(result)
+        assertIs<BookingPresetError.LimitReached>(failure.error)
     }
 }
 

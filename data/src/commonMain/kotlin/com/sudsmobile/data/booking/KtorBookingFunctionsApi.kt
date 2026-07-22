@@ -79,6 +79,83 @@ class KtorBookingFunctionsApi(
         }
     }
 
+    override suspend fun getMyBookingPresets(idToken: String): BookingPresetListResult {
+        return try {
+            val response = httpClient.post(config.getMyBookingPresetsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableBookingPresetsRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableBookingPresetsResponse>()
+            when {
+                body.error != null -> BookingPresetListResult.Failure(body.error.toBookingPresetError())
+                body.result != null -> BookingPresetListResult.Success(body.result.toBookingPresetList())
+                else -> BookingPresetListResult.Failure(
+                    BookingPresetError.Backend("A resposta das marcações favoritas veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingPresetListResult.Failure(
+                BookingPresetError.Unavailable("Não foi possível carregar as marcações favoritas."),
+            )
+        }
+    }
+
+    override suspend fun upsertMyBookingPreset(
+        request: BookingPresetUpsertRequest,
+        idToken: String,
+    ): BookingPresetSaveResult {
+        return try {
+            val response = httpClient.post(config.upsertMyBookingPresetUrl) {
+                callableHeaders(idToken)
+                setBody(CallableBookingPresetUpsertRequest(BookingPresetUpsertPayload.from(request)))
+            }
+            val body = response.body<CallableBookingPresetSaveResponse>()
+            val preset = body.result?.preset?.toBookingPresetOrNull()
+            when {
+                body.error != null -> BookingPresetSaveResult.Failure(body.error.toBookingPresetError())
+                preset != null -> BookingPresetSaveResult.Success(
+                    preset = preset,
+                    maxPresets = body.result?.maxPresets?.coerceIn(1, 20) ?: 5,
+                )
+                else -> BookingPresetSaveResult.Failure(
+                    BookingPresetError.Backend("A resposta veio sem a marcação favorita guardada."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingPresetSaveResult.Failure(
+                BookingPresetError.Unavailable("Não foi possível guardar esta marcação favorita."),
+            )
+        }
+    }
+
+    override suspend fun deleteMyBookingPreset(presetId: String, idToken: String): BookingPresetDeleteResult {
+        return try {
+            val response = httpClient.post(config.deleteMyBookingPresetUrl) {
+                callableHeaders(idToken)
+                setBody(CallableBookingPresetDeleteRequest(BookingPresetDeletePayload(presetId)))
+            }
+            val body = response.body<CallableBookingPresetDeleteResponse>()
+            when {
+                body.error != null -> BookingPresetDeleteResult.Failure(body.error.toBookingPresetError())
+                body.result?.presetId?.isNotBlank() == true ->
+                    BookingPresetDeleteResult.Success(body.result.presetId.trim())
+                else -> BookingPresetDeleteResult.Failure(
+                    BookingPresetError.Backend("A resposta veio sem confirmação da eliminação."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            BookingPresetDeleteResult.Failure(
+                BookingPresetError.Unavailable("Não foi possível eliminar esta marcação favorita."),
+            )
+        }
+    }
+
     override suspend fun getMyWaitlist(idToken: String): BookingWaitlistListResult {
         return try {
             val response = httpClient.post(config.getMyWaitlistUrl) {
@@ -377,6 +454,21 @@ private data class CallableMyReservationsRequest(
 )
 
 @Serializable
+private data class CallableBookingPresetsRequest(
+    val data: Map<String, String>,
+)
+
+@Serializable
+private data class CallableBookingPresetUpsertRequest(
+    val data: BookingPresetUpsertPayload,
+)
+
+@Serializable
+private data class CallableBookingPresetDeleteRequest(
+    val data: BookingPresetDeletePayload,
+)
+
+@Serializable
 private data class CallableMyLoyaltyRequest(
     val data: Map<String, String>,
 )
@@ -534,6 +626,34 @@ private data class WaitlistCancelPayload(
 )
 
 @Serializable
+private data class BookingPresetUpsertPayload(
+    val presetId: String? = null,
+    val label: String,
+    val serviceId: String,
+    val extraIds: List<String>,
+    val userVehicleId: String? = null,
+    val vehicleType: String,
+    val vehicleLabel: String? = null,
+) {
+    companion object {
+        fun from(request: BookingPresetUpsertRequest): BookingPresetUpsertPayload = BookingPresetUpsertPayload(
+            presetId = request.presetId,
+            label = request.label,
+            serviceId = request.serviceId,
+            extraIds = request.extraIds,
+            userVehicleId = request.userVehicleId,
+            vehicleType = request.vehicleType,
+            vehicleLabel = request.vehicleLabel,
+        )
+    }
+}
+
+@Serializable
+private data class BookingPresetDeletePayload(
+    val presetId: String,
+)
+
+@Serializable
 private data class CallableGetAvailabilityResponse(
     val result: GetAvailabilityResult? = null,
     val error: CallableError? = null,
@@ -548,6 +668,24 @@ private data class CallableCreateReservationResponse(
 @Serializable
 private data class CallableMyReservationsResponse(
     val result: MyReservationsResult? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableBookingPresetsResponse(
+    val result: BookingPresetListPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableBookingPresetSaveResponse(
+    val result: BookingPresetSavePayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableBookingPresetDeleteResponse(
+    val result: BookingPresetDeleteResultPayload? = null,
     val error: CallableError? = null,
 )
 
@@ -840,6 +978,64 @@ private data class LoyaltyPayload(
 }
 
 @Serializable
+private data class BookingPresetListPayload(
+    val presets: List<BookingPresetPayload> = emptyList(),
+    val maxPresets: Int = 5,
+) {
+    fun toBookingPresetList(): BookingPresetList = BookingPresetList(
+        presets = presets.mapNotNull { it.toBookingPresetOrNull() },
+        maxPresets = maxPresets.coerceIn(1, 20),
+    )
+}
+
+@Serializable
+private data class BookingPresetSavePayload(
+    val preset: BookingPresetPayload? = null,
+    val maxPresets: Int = 5,
+)
+
+@Serializable
+private data class BookingPresetDeleteResultPayload(
+    val ok: Boolean = false,
+    val presetId: String = "",
+)
+
+@Serializable
+private data class BookingPresetPayload(
+    val id: String = "",
+    val label: String = "",
+    val serviceId: String = "",
+    val extraIds: List<String> = emptyList(),
+    val userVehicleId: String = "",
+    val vehicleType: String = "passenger",
+    val vehicleLabel: String = "",
+    val createdAt: String = "",
+    val updatedAt: String = "",
+) {
+    fun toBookingPresetOrNull(): BookingPreset? {
+        val cleanId = id.trim()
+        val cleanLabel = label.trim()
+        val cleanServiceId = serviceId.trim()
+        val cleanVehicleType = when (vehicleType.trim().lowercase()) {
+            "suv" -> "suv"
+            else -> "passenger"
+        }
+        if (cleanId.isBlank() || cleanLabel.isBlank() || cleanServiceId.isBlank()) return null
+        return BookingPreset(
+            id = cleanId,
+            label = cleanLabel,
+            serviceId = cleanServiceId,
+            extraIds = extraIds.map { it.trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase() }.take(12),
+            userVehicleId = userVehicleId.trim().takeIf { it.isNotBlank() },
+            vehicleType = cleanVehicleType,
+            vehicleLabel = vehicleLabel.trim().takeIf { it.isNotBlank() },
+            createdAtIso = createdAt.trim(),
+            updatedAtIso = updatedAt.trim(),
+        )
+    }
+}
+
+@Serializable
 private data class MyReservationsResult(
     val reservations: List<MyReservationItem>,
     val loyalty: LoyaltyPayload? = null,
@@ -861,6 +1057,7 @@ private data class MyReservationItem(
     val status: String = "pending",
     val paymentStatus: String = "",
     val vehicleType: String = "passageiros",
+    val userVehicleId: String? = null,
     val vehicleLabel: String? = null,
     val priceCents: Int? = null,
     val upcoming: Boolean = true,
@@ -898,6 +1095,7 @@ private data class MyReservationItem(
         status = status,
         paymentStatus = paymentStatus,
         vehicleType = vehicleType,
+        userVehicleId = userVehicleId?.trim()?.takeIf { it.isNotBlank() },
         vehicleLabel = vehicleLabel,
         priceCents = priceCents,
         upcoming = upcoming,
@@ -968,6 +1166,21 @@ private data class CallableError(
             "UNAUTHENTICATED" -> BookingHistoryError.Unauthenticated("Inicie sessão para ver as suas marcações.")
             "UNAVAILABLE" -> BookingHistoryError.Unavailable("O serviço de marcações está indisponível.")
             else -> BookingHistoryError.Backend(fallbackMessage)
+        }
+    }
+
+    fun toBookingPresetError(): BookingPresetError {
+        val normalizedCode = status ?: code
+        val fallbackMessage = message ?: "Não foi possível gerir esta marcação favorita."
+        return when (normalizedCode) {
+            "INVALID_ARGUMENT" -> BookingPresetError.Validation(fallbackMessage)
+            "PERMISSION_DENIED" -> BookingPresetError.Permission("Esta marcação favorita não pertence à sessão atual.")
+            "UNAUTHENTICATED" -> BookingPresetError.Unauthenticated("Inicie sessão para gerir marcações favoritas.")
+            "NOT_FOUND" -> BookingPresetError.NotFound("Esta marcação favorita ou o veículo guardado já não existe.")
+            "FAILED_PRECONDITION", "RESOURCE_EXHAUSTED" ->
+                BookingPresetError.LimitReached("Pode guardar até 5 marcações favoritas.")
+            "UNAVAILABLE" -> BookingPresetError.Unavailable("O serviço de marcações favoritas está indisponível.")
+            else -> BookingPresetError.Backend(fallbackMessage)
         }
     }
 

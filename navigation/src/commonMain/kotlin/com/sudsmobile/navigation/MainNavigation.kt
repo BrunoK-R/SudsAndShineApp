@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -42,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
+import com.sudsmobile.data.booking.BookingSelectionPreset
 import com.sudsmobile.data.notification.NotificationDeviceRegistrar
 import com.sudsmobile.data.notification.NotificationRepository
 import com.sudsmobile.feature.blog.BlogScreen
@@ -85,16 +87,32 @@ fun MainNavigation(
     val currentRoute = currentBackStack?.destination?.route
     val showBottomBar = mainDestinations.any { it.route == currentRoute }
     var initialBookingServiceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var initialBookingSelectionPreset by remember { mutableStateOf<BookingSelectionPreset?>(null) }
     var initialBookingRequestKey by rememberSaveable { mutableStateOf(0L) }
 
     fun navigateToBooking(serviceId: String? = null) {
         initialBookingServiceId = serviceId
+        initialBookingSelectionPreset = null
         initialBookingRequestKey += 1
         navController.navigate(Routes.Products)
     }
 
     fun navigateToBookingFromLeaf(serviceId: String? = null) {
         initialBookingServiceId = serviceId
+        initialBookingSelectionPreset = null
+        initialBookingRequestKey += 1
+        navController.navigate(Routes.Products) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    fun navigateToBookingPresetFromLeaf(preset: BookingSelectionPreset) {
+        initialBookingServiceId = null
+        initialBookingSelectionPreset = preset
         initialBookingRequestKey += 1
         navController.navigate(Routes.Products) {
             popUpTo(navController.graph.findStartDestination().id) {
@@ -133,6 +151,7 @@ fun MainNavigation(
                     onDestinationClick = { route ->
                         if (route == Routes.Products) {
                             initialBookingServiceId = null
+                            initialBookingSelectionPreset = null
                         }
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -173,6 +192,7 @@ fun MainNavigation(
                 ProductsScreen(
                     contentPadding = paddingValues,
                     initialServiceId = initialBookingServiceId,
+                    initialSelectionPreset = initialBookingSelectionPreset,
                     initialServiceRequestKey = initialBookingRequestKey,
                     onBack = { navController.popBackStack() },
                     onViewBooking = {
@@ -346,7 +366,7 @@ fun MainNavigation(
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,
                     onRateService = { reservationId -> navController.navigate(Routes.rating(reservationId)) },
-                    onBookAgain = { serviceId -> navigateToBookingFromLeaf(serviceId) },
+                    onBookAgain = { preset -> navigateToBookingPresetFromLeaf(preset) },
                 )
             }
             composable(Routes.Contact) {

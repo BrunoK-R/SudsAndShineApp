@@ -47,6 +47,38 @@ class FirebaseBookingRepository(
             }
     }
 
+    override suspend fun getMyBookingPresets(): BookingPresetListResult {
+        val session = authRepository.currentSession()
+            ?: return BookingPresetListResult.Failure(
+                BookingPresetError.Unauthenticated("Inicie sessão para ver as marcações favoritas."),
+            )
+        return api.getMyBookingPresets(session.idToken)
+    }
+
+    override suspend fun saveBookingPreset(request: BookingPresetUpsertRequest): BookingPresetSaveResult {
+        val normalized = request.normalized()
+        validate(normalized)?.let { return BookingPresetSaveResult.Failure(it) }
+        val session = authRepository.currentSession()
+            ?: return BookingPresetSaveResult.Failure(
+                BookingPresetError.Unauthenticated("Inicie sessão para guardar esta marcação favorita."),
+            )
+        return api.upsertMyBookingPreset(normalized, session.idToken)
+    }
+
+    override suspend fun deleteBookingPreset(presetId: String): BookingPresetDeleteResult {
+        val normalizedId = presetId.trim()
+        if (!normalizedId.isSafeBookingPresetId()) {
+            return BookingPresetDeleteResult.Failure(
+                BookingPresetError.Validation("A marcação favorita selecionada é inválida."),
+            )
+        }
+        val session = authRepository.currentSession()
+            ?: return BookingPresetDeleteResult.Failure(
+                BookingPresetError.Unauthenticated("Inicie sessão para eliminar esta marcação favorita."),
+            )
+        return api.deleteMyBookingPreset(normalizedId, session.idToken)
+    }
+
     override suspend fun getMyWaitlist(): BookingWaitlistListResult {
         val session = authRepository.currentSession()
             ?: return BookingWaitlistListResult.Failure(
@@ -224,6 +256,24 @@ class FirebaseBookingRepository(
         }
     }
 
+    private fun validate(request: BookingPresetUpsertRequest): BookingPresetError? {
+        return when {
+            request.presetId != null && !request.presetId.isSafeBookingPresetId() ->
+                BookingPresetError.Validation("A marcação favorita selecionada é inválida.")
+            request.label.length !in 2..80 ->
+                BookingPresetError.Validation("Indique um nome curto para esta marcação favorita.")
+            !request.serviceId.isSafeBookingPresetSelectionId(120) ->
+                BookingPresetError.Validation("O serviço da marcação favorita é inválido.")
+            request.extraIds.size > 12 || request.extraIds.any { !it.isSafeBookingPresetSelectionId(120) } ->
+                BookingPresetError.Validation("Os extras da marcação favorita são inválidos.")
+            request.userVehicleId != null && !request.userVehicleId.isSafeBookingPresetSelectionId(160) ->
+                BookingPresetError.Validation("O veículo da marcação favorita é inválido.")
+            request.vehicleType !in setOf("passenger", "suv") ->
+                BookingPresetError.Validation("O tipo de veículo da marcação favorita é inválido.")
+            else -> null
+        }
+    }
+
     private fun validate(request: BookingReviewRequest): BookingReviewError? {
         return when {
             request.reservationId.isBlank() || request.reservationId.contains("/") ->
@@ -304,6 +354,19 @@ class FirebaseBookingRepository(
         slotStartIso = slotStartIso.trim(),
         slotEndIso = slotEndIso.trim(),
     )
+
+    private fun BookingPresetUpsertRequest.normalized(): BookingPresetUpsertRequest = copy(
+        presetId = presetId?.trim()?.takeIf { it.isNotBlank() },
+        label = label.trim().replace(Regex("\\s+"), " "),
+        serviceId = serviceId.trim(),
+        extraIds = extraIds.map { it.trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase() },
+        userVehicleId = userVehicleId?.trim()?.takeIf { it.isNotBlank() },
+        vehicleType = when (vehicleType.trim().lowercase()) {
+            "passageiros" -> "passenger"
+            else -> vehicleType.trim().lowercase()
+        },
+        vehicleLabel = vehicleLabel?.trim()?.replace(Regex("\\s+"), " ")?.takeIf { it.isNotBlank() },
+    )
 }
 
 private fun isValidDateId(dateId: String): Boolean {
@@ -317,6 +380,12 @@ private fun isValidDateId(dateId: String): Boolean {
 }
 
 private fun Int?.orZero(): Int = this ?: 0
+
+private fun String.isSafeBookingPresetId(): Boolean =
+    length in 1..80 && !contains("/") && all { it.isLetterOrDigit() || it == '-' || it == '_' }
+
+private fun String.isSafeBookingPresetSelectionId(maxLength: Int): Boolean =
+    length in 1..maxLength && !contains("/") && all { it.isLetterOrDigit() || it == '-' || it == '_' }
 
 private fun isValidSlotIso(value: String): Boolean {
     val trimmed = value.trim()

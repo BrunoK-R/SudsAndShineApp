@@ -46,6 +46,15 @@ data class FirebaseFunctionsConfig(
             "https://$region-$projectId.cloudfunctions.net/getMyReservations"
         }
 
+    val getMyBookingPresetsUrl: String
+        get() = functionUrl("getMyBookingPresets")
+
+    val upsertMyBookingPresetUrl: String
+        get() = functionUrl("upsertMyBookingPreset")
+
+    val deleteMyBookingPresetUrl: String
+        get() = functionUrl("deleteMyBookingPreset")
+
     val submitReservationReviewUrl: String
         get() = functionUrl("submitReservationReview")
 

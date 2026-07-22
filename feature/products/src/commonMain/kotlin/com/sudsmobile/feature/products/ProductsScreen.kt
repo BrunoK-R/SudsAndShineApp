@@ -50,6 +50,8 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -93,9 +95,13 @@ import com.sudsmobile.data.booking.BookingAvailabilityDay
 import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
 import com.sudsmobile.data.booking.BookingPaymentStatus
+import com.sudsmobile.data.booking.BookingPreset
+import com.sudsmobile.data.booking.BookingPresetUpsertRequest
 import com.sudsmobile.data.booking.BookingReservationStatus
+import com.sudsmobile.data.booking.BookingSelectionPreset
 import com.sudsmobile.data.booking.BookingWaitlistEntry
 import com.sudsmobile.data.booking.BookingWaitlistJoinRequest
+import com.sudsmobile.data.booking.toSelectionPreset
 import com.sudsmobile.data.booking.toBookingPaymentStatus
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import org.koin.compose.viewmodel.koinViewModel
@@ -134,6 +140,7 @@ private val bookingVehicleCategories = listOf(
 fun ProductsScreen(
     contentPadding: PaddingValues,
     initialServiceId: String? = null,
+    initialSelectionPreset: BookingSelectionPreset? = null,
     initialServiceRequestKey: Long = 0L,
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
@@ -153,6 +160,8 @@ fun ProductsScreen(
     val businessInfoState by viewModel.businessInfoState.collectAsStateWithLifecycle()
     val rewardsState by viewModel.rewardsState.collectAsStateWithLifecycle()
     val waitlistState by viewModel.waitlistState.collectAsStateWithLifecycle()
+    val presetsState by viewModel.presetsState.collectAsStateWithLifecycle()
+    val presetMutationState by viewModel.presetMutationState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
@@ -163,6 +172,7 @@ fun ProductsScreen(
     ProductsScreenContent(
         contentPadding = contentPadding,
         initialServiceId = initialServiceId,
+        initialSelectionPreset = initialSelectionPreset,
         initialServiceRequestKey = initialServiceRequestKey,
         catalogState = catalogState,
         vehiclesState = vehiclesState,
@@ -172,6 +182,8 @@ fun ProductsScreen(
         businessInfoState = businessInfoState,
         rewardsState = rewardsState,
         waitlistState = waitlistState,
+        presetsState = presetsState,
+        presetMutationState = presetMutationState,
         sessionState = sessionState,
         availabilityState = availabilityState,
         submitState = submitState,
@@ -191,6 +203,11 @@ fun ProductsScreen(
         onSubmitSuccessConsumed = viewModel::consumeSuccess,
         onJoinWaitlist = viewModel::joinWaitlist,
         onCancelWaitlist = viewModel::cancelWaitlist,
+        onRefreshPresetsForSession = viewModel::refreshPresetsForSession,
+        onLoadPresets = viewModel::loadPresets,
+        onSavePreset = viewModel::savePreset,
+        onDeletePreset = viewModel::deletePreset,
+        onDismissPresetMutation = viewModel::clearPresetMutationState,
         onBack = onBack,
         onViewBooking = onViewBooking,
         onHome = onHome,
@@ -204,6 +221,7 @@ fun ProductsScreen(
 private fun ProductsScreenContent(
     contentPadding: PaddingValues,
     initialServiceId: String?,
+    initialSelectionPreset: BookingSelectionPreset?,
     initialServiceRequestKey: Long,
     catalogState: ProductCatalogUiState,
     vehiclesState: BookingVehiclesUiState,
@@ -213,6 +231,8 @@ private fun ProductsScreenContent(
     businessInfoState: BookingBusinessInfoUiState,
     rewardsState: BookingRewardsUiState,
     waitlistState: BookingWaitlistUiState,
+    presetsState: BookingPresetsUiState,
+    presetMutationState: BookingPresetMutationUiState,
     sessionState: AuthSessionState,
     availabilityState: BookingAvailabilityUiState,
     submitState: BookingSubmitUiState,
@@ -232,6 +252,11 @@ private fun ProductsScreenContent(
     onSubmitSuccessConsumed: () -> Unit,
     onJoinWaitlist: (BookingWaitlistJoinRequest) -> Unit,
     onCancelWaitlist: (BookingWaitlistEntry) -> Unit,
+    onRefreshPresetsForSession: (Boolean) -> Unit,
+    onLoadPresets: () -> Unit,
+    onSavePreset: (BookingPresetUpsertRequest) -> Unit,
+    onDeletePreset: (String) -> Unit,
+    onDismissPresetMutation: () -> Unit,
     onBack: () -> Unit = {},
     onViewBooking: () -> Unit = {},
     onHome: () -> Unit = {},
@@ -266,6 +291,7 @@ private fun ProductsScreenContent(
     var successPendingExpiresAt by rememberSaveable { mutableStateOf<String?>(null) }
     var appliedInitialServiceRequestKey by rememberSaveable { mutableStateOf<Long?>(null) }
     var unavailableInitialServiceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingPresetVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
     val currentStep = BookingStep.valueOf(currentStepName)
     val contactFormValid = contactName.isNotBlank() &&
         contactPhone.trim().length >= 6 &&
@@ -324,6 +350,37 @@ private fun ProductsScreenContent(
         appliedContactPhone = nextPhone
     }
 
+    fun applySelectionPreset(preset: BookingSelectionPreset) {
+        val service = loadedServices.firstOrNull { it.id == preset.serviceId } ?: run {
+            unavailableInitialServiceId = preset.serviceId
+            currentStepName = BookingStep.Service.name
+            return
+        }
+        val eligibleExtraIds = loadedExtras
+            .filter { it.isEligibleFor(service.id) }
+            .map { it.id }
+            .toSet()
+        selectedServiceId = service.id
+        selectedExtraIds = preset.extraIds.filter { it in eligibleExtraIds }.distinct()
+        selectedDateId = null
+        selectedTime = null
+        availabilityAnchorDate = null
+        minimumAvailabilityMonthAnchor = null
+        unavailableInitialServiceId = null
+        val savedVehicleId = preset.userVehicleId?.trim()?.takeIf { it.isNotBlank() }
+        if (savedVehicleId != null) {
+            val selectionId = "saved:$savedVehicleId"
+            selectedVehicleId = selectionId
+            pendingPresetVehicleId = selectionId
+            currentStepName = BookingStep.Vehicle.name
+        } else {
+            selectedVehicleId = if (preset.vehicleType == "suv") "suv" else "passenger"
+            pendingPresetVehicleId = null
+            currentStepName = BookingStep.DateTime.name
+        }
+        onClearSubmitError()
+    }
+
     LaunchedEffect(submitState) {
         val state = submitState
         if (state is BookingSubmitUiState.Success) {
@@ -355,6 +412,10 @@ private fun ProductsScreenContent(
         if (currentStep == BookingStep.Contact) {
             onRefreshContactProfileForSession()
         }
+    }
+
+    LaunchedEffect(sessionState) {
+        onRefreshPresetsForSession(false)
     }
 
     LaunchedEffect(currentStep) {
@@ -401,10 +462,18 @@ private fun ProductsScreenContent(
         }
     }
 
-    LaunchedEffect(initialServiceId, initialServiceRequestKey, catalogState) {
+    LaunchedEffect(initialServiceId, initialSelectionPreset, initialServiceRequestKey, catalogState) {
         val loadedCatalog = catalogState as? ProductCatalogUiState.Loaded ?: return@LaunchedEffect
-        val requestedServiceId = initialServiceId.normalizedInitialServiceId() ?: return@LaunchedEffect
         if (appliedInitialServiceRequestKey == initialServiceRequestKey) return@LaunchedEffect
+
+        val requestedPreset = initialSelectionPreset
+        if (requestedPreset != null) {
+            appliedInitialServiceRequestKey = initialServiceRequestKey
+            applySelectionPreset(requestedPreset)
+            return@LaunchedEffect
+        }
+
+        val requestedServiceId = initialServiceId.normalizedInitialServiceId() ?: return@LaunchedEffect
 
         val resolvedServiceId = resolveInitialServiceId(
             initialServiceId = requestedServiceId,
@@ -448,11 +517,22 @@ private fun ProductsScreenContent(
     }
 
     LaunchedEffect(vehiclesState) {
+        if (vehiclesState is BookingVehiclesUiState.Idle || vehiclesState is BookingVehiclesUiState.Loading) {
+            return@LaunchedEffect
+        }
         val defaultVehicleId = savedVehicles.firstOrNull { it.isDefault }?.id
         if (selectedVehicleId != null && vehicleOptions.none { it.id == selectedVehicleId }) {
             selectedVehicleId = defaultVehicleId
         } else if (selectedVehicleId == null) {
             selectedVehicleId = defaultVehicleId
+        }
+        val requestedVehicleId = pendingPresetVehicleId
+        if (requestedVehicleId != null) {
+            pendingPresetVehicleId = null
+            if (vehicleOptions.any { it.id == requestedVehicleId }) {
+                selectedVehicleId = requestedVehicleId
+                currentStepName = BookingStep.DateTime.name
+            }
         }
     }
 
@@ -496,10 +576,16 @@ private fun ProductsScreenContent(
                     ) {
                         BookingServiceStepContent(
                             catalogState = catalogState,
+                            presetsState = presetsState,
+                            presetMutationState = presetMutationState,
                             selectedServiceId = selectedServiceId,
                             selectedExtraIds = selectedExtraIds,
                             unavailableInitialServiceId = unavailableInitialServiceId,
                             onRetryCatalog = onLoadCatalog,
+                            onRetryPresets = onLoadPresets,
+                            onPresetSelected = ::applySelectionPreset,
+                            onDeletePreset = onDeletePreset,
+                            onDismissPresetMutation = onDismissPresetMutation,
                             onServiceSelected = { service ->
                                 if (selectedServiceId != service.id) {
                                     selectedDateId = null
@@ -681,7 +767,11 @@ private fun ProductsScreenContent(
                         businessInfoState = businessInfoState,
                         onRetryBusinessInfo = { onLoadBusinessInfo(true) },
                         rewardsState = rewardsState,
+                        presetsState = presetsState,
+                        presetMutationState = presetMutationState,
                         onRetryRewards = onLoadRewards,
+                        onSavePreset = onSavePreset,
+                        onDismissPresetMutation = onDismissPresetMutation,
                         sessionState = sessionState,
                         onRequestSignIn = onRequestSignIn,
                         onEditService = {
@@ -914,7 +1004,11 @@ private fun BookingConfirmationContent(
     businessInfoState: BookingBusinessInfoUiState,
     onRetryBusinessInfo: () -> Unit,
     rewardsState: BookingRewardsUiState,
+    presetsState: BookingPresetsUiState,
+    presetMutationState: BookingPresetMutationUiState,
     onRetryRewards: () -> Unit,
+    onSavePreset: (BookingPresetUpsertRequest) -> Unit,
+    onDismissPresetMutation: () -> Unit,
     sessionState: AuthSessionState,
     onRequestSignIn: () -> Unit,
     onEditService: () -> Unit,
@@ -998,6 +1092,18 @@ private fun BookingConfirmationContent(
             onRequestSignIn = onRequestSignIn,
         )
 
+        BookingFavoriteSaveCard(
+            service = service,
+            selectedExtras = selectedExtras,
+            vehicle = vehicle,
+            sessionState = sessionState,
+            presetsState = presetsState,
+            mutationState = presetMutationState,
+            onRequestSignIn = onRequestSignIn,
+            onSave = onSavePreset,
+            onDismissMutation = onDismissPresetMutation,
+        )
+
         val basePriceCents = service?.priceCentsForVehicle(vehicle?.type) ?: 0
         val extrasPriceCents = selectedExtras.sumOf { it.priceCents }
         val totalPriceCents = basePriceCents + extrasPriceCents
@@ -1015,6 +1121,142 @@ private fun BookingConfirmationContent(
             submitState = submitState,
             onAction = onSubmitErrorAction,
         )
+    }
+}
+
+@Composable
+private fun BookingFavoriteSaveCard(
+    service: ProductServiceUi?,
+    selectedExtras: List<ProductExtraUi>,
+    vehicle: BookingVehicleUi?,
+    sessionState: AuthSessionState,
+    presetsState: BookingPresetsUiState,
+    mutationState: BookingPresetMutationUiState,
+    onRequestSignIn: () -> Unit,
+    onSave: (BookingPresetUpsertRequest) -> Unit,
+    onDismissMutation: () -> Unit,
+) {
+    if (service == null || vehicle == null) return
+    val presets = (presetsState as? BookingPresetsUiState.Loaded)?.presets.orEmpty()
+    val currentExtraIds = selectedExtras.map { it.id }
+    val alreadySaved = presets.any { preset ->
+        preset.serviceId == service.id &&
+            preset.extraIds.toSet() == currentExtraIds.toSet() &&
+            preset.userVehicleId == vehicle.userVehicleId &&
+            preset.vehicleType == vehicle.type
+    }
+    val maxPresets = when (presetsState) {
+        is BookingPresetsUiState.Loaded -> presetsState.maxPresets
+        is BookingPresetsUiState.Empty -> presetsState.maxPresets
+        else -> 5
+    }
+    val limitReached = !alreadySaved && presets.size >= maxPresets
+    val saving = mutationState is BookingPresetMutationUiState.Saving
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f),
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        text = if (alreadySaved) "Guardado nos favoritos" else "Repetir em segundos",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = when {
+                            alreadySaved -> "Este serviço, extras e veículo já estão guardados."
+                            limitReached -> "Já atingiu o limite de $maxPresets favoritos. Elimine um para guardar este."
+                            sessionState !is AuthSessionState.Authenticated ->
+                                "Inicie sessão para guardar esta combinação e reutilizá-la noutros dispositivos."
+                            else -> "Guarde o serviço, os extras e o veículo. A data e a hora serão sempre escolhidas de novo."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (!alreadySaved && !limitReached) {
+                OutlinedButton(
+                    onClick = {
+                        if (sessionState !is AuthSessionState.Authenticated) {
+                            onRequestSignIn()
+                        } else {
+                            onSave(
+                                BookingPresetUpsertRequest(
+                                    label = "${service.name} · ${vehicle.name}",
+                                    serviceId = service.id,
+                                    extraIds = currentExtraIds,
+                                    userVehicleId = vehicle.userVehicleId,
+                                    vehicleType = vehicle.type,
+                                    vehicleLabel = vehicle.vehicleLabel ?: vehicle.name,
+                                ),
+                            )
+                        }
+                    },
+                    enabled = !saving,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.tertiary),
+                ) {
+                    if (saving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.tertiary,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (saving) "A guardar" else if (sessionState is AuthSessionState.Authenticated) "Guardar favorito" else "Entrar para guardar")
+                }
+            }
+
+            when (mutationState) {
+                is BookingPresetMutationUiState.Success -> BookingPresetMutationMessage(
+                    message = mutationState.message,
+                    error = false,
+                    onDismiss = onDismissMutation,
+                )
+                is BookingPresetMutationUiState.Error -> BookingPresetMutationMessage(
+                    message = mutationState.message,
+                    error = true,
+                    onDismiss = onDismissMutation,
+                )
+                BookingPresetMutationUiState.Idle,
+                BookingPresetMutationUiState.Saving,
+                is BookingPresetMutationUiState.Deleting -> Unit
+            }
+        }
     }
 }
 
@@ -3293,13 +3535,28 @@ private fun SectionHeader(
 @Composable
 private fun BookingServiceStepContent(
     catalogState: ProductCatalogUiState,
+    presetsState: BookingPresetsUiState,
+    presetMutationState: BookingPresetMutationUiState,
     selectedServiceId: String?,
     selectedExtraIds: List<String>,
     unavailableInitialServiceId: String?,
     onRetryCatalog: () -> Unit,
+    onRetryPresets: () -> Unit,
+    onPresetSelected: (BookingSelectionPreset) -> Unit,
+    onDeletePreset: (String) -> Unit,
+    onDismissPresetMutation: () -> Unit,
     onServiceSelected: (ProductServiceUi) -> Unit,
     onExtraToggled: (ProductExtraUi) -> Unit,
 ) {
+    BookingFavoritePresetsSection(
+        presetsState = presetsState,
+        mutationState = presetMutationState,
+        onRetry = onRetryPresets,
+        onSelected = { onPresetSelected(it.toSelectionPreset()) },
+        onDelete = onDeletePreset,
+        onDismissMutation = onDismissPresetMutation,
+    )
+
     if (unavailableInitialServiceId != null) {
         AvailabilityStatusCard(
             title = "Serviço indisponível",
@@ -3338,6 +3595,234 @@ private fun BookingServiceStepContent(
             body = catalogState.message,
             onRetry = onRetryCatalog,
         )
+    }
+}
+
+@Composable
+private fun BookingFavoritePresetsSection(
+    presetsState: BookingPresetsUiState,
+    mutationState: BookingPresetMutationUiState,
+    onRetry: () -> Unit,
+    onSelected: (BookingPreset) -> Unit,
+    onDelete: (String) -> Unit,
+    onDismissMutation: () -> Unit,
+) {
+    when (presetsState) {
+        BookingPresetsUiState.Idle,
+        BookingPresetsUiState.Unauthenticated,
+        is BookingPresetsUiState.Empty -> Unit
+
+        BookingPresetsUiState.Loading -> Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f),
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    text = "A carregar marcações favoritas",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        is BookingPresetsUiState.Error -> BookingPresetLoadErrorRow(
+            message = presetsState.message,
+            onRetry = onRetry,
+        )
+
+        is BookingPresetsUiState.Loaded -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SectionHeader(icon = Icons.Filled.Star, title = "Os seus favoritos")
+                Text(
+                    text = "${presetsState.presets.size}/${presetsState.maxPresets}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = "Escolha um favorito para avançar diretamente para a data e hora.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            presetsState.presets.forEach { preset ->
+                FavoriteBookingPresetCard(
+                    preset = preset,
+                    deleting = mutationState is BookingPresetMutationUiState.Deleting &&
+                        mutationState.presetId == preset.id,
+                    onSelected = { onSelected(preset) },
+                    onDelete = { onDelete(preset.id) },
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+    }
+
+    when (mutationState) {
+        is BookingPresetMutationUiState.Success -> BookingPresetMutationMessage(
+            message = mutationState.message,
+            error = false,
+            onDismiss = onDismissMutation,
+        )
+        is BookingPresetMutationUiState.Error -> BookingPresetMutationMessage(
+            message = mutationState.message,
+            error = true,
+            onDismiss = onDismissMutation,
+        )
+        BookingPresetMutationUiState.Idle,
+        BookingPresetMutationUiState.Saving,
+        is BookingPresetMutationUiState.Deleting -> Unit
+    }
+}
+
+@Composable
+private fun BookingPresetLoadErrorRow(
+    message: String,
+    onRetry: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            IconButton(onClick = onRetry) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Tentar carregar favoritos novamente",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavoriteBookingPresetCard(
+    preset: BookingPreset,
+    deleting: Boolean,
+    onSelected: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !deleting, onClick = onSelected),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.45f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = RoundedCornerShape(13.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Star,
+                    contentDescription = null,
+                    modifier = Modifier.padding(11.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = preset.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                val vehicle = preset.vehicleLabel ?: if (preset.vehicleType == "suv") "SUV" else "Passageiros"
+                val extras = if (preset.extraIds.isEmpty()) "Sem extras" else "${preset.extraIds.size} extras"
+                Text(
+                    text = "$vehicle · $extras",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onDelete, enabled = !deleting) {
+                if (deleting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.DeleteOutline,
+                        contentDescription = "Eliminar ${preset.label}",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookingPresetMutationMessage(
+    message: String,
+    error: Boolean,
+    onDismiss: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
+                Text("Fechar")
+            }
+        }
     }
 }
 

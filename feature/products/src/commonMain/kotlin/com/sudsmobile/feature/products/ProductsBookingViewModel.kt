@@ -18,6 +18,12 @@ import com.sudsmobile.data.booking.BookingLoyalty
 import com.sudsmobile.data.booking.BookingLoyaltyError
 import com.sudsmobile.data.booking.BookingLoyaltyRedemption
 import com.sudsmobile.data.booking.BookingLoyaltyResult
+import com.sudsmobile.data.booking.BookingPreset
+import com.sudsmobile.data.booking.BookingPresetDeleteResult
+import com.sudsmobile.data.booking.BookingPresetError
+import com.sudsmobile.data.booking.BookingPresetListResult
+import com.sudsmobile.data.booking.BookingPresetSaveResult
+import com.sudsmobile.data.booking.BookingPresetUpsertRequest
 import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.BookingWaitlistActionResult
 import com.sudsmobile.data.booking.BookingWaitlistEntry
@@ -172,6 +178,23 @@ data class BookingWaitlistUiState(
     val isUnauthenticated: Boolean = false,
 )
 
+sealed interface BookingPresetsUiState {
+    data object Idle : BookingPresetsUiState
+    data object Loading : BookingPresetsUiState
+    data object Unauthenticated : BookingPresetsUiState
+    data class Empty(val maxPresets: Int = 5) : BookingPresetsUiState
+    data class Loaded(val presets: List<BookingPreset>, val maxPresets: Int) : BookingPresetsUiState
+    data class Error(val message: String, val retryable: Boolean) : BookingPresetsUiState
+}
+
+sealed interface BookingPresetMutationUiState {
+    data object Idle : BookingPresetMutationUiState
+    data object Saving : BookingPresetMutationUiState
+    data class Deleting(val presetId: String) : BookingPresetMutationUiState
+    data class Success(val message: String) : BookingPresetMutationUiState
+    data class Error(val message: String, val retryable: Boolean) : BookingPresetMutationUiState
+}
+
 class ProductsBookingViewModel(
     private val bookingRepository: BookingRepository,
     private val authRepository: AuthRepository,
@@ -222,6 +245,175 @@ class ProductsBookingViewModel(
     private var loadedWaitlistUid: String? = null
     private var waitlistRequestSequence: Long = 0
     private var waitlistRequestInFlight: Boolean = false
+
+    private val _presetsState = MutableStateFlow<BookingPresetsUiState>(BookingPresetsUiState.Idle)
+    val presetsState: StateFlow<BookingPresetsUiState> = _presetsState.asStateFlow()
+    private val _presetMutationState = MutableStateFlow<BookingPresetMutationUiState>(
+        BookingPresetMutationUiState.Idle,
+    )
+    val presetMutationState: StateFlow<BookingPresetMutationUiState> = _presetMutationState.asStateFlow()
+    private var loadedPresetsUid: String? = null
+    private var presetsRequestSequence: Long = 0
+    private var presetsRequestInFlight: Boolean = false
+
+    fun refreshPresetsForSession(force: Boolean = false) {
+        val session = when (val current = sessionState.value) {
+            AuthSessionState.Restoring -> {
+                clearLoadedPresets()
+                _presetsState.value = BookingPresetsUiState.Loading
+                return
+            }
+            is AuthSessionState.RestoreFailed -> {
+                clearLoadedPresets()
+                _presetsState.value = BookingPresetsUiState.Error(
+                    message = current.error.message,
+                    retryable = current.error.isRetryableSessionError(),
+                )
+                return
+            }
+            AuthSessionState.Unauthenticated -> {
+                clearLoadedPresets()
+                _presetsState.value = BookingPresetsUiState.Unauthenticated
+                return
+            }
+            is AuthSessionState.Authenticated -> current
+        }
+        if (!force && loadedPresetsUid == session.session.user.uid &&
+            (_presetsState.value is BookingPresetsUiState.Loaded || _presetsState.value is BookingPresetsUiState.Empty)
+        ) {
+            return
+        }
+        loadPresets()
+    }
+
+    fun loadPresets() {
+        if (presetsRequestInFlight) return
+        val session = sessionState.value as? AuthSessionState.Authenticated ?: run {
+            refreshPresetsForSession()
+            return
+        }
+        val requestedUid = session.session.user.uid
+        val requestSequence = ++presetsRequestSequence
+        presetsRequestInFlight = true
+        viewModelScope.launch {
+            try {
+                _presetsState.value = BookingPresetsUiState.Loading
+                val nextState = when (val result = bookingRepository.getMyBookingPresets()) {
+                    is BookingPresetListResult.Success -> if (result.list.presets.isEmpty()) {
+                        BookingPresetsUiState.Empty(result.list.maxPresets)
+                    } else {
+                        BookingPresetsUiState.Loaded(result.list.presets, result.list.maxPresets)
+                    }
+                    is BookingPresetListResult.Failure -> result.error.toPresetsUiState()
+                }
+                val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+                if (requestSequence == presetsRequestSequence && currentUid == requestedUid) {
+                    loadedPresetsUid = requestedUid
+                    _presetsState.value = nextState
+                } else if (requestSequence == presetsRequestSequence) {
+                    clearLoadedPresets()
+                    _presetsState.value = BookingPresetsUiState.Unauthenticated
+                }
+            } finally {
+                if (requestSequence == presetsRequestSequence) presetsRequestInFlight = false
+            }
+        }
+    }
+
+    fun savePreset(request: BookingPresetUpsertRequest) {
+        if (_presetMutationState.value is BookingPresetMutationUiState.Saving ||
+            _presetMutationState.value is BookingPresetMutationUiState.Deleting
+        ) {
+            return
+        }
+        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+        if (requestedUid == null) {
+            _presetMutationState.value = BookingPresetMutationUiState.Error(
+                message = "Inicie sessão para guardar esta marcação favorita.",
+                retryable = false,
+            )
+            return
+        }
+        _presetMutationState.value = BookingPresetMutationUiState.Saving
+        viewModelScope.launch {
+            val result = bookingRepository.saveBookingPreset(request)
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid != requestedUid) {
+                clearLoadedPresets()
+                _presetsState.value = BookingPresetsUiState.Unauthenticated
+                _presetMutationState.value = BookingPresetMutationUiState.Idle
+                return@launch
+            }
+            when (result) {
+                is BookingPresetSaveResult.Success -> {
+                    val current = (_presetsState.value as? BookingPresetsUiState.Loaded)?.presets.orEmpty()
+                    val next = listOf(result.preset) + current.filterNot { it.id == result.preset.id }
+                    loadedPresetsUid = requestedUid
+                    _presetsState.value = BookingPresetsUiState.Loaded(next, result.maxPresets)
+                    _presetMutationState.value = BookingPresetMutationUiState.Success(
+                        "Marcação guardada nos favoritos.",
+                    )
+                }
+                is BookingPresetSaveResult.Failure ->
+                    _presetMutationState.value = result.error.toPresetMutationUiState()
+            }
+        }
+    }
+
+    fun deletePreset(presetId: String) {
+        if (_presetMutationState.value is BookingPresetMutationUiState.Saving ||
+            _presetMutationState.value is BookingPresetMutationUiState.Deleting
+        ) {
+            return
+        }
+        val requestedUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+        if (requestedUid == null) {
+            _presetMutationState.value = BookingPresetMutationUiState.Error(
+                message = "Inicie sessão para gerir marcações favoritas.",
+                retryable = false,
+            )
+            return
+        }
+        _presetMutationState.value = BookingPresetMutationUiState.Deleting(presetId)
+        viewModelScope.launch {
+            val result = bookingRepository.deleteBookingPreset(presetId)
+            val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
+            if (currentUid != requestedUid) {
+                clearLoadedPresets()
+                _presetsState.value = BookingPresetsUiState.Unauthenticated
+                _presetMutationState.value = BookingPresetMutationUiState.Idle
+                return@launch
+            }
+            when (result) {
+                is BookingPresetDeleteResult.Success -> {
+                    val current = (_presetsState.value as? BookingPresetsUiState.Loaded)?.presets.orEmpty()
+                    val next = current.filterNot { it.id == result.presetId }
+                    val max = (_presetsState.value as? BookingPresetsUiState.Loaded)?.maxPresets ?: 5
+                    _presetsState.value = if (next.isEmpty()) {
+                        BookingPresetsUiState.Empty(max)
+                    } else {
+                        BookingPresetsUiState.Loaded(next, max)
+                    }
+                    _presetMutationState.value = BookingPresetMutationUiState.Success(
+                        "Marcação removida dos favoritos.",
+                    )
+                }
+                is BookingPresetDeleteResult.Failure ->
+                    _presetMutationState.value = result.error.toPresetMutationUiState()
+            }
+        }
+    }
+
+    fun clearPresetMutationState() {
+        _presetMutationState.value = BookingPresetMutationUiState.Idle
+    }
+
+    private fun clearLoadedPresets() {
+        loadedPresetsUid = null
+        presetsRequestSequence += 1
+        presetsRequestInFlight = false
+        _presetMutationState.value = BookingPresetMutationUiState.Idle
+    }
 
     fun loadBusinessInfo(force: Boolean = false) {
         if (!force && _businessInfoState.value is BookingBusinessInfoUiState.Loading) return
@@ -992,6 +1184,22 @@ private fun AuthError.toVehiclesUiState(): BookingVehiclesUiState.Error {
 private fun AuthError.isRetryableSessionError(): Boolean {
     return this is AuthError.Unavailable || this is AuthError.Backend
 }
+
+private fun BookingPresetError.toPresetsUiState(): BookingPresetsUiState = when (this) {
+    is BookingPresetError.Unauthenticated -> BookingPresetsUiState.Unauthenticated
+    is BookingPresetError.Validation,
+    is BookingPresetError.Permission,
+    is BookingPresetError.NotFound,
+    is BookingPresetError.LimitReached -> BookingPresetsUiState.Error(message = message, retryable = false)
+    is BookingPresetError.Unavailable,
+    is BookingPresetError.Backend -> BookingPresetsUiState.Error(message = message, retryable = true)
+}
+
+private fun BookingPresetError.toPresetMutationUiState(): BookingPresetMutationUiState.Error =
+    BookingPresetMutationUiState.Error(
+        message = message,
+        retryable = this is BookingPresetError.Unavailable || this is BookingPresetError.Backend,
+    )
 
 private fun BookingLoyaltyRedemption.toBookingRewardCodeUiOrNull(): BookingRewardCodeUi? {
     if (id.isBlank() || rewardCode.isBlank() || !status.isIssuedRewardStatus()) return null

@@ -181,7 +181,7 @@ class ProfileHistoryViewModelTest {
         assertEquals(5, loaded.items.first().reviewRating)
         assertEquals(listOf("Qualidade", "Rápido"), loaded.items.first().reviewTags)
         assertEquals("Ficou impecável. Voltava a reservar.", loaded.items.first().reviewComment)
-        assertEquals("premium", loaded.items.first().rebookServiceId)
+        assertEquals("premium", loaded.items.first().rebookPreset?.serviceId)
         assertEquals(true, loaded.items[1].reviewable)
         assertEquals(ProfileHistoryStatusUi.Cancelled, loaded.items[2].status)
         assertEquals(false, loaded.items[2].reviewable)
@@ -201,6 +201,8 @@ class ProfileHistoryViewModelTest {
                                 upcoming = false,
                                 priceCents = 3950,
                                 paymentStatus = "covered_by_loyalty",
+                                userVehicleId = "vehicle-1",
+                                vehicleLabel = "BMW 320d",
                                 extras = listOf(
                                     BookingReservationExtra(id = "wax", name = " Cera premium ", priceCents = 700),
                                     BookingReservationExtra(id = "vacuum", name = "Aspiração", priceCents = 0),
@@ -229,6 +231,10 @@ class ProfileHistoryViewModelTest {
             ),
             item.extras,
         )
+        assertEquals("premium", item.rebookPreset?.serviceId)
+        assertEquals(listOf("wax", "vacuum", "blank"), item.rebookPreset?.extraIds)
+        assertEquals("vehicle-1", item.rebookPreset?.userVehicleId)
+        assertEquals("BMW 320d", item.rebookPreset?.vehicleLabel)
     }
 
     @Test
@@ -263,8 +269,8 @@ class ProfileHistoryViewModelTest {
         runCurrent()
 
         val loaded = assertIs<ProfileHistoryUiState.Loaded>(viewModel.uiState.value)
-        assertEquals("premium", loaded.items[0].rebookServiceId)
-        assertEquals(null, loaded.items[1].rebookServiceId)
+        assertEquals("premium", loaded.items[0].rebookPreset?.serviceId)
+        assertEquals(null, loaded.items[1].rebookPreset)
     }
 
     @Test
@@ -657,6 +663,7 @@ private fun historyReservation(
     status: String = if (upcoming) "pending" else "completed",
     paymentStatus: String = "paid",
     priceCents: Int?,
+    userVehicleId: String? = null,
     vehicleLabel: String? = null,
     extras: List<BookingReservationExtra> = emptyList(),
     reviewed: Boolean = false,
@@ -678,6 +685,7 @@ private fun historyReservation(
     status = status,
     paymentStatus = paymentStatus,
     vehicleType = "suv",
+    userVehicleId = userVehicleId,
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,
     upcoming = upcoming,
