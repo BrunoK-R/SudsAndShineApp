@@ -239,6 +239,45 @@ data class AdminLoyaltySettingsUpdateRequest(
     val rewardDescription: String,
 )
 
+data class AdminLoyaltyReportSummary(
+    val stampsRequired: Int,
+    val qualifyingWashes: Int,
+    val rewardsEarned: Int,
+    val rewardsRedeemed: Int,
+    val rewardsReserved: Int,
+    val rewardsReleased: Int,
+    val estimatedAvailableRewards: Int,
+    val activeCustomers: Int,
+    val reservationsScanned: Int,
+    val truncated: Boolean,
+    val periodStartIso: String = "",
+    val periodEndIso: String = "",
+)
+
+data class AdminLoyaltyReportEvent(
+    val id: String,
+    val kind: String,
+    val occurredAtIso: String,
+    val customerUid: String,
+    val customerName: String,
+    val customerEmail: String,
+    val reservationId: String,
+    val reservationCode: String,
+    val serviceName: String,
+    val rewardCode: String,
+    val rewardDescription: String,
+    val status: String,
+    val stampPosition: Int,
+    val stampsRequired: Int,
+    val rewardNumber: Int,
+)
+
+data class AdminLoyaltyReport(
+    val source: String,
+    val summary: AdminLoyaltyReportSummary,
+    val events: List<AdminLoyaltyReportEvent>,
+)
+
 data class AdminNotificationSettingsUpdateRequest(
     val bookingStatusEnabled: Boolean,
     val appointmentReminderEnabled: Boolean,
@@ -301,6 +340,15 @@ data class AdminNotificationCampaignDraft(
     val sentAtIso: String = "",
     val sentByUid: String = "",
     val queuedCount: Int = 0,
+    val deliverySummary: AdminNotificationCampaignDeliverySummary = AdminNotificationCampaignDeliverySummary(),
+)
+
+data class AdminNotificationCampaignDeliverySummary(
+    val totalCount: Int = 0,
+    val sentCount: Int = 0,
+    val failedCount: Int = 0,
+    val suppressedCount: Int = 0,
+    val pendingCount: Int = 0,
 )
 
 data class AdminNotificationCampaignDraftsConfig(
@@ -467,6 +515,11 @@ sealed interface AdminLoyaltySettingsResult {
     data class Failure(val error: AdminError) : AdminLoyaltySettingsResult
 }
 
+sealed interface AdminLoyaltyReportResult {
+    data class Success(val report: AdminLoyaltyReport) : AdminLoyaltyReportResult
+    data class Failure(val error: AdminError) : AdminLoyaltyReportResult
+}
+
 sealed interface AdminNotificationSettingsResult {
     data class Success(val config: AdminNotificationSettingsConfig) : AdminNotificationSettingsResult
     data class Failure(val error: AdminError) : AdminNotificationSettingsResult
@@ -538,6 +591,8 @@ interface AdminRepository {
         AdminBookingPolicyResult.Failure(AdminError.Backend("Booking policy configuration is not implemented."))
     suspend fun getLoyaltySettingsConfiguration(): AdminLoyaltySettingsResult =
         AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
+    suspend fun getLoyaltyReport(): AdminLoyaltyReportResult =
+        AdminLoyaltyReportResult.Failure(AdminError.Backend("Loyalty reporting is not implemented."))
     suspend fun getNotificationSettingsConfiguration(): AdminNotificationSettingsResult =
         AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
     suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult

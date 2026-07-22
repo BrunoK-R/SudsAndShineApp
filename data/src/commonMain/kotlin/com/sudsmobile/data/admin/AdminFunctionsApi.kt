@@ -39,6 +39,9 @@ interface AdminFunctionsApi {
     suspend fun getLoyaltySettingsConfiguration(idToken: String): AdminLoyaltySettingsResult =
         AdminLoyaltySettingsResult.Failure(AdminError.Backend("Loyalty settings are not implemented."))
 
+    suspend fun getLoyaltyReport(idToken: String): AdminLoyaltyReportResult =
+        AdminLoyaltyReportResult.Failure(AdminError.Backend("Loyalty reporting is not implemented."))
+
     suspend fun getNotificationSettingsConfiguration(idToken: String): AdminNotificationSettingsResult =
         AdminNotificationSettingsResult.Failure(AdminError.Backend("Notification settings are not implemented."))
 

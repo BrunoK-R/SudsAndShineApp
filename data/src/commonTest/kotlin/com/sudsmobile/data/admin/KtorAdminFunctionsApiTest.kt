@@ -514,6 +514,74 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAdminLoyaltyReportAndFiltersInvalidEvents() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "source": "reservations",
+                    "summary": {
+                      "stampsRequired": 10,
+                      "qualifyingWashes": 21,
+                      "rewardsEarned": 2,
+                      "rewardsRedeemed": 1,
+                      "rewardsReserved": 1,
+                      "rewardsReleased": 1,
+                      "estimatedAvailableRewards": 1,
+                      "activeCustomers": 4,
+                      "reservationsScanned": 28,
+                      "truncated": false,
+                      "periodStart": "2026-01-02T10:00:00.000Z",
+                      "periodEnd": "2026-07-20T12:30:00.000Z"
+                    },
+                    "events": [
+                      {
+                        "id": "stamp:reservation-1",
+                        "kind": "stamp_granted",
+                        "occurredAt": "2026-07-20T12:30:00.000Z",
+                        "customerUid": " user-1 ",
+                        "customerName": " Bruno ",
+                        "customerEmail": " bruno@example.com ",
+                        "reservationId": " reservation-1 ",
+                        "reservationCode": " SS-ONE ",
+                        "serviceName": " Lavagem Premium ",
+                        "stampPosition": 1,
+                        "stampsRequired": 10
+                      },
+                      {
+                        "id": "invalid-without-date",
+                        "kind": "stamp_granted"
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+            },
+            config = testConfig(),
+        )
+
+        val result = api.getLoyaltyReport("id-token-1")
+
+        val success = assertIs<AdminLoyaltyReportResult.Success>(result)
+        assertEquals("/test-project/europe-west1/getAdminLoyaltyReport", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals(21, success.report.summary.qualifyingWashes)
+        assertEquals(2, success.report.summary.rewardsEarned)
+        assertEquals("2026-01-02T10:00:00.000Z", success.report.summary.periodStartIso)
+        val event = success.report.events.single()
+        assertEquals("user-1", event.customerUid)
+        assertEquals("Bruno", event.customerName)
+        assertEquals("SS-ONE", event.reservationCode)
+        assertEquals(1, event.stampPosition)
+    }
+
+    @Test
     fun postsLoyaltySettingsUpdateWithAuthorization() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null
@@ -837,7 +905,14 @@ class KtorAdminFunctionsApiTest {
                         "createdAtIso": "2026-06-01T10:00:00.000Z",
                         "updatedAtIso": "2026-06-01T11:00:00.000Z",
                         "createdByUid": "admin-created",
-                        "updatedByUid": "admin-updated"
+                        "updatedByUid": "admin-updated",
+                        "deliverySummary": {
+                          "totalCount": 12,
+                          "sentCount": 8,
+                          "failedCount": 1,
+                          "suppressedCount": 2,
+                          "pendingCount": 1
+                        }
                       }
                     ]
                   }
@@ -867,6 +942,11 @@ class KtorAdminFunctionsApiTest {
         assertEquals("2026-06-01T11:00:00.000Z", draft.updatedAtIso)
         assertEquals("admin-created", draft.createdByUid)
         assertEquals("admin-updated", draft.updatedByUid)
+        assertEquals(12, draft.deliverySummary.totalCount)
+        assertEquals(8, draft.deliverySummary.sentCount)
+        assertEquals(1, draft.deliverySummary.failedCount)
+        assertEquals(2, draft.deliverySummary.suppressedCount)
+        assertEquals(1, draft.deliverySummary.pendingCount)
     }
 
     @Test

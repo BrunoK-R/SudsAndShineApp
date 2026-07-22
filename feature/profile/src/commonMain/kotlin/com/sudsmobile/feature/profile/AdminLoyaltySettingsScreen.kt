@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
@@ -52,6 +53,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.admin.AdminLoyaltyReport
+import com.sudsmobile.data.admin.AdminLoyaltyReportEvent
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -63,6 +66,7 @@ fun AdminLoyaltySettingsScreen(
     val viewModel: AdminLoyaltySettingsViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val saveState by viewModel.saveState.collectAsStateWithLifecycle()
+    val reportState by viewModel.reportState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
 
     LaunchedEffect(sessionState) {
@@ -73,6 +77,7 @@ fun AdminLoyaltySettingsScreen(
         contentPadding = contentPadding,
         uiState = uiState,
         saveState = saveState,
+        reportState = reportState,
         onBack = onBack,
         onRequestSignIn = onRequestSignIn,
         onRetry = { viewModel.loadConfiguration() },
@@ -87,6 +92,7 @@ private fun AdminLoyaltySettingsScreenContent(
     contentPadding: PaddingValues,
     uiState: AdminLoyaltySettingsUiState,
     saveState: AdminLoyaltySettingsSaveState,
+    reportState: AdminLoyaltyReportUiState,
     onBack: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
@@ -146,12 +152,18 @@ private fun AdminLoyaltySettingsScreenContent(
                     onAction = if (uiState.retryable) onRetry else null,
                 )
 
-                is AdminLoyaltySettingsUiState.Loaded -> AdminLoyaltySettingsFormCard(
-                    form = uiState.form,
-                    saving = saveState == AdminLoyaltySettingsSaveState.Saving,
-                    onFormChange = onFormChange,
-                    onSave = onSave,
-                )
+                is AdminLoyaltySettingsUiState.Loaded -> {
+                    AdminLoyaltyReportSection(
+                        state = reportState,
+                        onRetry = onRetry,
+                    )
+                    AdminLoyaltySettingsFormCard(
+                        form = uiState.form,
+                        saving = saveState == AdminLoyaltySettingsSaveState.Saving,
+                        onFormChange = onFormChange,
+                        onSave = onSave,
+                    )
+                }
             }
         }
     }
@@ -206,7 +218,7 @@ private fun AdminLoyaltySettingsHeader(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Selos necessários e recompensa emitida",
+                text = "Desempenho, auditoria e regras do programa",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.68f),
             )
@@ -312,6 +324,269 @@ private fun AdminLoyaltySettingsStatusCard(
             }
         }
     }
+}
+
+@Composable
+private fun AdminLoyaltyReportSection(
+    state: AdminLoyaltyReportUiState,
+    onRetry: () -> Unit,
+) {
+    when (state) {
+        AdminLoyaltyReportUiState.Idle,
+        AdminLoyaltyReportUiState.Loading -> AdminLoyaltySettingsStatusCard(
+            title = "A calcular o programa",
+            body = "Estamos a reunir lavagens elegíveis e utilização de recompensas.",
+            icon = Icons.Filled.CardGiftcard,
+            loading = true,
+        )
+        AdminLoyaltyReportUiState.Unauthenticated -> Unit
+        AdminLoyaltyReportUiState.NotAdmin -> Unit
+        is AdminLoyaltyReportUiState.Error -> AdminLoyaltySettingsStatusCard(
+            title = "Relatório indisponível",
+            body = state.message,
+            icon = Icons.Filled.ErrorOutline,
+            actionLabel = if (state.retryable) "Tentar novamente" else null,
+            onAction = if (state.retryable) onRetry else null,
+        )
+        is AdminLoyaltyReportUiState.Loaded -> AdminLoyaltyReportCard(state.report)
+    }
+}
+
+@Composable
+private fun AdminLoyaltyReportCard(report: AdminLoyaltyReport) {
+    val summary = report.summary
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = "Saúde da fidelização",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = summary.loyaltyReportScopeLabel(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CardGiftcard,
+                        contentDescription = null,
+                        modifier = Modifier.padding(10.dp).size(22.dp),
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AdminLoyaltyMetric(
+                        value = summary.qualifyingWashes.toString(),
+                        label = "Selos atribuídos",
+                        modifier = Modifier.weight(1f),
+                    )
+                    AdminLoyaltyMetric(
+                        value = summary.rewardsEarned.toString(),
+                        label = "Prémios ganhos",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AdminLoyaltyMetric(
+                        value = summary.rewardsRedeemed.toString(),
+                        label = "Prémios usados",
+                        modifier = Modifier.weight(1f),
+                    )
+                    AdminLoyaltyMetric(
+                        value = summary.estimatedAvailableRewards.toString(),
+                        label = "Por utilizar",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AdminLoyaltyMetric(
+                        value = summary.rewardsReserved.toString(),
+                        label = "Em marcações",
+                        modifier = Modifier.weight(1f),
+                    )
+                    AdminLoyaltyMetric(
+                        value = summary.activeCustomers.toString(),
+                        label = "Clientes ativos",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (report.events.isEmpty()) {
+                Text(
+                    text = "Ainda não existem movimentos de fidelização.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    text = "Movimentos recentes",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                report.events.take(15).forEachIndexed { index, event ->
+                    AdminLoyaltyReportEventRow(event)
+                    if (index < report.events.take(15).lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        )
+                    }
+                }
+            }
+
+            if (summary.truncated) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(17.dp),
+                    )
+                    Text(
+                        text = "O cálculo usa as ${summary.reservationsScanned} marcações mais recentes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminLoyaltyMetric(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminLoyaltyReportEventRow(event: AdminLoyaltyReportEvent) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text(
+                text = event.loyaltyEventTitle(),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = event.occurredAtIso.toCompactLoyaltyReportDate(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = event.loyaltyEventDetail(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (event.rewardCode.isNotBlank()) {
+            Text(
+                text = event.rewardCode,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+private fun com.sudsmobile.data.admin.AdminLoyaltyReportSummary.loyaltyReportScopeLabel(): String {
+    val period = listOf(periodStartIso.toCompactLoyaltyReportDate(), periodEndIso.toCompactLoyaltyReportDate())
+        .filter { it.isNotBlank() }
+        .distinct()
+        .joinToString(" – ")
+    val scan = "$reservationsScanned marcações analisadas"
+    return if (period.isBlank()) scan else "$scan · $period"
+}
+
+private fun AdminLoyaltyReportEvent.loyaltyEventTitle(): String = when (kind) {
+    "reward_earned" -> "Recompensa conquistada"
+    "reward_redeemed" -> "Recompensa utilizada"
+    "reward_reserved" -> "Recompensa reservada"
+    "reward_released" -> "Recompensa devolvida"
+    else -> "Selo atribuído"
+}
+
+private fun AdminLoyaltyReportEvent.loyaltyEventDetail(): String {
+    val customer = customerName.ifBlank { customerEmail.ifBlank { "Cliente" } }
+    val booking = reservationCode.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+    val progress = if (kind == "stamp_granted" && stampPosition > 0 && stampsRequired > 0) {
+        " · selo $stampPosition/$stampsRequired"
+    } else {
+        ""
+    }
+    return "$customer · $serviceName$booking$progress"
+}
+
+private fun String.toCompactLoyaltyReportDate(): String {
+    val value = trim()
+    if (value.length < 10) return value
+    val date = value.take(10)
+    val time = value.substringAfter("T", missingDelimiterValue = "").take(5)
+    return if (time.length == 5) "$date $time" else date
 }
 
 @Composable

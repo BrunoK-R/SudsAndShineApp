@@ -97,6 +97,9 @@ data class FirebaseFunctionsConfig(
     val getAdminLoyaltySettingsUrl: String
         get() = functionUrl("getAdminLoyaltySettings")
 
+    val getAdminLoyaltyReportUrl: String
+        get() = functionUrl("getAdminLoyaltyReport")
+
     val getAdminNotificationSettingsUrl: String
         get() = functionUrl("getAdminNotificationSettings")
 

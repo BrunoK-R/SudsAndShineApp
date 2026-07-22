@@ -605,6 +605,9 @@ private fun AdminNotificationCampaignDraftCard(
             if (draft.deliveryLocked || draft.sendBlocked || sent) {
                 CampaignDeliveryLockPanel(draft = draft)
             }
+            if (draft.deliveryTotalCount > 0) {
+                CampaignDeliveryReportPanel(draft = draft)
+            }
             OutlinedButton(
                 onClick = onSendTest,
                 enabled = canMutate,
@@ -716,6 +719,86 @@ private fun AdminNotificationCampaignDraftCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CampaignDeliveryReportPanel(draft: AdminNotificationCampaignDraftUi) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Resultado da entrega",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CampaignDeliveryMetric(
+                    value = draft.deliverySentCount,
+                    label = "Entregues",
+                    modifier = Modifier.weight(1f),
+                )
+                CampaignDeliveryMetric(
+                    value = draft.deliveryPendingCount,
+                    label = "Pendentes",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CampaignDeliveryMetric(
+                    value = draft.deliveryFailedCount,
+                    label = "Falharam",
+                    modifier = Modifier.weight(1f),
+                )
+                CampaignDeliveryMetric(
+                    value = draft.deliverySuppressedCount,
+                    label = "Excluídos",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Text(
+                text = "${draft.deliveryTotalCount} destinatários processados",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CampaignDeliveryMetric(
+    value: Int,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = value.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

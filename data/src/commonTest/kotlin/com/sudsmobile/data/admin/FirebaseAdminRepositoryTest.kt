@@ -479,6 +479,21 @@ class FirebaseAdminRepositoryTest {
     }
 
     @Test
+    fun loadsLoyaltyReportWithCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.getLoyaltyReport()
+
+        val success = assertIs<AdminLoyaltyReportResult.Success>(result)
+        assertEquals(12, success.report.summary.qualifyingWashes)
+        assertEquals("id-token-1", api.loyaltyReportIdTokens.single())
+    }
+
+    @Test
     fun updateLoyaltySettingsNormalizesRequestAndUsesCurrentToken() = runTest {
         val api = FakeAdminFunctionsApi()
         val repository = FirebaseAdminRepository(
@@ -1032,6 +1047,7 @@ private class FakeAdminFunctionsApi(
     val availabilityIdTokens = mutableListOf<String>()
     val bookingPolicyIdTokens = mutableListOf<String>()
     val loyaltySettingsIdTokens = mutableListOf<String>()
+    val loyaltyReportIdTokens = mutableListOf<String>()
     val notificationSettingsIdTokens = mutableListOf<String>()
     val updateAvailabilityRequests = mutableListOf<AdminAvailabilityUpdateRequest>()
     val updateAvailabilityIdTokens = mutableListOf<String>()
@@ -1231,6 +1247,28 @@ private class FakeAdminFunctionsApi(
                 rewardType = "free_wash",
                 rewardValue = 1,
                 rewardDescription = "1 lavagem grátis",
+            ),
+        )
+    }
+
+    override suspend fun getLoyaltyReport(idToken: String): AdminLoyaltyReportResult {
+        loyaltyReportIdTokens += idToken
+        return AdminLoyaltyReportResult.Success(
+            AdminLoyaltyReport(
+                source = "reservations",
+                summary = AdminLoyaltyReportSummary(
+                    stampsRequired = 10,
+                    qualifyingWashes = 12,
+                    rewardsEarned = 1,
+                    rewardsRedeemed = 0,
+                    rewardsReserved = 0,
+                    rewardsReleased = 0,
+                    estimatedAvailableRewards = 1,
+                    activeCustomers = 2,
+                    reservationsScanned = 12,
+                    truncated = false,
+                ),
+                events = emptyList(),
             ),
         )
     }

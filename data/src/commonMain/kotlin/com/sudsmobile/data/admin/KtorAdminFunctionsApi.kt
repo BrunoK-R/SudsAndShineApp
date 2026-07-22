@@ -230,6 +230,30 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getLoyaltyReport(idToken: String): AdminLoyaltyReportResult {
+        return try {
+            val response = httpClient.post(config.getAdminLoyaltyReportUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallableLoyaltyReportResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminLoyaltyReportResult.Failure(error.toAdminError())
+                body.result != null -> AdminLoyaltyReportResult.Success(body.result.toAdminLoyaltyReport())
+                else -> AdminLoyaltyReportResult.Failure(
+                    AdminError.Backend("A resposta do relatório de fidelização veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminLoyaltyReportResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar o relatório de fidelização. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun getNotificationSettingsConfiguration(idToken: String): AdminNotificationSettingsResult {
         return try {
             val response = httpClient.post(config.getAdminNotificationSettingsUrl) {
@@ -1308,6 +1332,12 @@ private data class CallableLoyaltySettingsResponse(
 )
 
 @Serializable
+private data class CallableLoyaltyReportResponse(
+    val result: LoyaltyReportPayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
 private data class CallableNotificationSettingsResponse(
     val result: NotificationSettingsResultPayload? = null,
     val error: CallableError? = null,
@@ -1720,6 +1750,93 @@ private data class LoyaltySettingsResultPayload(
 }
 
 @Serializable
+private data class LoyaltyReportPayload(
+    val source: String = "",
+    val summary: LoyaltyReportSummaryPayload = LoyaltyReportSummaryPayload(),
+    val events: List<LoyaltyReportEventPayload> = emptyList(),
+) {
+    fun toAdminLoyaltyReport(): AdminLoyaltyReport = AdminLoyaltyReport(
+        source = source.trim().ifBlank { "empty" },
+        summary = summary.toAdminLoyaltyReportSummary(),
+        events = events.mapNotNull { it.toAdminLoyaltyReportEventOrNull() },
+    )
+}
+
+@Serializable
+private data class LoyaltyReportSummaryPayload(
+    val stampsRequired: Int = 10,
+    val qualifyingWashes: Int = 0,
+    val rewardsEarned: Int = 0,
+    val rewardsRedeemed: Int = 0,
+    val rewardsReserved: Int = 0,
+    val rewardsReleased: Int = 0,
+    val estimatedAvailableRewards: Int = 0,
+    val activeCustomers: Int = 0,
+    val reservationsScanned: Int = 0,
+    val truncated: Boolean = false,
+    val periodStart: String = "",
+    val periodEnd: String = "",
+) {
+    fun toAdminLoyaltyReportSummary(): AdminLoyaltyReportSummary = AdminLoyaltyReportSummary(
+        stampsRequired = stampsRequired.coerceIn(1, 50),
+        qualifyingWashes = qualifyingWashes.coerceAtLeast(0),
+        rewardsEarned = rewardsEarned.coerceAtLeast(0),
+        rewardsRedeemed = rewardsRedeemed.coerceAtLeast(0),
+        rewardsReserved = rewardsReserved.coerceAtLeast(0),
+        rewardsReleased = rewardsReleased.coerceAtLeast(0),
+        estimatedAvailableRewards = estimatedAvailableRewards.coerceAtLeast(0),
+        activeCustomers = activeCustomers.coerceAtLeast(0),
+        reservationsScanned = reservationsScanned.coerceAtLeast(0),
+        truncated = truncated,
+        periodStartIso = periodStart.trim(),
+        periodEndIso = periodEnd.trim(),
+    )
+}
+
+@Serializable
+private data class LoyaltyReportEventPayload(
+    val id: String = "",
+    val kind: String = "",
+    val occurredAt: String = "",
+    val customerUid: String = "",
+    val customerName: String = "",
+    val customerEmail: String = "",
+    val reservationId: String = "",
+    val reservationCode: String = "",
+    val serviceName: String = "",
+    val rewardCode: String = "",
+    val rewardDescription: String = "",
+    val status: String = "",
+    val stampPosition: Int = 0,
+    val stampsRequired: Int = 0,
+    val rewardNumber: Int = 0,
+) {
+    fun toAdminLoyaltyReportEventOrNull(): AdminLoyaltyReportEvent? {
+        val cleanId = id.trim()
+        val cleanKind = kind.trim()
+        val cleanOccurredAt = occurredAt.trim()
+        if (cleanId.isBlank() || cleanKind.isBlank() || cleanOccurredAt.isBlank()) return null
+        return AdminLoyaltyReportEvent(
+            id = cleanId,
+            kind = cleanKind,
+            occurredAtIso = cleanOccurredAt,
+            customerUid = customerUid.trim(),
+            customerName = customerName.trim().ifBlank { "Cliente" },
+            customerEmail = customerEmail.trim(),
+            reservationId = reservationId.trim(),
+            reservationCode = reservationCode.trim(),
+            serviceName = serviceName.trim().ifBlank { "Lavagem" },
+            rewardCode = rewardCode.trim(),
+            rewardDescription = rewardDescription.trim(),
+            status = status.trim(),
+            stampPosition = stampPosition.coerceAtLeast(0),
+            stampsRequired = stampsRequired.coerceAtLeast(0),
+            rewardNumber = rewardNumber.coerceAtLeast(0),
+        )
+    }
+}
+
+@Serializable
 private data class NotificationSettingsResultPayload(
     val bookingStatusEnabled: Boolean = true,
     val appointmentReminderEnabled: Boolean = true,
@@ -1861,6 +1978,7 @@ private data class NotificationCampaignDraftPayload(
     val sentAtIso: String = "",
     val sentByUid: String = "",
     val queuedCount: Int = 0,
+    val deliverySummary: NotificationCampaignDeliverySummaryPayload = NotificationCampaignDeliverySummaryPayload(),
 ) {
     fun toAdminNotificationCampaignDraftOrNull(): AdminNotificationCampaignDraft? {
         val id = campaignId.trim()
@@ -1911,8 +2029,27 @@ private data class NotificationCampaignDraftPayload(
             sentAtIso = sentAtIso.trim(),
             sentByUid = sentByUid.trim(),
             queuedCount = queuedCount.coerceAtLeast(0),
+            deliverySummary = deliverySummary.toAdminNotificationCampaignDeliverySummary(),
         )
     }
+}
+
+@Serializable
+private data class NotificationCampaignDeliverySummaryPayload(
+    val totalCount: Int = 0,
+    val sentCount: Int = 0,
+    val failedCount: Int = 0,
+    val suppressedCount: Int = 0,
+    val pendingCount: Int = 0,
+) {
+    fun toAdminNotificationCampaignDeliverySummary(): AdminNotificationCampaignDeliverySummary =
+        AdminNotificationCampaignDeliverySummary(
+            totalCount = totalCount.coerceAtLeast(0),
+            sentCount = sentCount.coerceAtLeast(0),
+            failedCount = failedCount.coerceAtLeast(0),
+            suppressedCount = suppressedCount.coerceAtLeast(0),
+            pendingCount = pendingCount.coerceAtLeast(0),
+        )
 }
 
 @Serializable

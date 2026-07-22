@@ -43,6 +43,11 @@ internal data class AdminNotificationCampaignDraftUi(
     val archivedAuditLabel: String,
     val sentAuditLabel: String,
     val queuedCountLabel: String,
+    val deliveryTotalCount: Int,
+    val deliverySentCount: Int,
+    val deliveryFailedCount: Int,
+    val deliverySuppressedCount: Int,
+    val deliveryPendingCount: Int,
 )
 
 internal data class AdminNotificationCampaignDraftForm(
@@ -621,6 +626,11 @@ private fun AdminNotificationCampaignDraft.toUi(): AdminNotificationCampaignDraf
         archivedAuditLabel = campaignAuditLabel("Arquivado", archivedAtIso, archivedByUid),
         sentAuditLabel = campaignAuditLabel("Enviado", sentAtIso, sentByUid),
         queuedCountLabel = if (queuedCount > 0) queuedCount.toString() else "",
+        deliveryTotalCount = deliverySummary.totalCount,
+        deliverySentCount = deliverySummary.sentCount,
+        deliveryFailedCount = deliverySummary.failedCount,
+        deliverySuppressedCount = deliverySummary.suppressedCount,
+        deliveryPendingCount = deliverySummary.pendingCount,
     )
 }
 

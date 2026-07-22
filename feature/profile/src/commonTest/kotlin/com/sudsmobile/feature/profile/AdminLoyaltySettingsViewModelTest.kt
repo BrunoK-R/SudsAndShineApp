@@ -16,6 +16,10 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminLoyaltySettingsConfig
 import com.sudsmobile.data.admin.AdminLoyaltySettingsResult
 import com.sudsmobile.data.admin.AdminLoyaltySettingsUpdateRequest
+import com.sudsmobile.data.admin.AdminLoyaltyReport
+import com.sudsmobile.data.admin.AdminLoyaltyReportEvent
+import com.sudsmobile.data.admin.AdminLoyaltyReportResult
+import com.sudsmobile.data.admin.AdminLoyaltyReportSummary
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.admin.AdminRole
 import com.sudsmobile.data.admin.AdminRoleResult
@@ -111,6 +115,23 @@ class AdminLoyaltySettingsViewModelTest {
 
         val loaded = assertIs<AdminLoyaltySettingsUiState.Loaded>(viewModel.uiState.value)
         assertEquals("Atualizado 2026-06-01 10:15 UTC por admin-lo...", loaded.form.updatedAuditLabel)
+    }
+
+    @Test
+    fun loadConfigurationLoadsLoyaltyReportAlongsideSettings() = runTest {
+        val repository = FakeLoyaltySettingsAdminRepository()
+        val viewModel = AdminLoyaltySettingsViewModel(
+            authRepository = FakeLoyaltySettingsAuthRepository(authenticated = true),
+            adminRepository = repository,
+        )
+
+        viewModel.loadConfiguration()
+        runCurrent()
+
+        val loaded = assertIs<AdminLoyaltyReportUiState.Loaded>(viewModel.reportState.value)
+        assertEquals(12, loaded.report.summary.qualifyingWashes)
+        assertEquals("stamp:reservation-1", loaded.report.events.single().id)
+        assertEquals(1, repository.reportLoadCalls)
     }
 
     @Test
@@ -242,12 +263,15 @@ class AdminLoyaltySettingsViewModelTest {
 
 private class FakeLoyaltySettingsAdminRepository(
     var loadResult: AdminLoyaltySettingsResult = AdminLoyaltySettingsResult.Success(adminLoyaltySettingsConfig()),
+    var reportResult: AdminLoyaltyReportResult = AdminLoyaltyReportResult.Success(adminLoyaltyReport()),
     var updateResult: AdminLoyaltySettingsResult? = null,
     private val loadResultDeferred: CompletableDeferred<AdminLoyaltySettingsResult>? = null,
     private val loadResults: ArrayDeque<AdminLoyaltySettingsResult>? = null,
     private val updateResultDeferred: CompletableDeferred<AdminLoyaltySettingsResult>? = null,
 ) : AdminRepository {
     var loadCalls = 0
+        private set
+    var reportLoadCalls = 0
         private set
     val updateRequests = mutableListOf<AdminLoyaltySettingsUpdateRequest>()
 
@@ -270,6 +294,11 @@ private class FakeLoyaltySettingsAdminRepository(
     override suspend fun getLoyaltySettingsConfiguration(): AdminLoyaltySettingsResult {
         loadCalls += 1
         return loadResultDeferred?.await() ?: loadResults?.removeFirstOrNull() ?: loadResult
+    }
+
+    override suspend fun getLoyaltyReport(): AdminLoyaltyReportResult {
+        reportLoadCalls += 1
+        return reportResult
     }
 
     override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult =
@@ -398,4 +427,39 @@ private fun adminLoyaltySettingsConfig(
     rewardDescription = "1 lavagem grátis",
     updatedAtIso = updatedAtIso,
     updatedByUid = updatedByUid,
+)
+
+private fun adminLoyaltyReport(): AdminLoyaltyReport = AdminLoyaltyReport(
+    source = "reservations",
+    summary = AdminLoyaltyReportSummary(
+        stampsRequired = 10,
+        qualifyingWashes = 12,
+        rewardsEarned = 1,
+        rewardsRedeemed = 0,
+        rewardsReserved = 0,
+        rewardsReleased = 0,
+        estimatedAvailableRewards = 1,
+        activeCustomers = 2,
+        reservationsScanned = 12,
+        truncated = false,
+    ),
+    events = listOf(
+        AdminLoyaltyReportEvent(
+            id = "stamp:reservation-1",
+            kind = "stamp_granted",
+            occurredAtIso = "2026-07-20T12:30:00.000Z",
+            customerUid = "user-1",
+            customerName = "Bruno",
+            customerEmail = "bruno@example.com",
+            reservationId = "reservation-1",
+            reservationCode = "SS-ONE",
+            serviceName = "Lavagem Premium",
+            rewardCode = "",
+            rewardDescription = "",
+            status = "completed",
+            stampPosition = 1,
+            stampsRequired = 10,
+            rewardNumber = 0,
+        ),
+    ),
 )

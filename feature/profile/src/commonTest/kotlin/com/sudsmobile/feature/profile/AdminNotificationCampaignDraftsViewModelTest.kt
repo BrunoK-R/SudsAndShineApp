@@ -13,6 +13,7 @@ import com.sudsmobile.data.admin.AdminCapacityOverrideMutationResult
 import com.sudsmobile.data.admin.AdminCapacityOverrideUpsertRequest
 import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraft
+import com.sudsmobile.data.admin.AdminNotificationCampaignDeliverySummary
 import com.sudsmobile.data.admin.AdminNotificationCampaignDraftArchiveRequest
 import com.sudsmobile.data.admin.AdminNotificationCampaignBroadcastReceipt
 import com.sudsmobile.data.admin.AdminNotificationCampaignBroadcastRequest
@@ -139,6 +140,37 @@ class AdminNotificationCampaignDraftsViewModelTest {
         assertEquals(false, draft.deliveryLocked)
         assertEquals("ready", draft.sendState)
         assertEquals("Pronta para envio", draft.sendStateLabel)
+    }
+
+    @Test
+    fun loadDraftsMapsCampaignDeliveryOutcomes() = runTest {
+        val viewModel = AdminNotificationCampaignDraftsViewModel(
+            authRepository = FakeCampaignDraftsAuthRepository(authenticated = true),
+            adminRepository = FakeCampaignDraftsAdminRepository(
+                loadResult = AdminNotificationCampaignDraftsResult.Success(
+                    campaignDraftsConfig(
+                        deliverySummary = AdminNotificationCampaignDeliverySummary(
+                            totalCount = 12,
+                            sentCount = 8,
+                            failedCount = 1,
+                            suppressedCount = 2,
+                            pendingCount = 1,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        viewModel.loadDrafts()
+        runCurrent()
+
+        val loaded = assertIs<AdminNotificationCampaignDraftsUiState.Loaded>(viewModel.uiState.value)
+        val draft = loaded.drafts.single()
+        assertEquals(12, draft.deliveryTotalCount)
+        assertEquals(8, draft.deliverySentCount)
+        assertEquals(1, draft.deliveryFailedCount)
+        assertEquals(2, draft.deliverySuppressedCount)
+        assertEquals(1, draft.deliveryPendingCount)
     }
 
     @Test
@@ -877,6 +909,7 @@ private fun campaignDraftsConfig(
     sendBlocked: Boolean = false,
     sendBlockedReason: String = "",
     targetAudience: String = "test_users",
+    deliverySummary: AdminNotificationCampaignDeliverySummary = AdminNotificationCampaignDeliverySummary(),
 ): AdminNotificationCampaignDraftsConfig = AdminNotificationCampaignDraftsConfig(
     source = "firestore",
     campaigns = listOf(
@@ -898,6 +931,7 @@ private fun campaignDraftsConfig(
             updatedAtIso = "2026-06-01T11:30:00.000Z",
             createdByUid = "admin-cr",
             updatedByUid = "admin-updated-long-id",
+            deliverySummary = deliverySummary,
         ),
     ),
 )

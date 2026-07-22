@@ -6,6 +6,8 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminLoyaltySettingsConfig
 import com.sudsmobile.data.admin.AdminLoyaltySettingsResult
 import com.sudsmobile.data.admin.AdminLoyaltySettingsUpdateRequest
+import com.sudsmobile.data.admin.AdminLoyaltyReport
+import com.sudsmobile.data.admin.AdminLoyaltyReportResult
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.auth.AuthError
 import com.sudsmobile.data.auth.AuthRepository
@@ -13,6 +15,7 @@ import com.sudsmobile.data.auth.AuthSessionState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 internal data class AdminLoyaltySettingsForm(
@@ -39,6 +42,15 @@ internal sealed interface AdminLoyaltySettingsSaveState {
     data class Error(val message: String, val retryable: Boolean) : AdminLoyaltySettingsSaveState
 }
 
+internal sealed interface AdminLoyaltyReportUiState {
+    data object Idle : AdminLoyaltyReportUiState
+    data object Loading : AdminLoyaltyReportUiState
+    data object Unauthenticated : AdminLoyaltyReportUiState
+    data object NotAdmin : AdminLoyaltyReportUiState
+    data class Loaded(val report: AdminLoyaltyReport) : AdminLoyaltyReportUiState
+    data class Error(val message: String, val retryable: Boolean) : AdminLoyaltyReportUiState
+}
+
 internal class AdminLoyaltySettingsViewModel(
     private val authRepository: AuthRepository,
     private val adminRepository: AdminRepository,
@@ -48,6 +60,8 @@ internal class AdminLoyaltySettingsViewModel(
     val uiState: StateFlow<AdminLoyaltySettingsUiState> = _uiState.asStateFlow()
     private val _saveState = MutableStateFlow<AdminLoyaltySettingsSaveState>(AdminLoyaltySettingsSaveState.Idle)
     val saveState: StateFlow<AdminLoyaltySettingsSaveState> = _saveState.asStateFlow()
+    private val _reportState = MutableStateFlow<AdminLoyaltyReportUiState>(AdminLoyaltyReportUiState.Idle)
+    val reportState: StateFlow<AdminLoyaltyReportUiState> = _reportState.asStateFlow()
     private var loadedUid: String? = null
     private var loadingUid: String? = null
     private var loadSequence: Long = 0
@@ -57,16 +71,22 @@ internal class AdminLoyaltySettingsViewModel(
             AuthSessionState.Restoring -> {
                 clearLoadedConfig()
                 _uiState.value = AdminLoyaltySettingsUiState.Loading
+                _reportState.value = AdminLoyaltyReportUiState.Loading
                 return
             }
             is AuthSessionState.RestoreFailed -> {
                 clearLoadedConfig()
                 _uiState.value = currentSessionState.error.toAdminLoyaltySettingsState()
+                _reportState.value = AdminLoyaltyReportUiState.Error(
+                    message = currentSessionState.error.message,
+                    retryable = currentSessionState.error.isRetryable(),
+                )
                 return
             }
             AuthSessionState.Unauthenticated -> {
                 clearLoadedConfig()
                 _uiState.value = AdminLoyaltySettingsUiState.Unauthenticated
+                _reportState.value = AdminLoyaltyReportUiState.Unauthenticated
                 return
             }
             is AuthSessionState.Authenticated -> currentSessionState
@@ -82,16 +102,22 @@ internal class AdminLoyaltySettingsViewModel(
             AuthSessionState.Restoring -> {
                 clearLoadedConfig()
                 _uiState.value = AdminLoyaltySettingsUiState.Loading
+                _reportState.value = AdminLoyaltyReportUiState.Loading
                 return
             }
             is AuthSessionState.RestoreFailed -> {
                 clearLoadedConfig()
                 _uiState.value = currentSessionState.error.toAdminLoyaltySettingsState()
+                _reportState.value = AdminLoyaltyReportUiState.Error(
+                    message = currentSessionState.error.message,
+                    retryable = currentSessionState.error.isRetryable(),
+                )
                 return
             }
             AuthSessionState.Unauthenticated -> {
                 clearLoadedConfig()
                 _uiState.value = AdminLoyaltySettingsUiState.Unauthenticated
+                _reportState.value = AdminLoyaltyReportUiState.Unauthenticated
                 return
             }
             is AuthSessionState.Authenticated -> currentSessionState
@@ -105,9 +131,16 @@ internal class AdminLoyaltySettingsViewModel(
         viewModelScope.launch {
             try {
                 _uiState.value = AdminLoyaltySettingsUiState.Loading
-                val nextState = when (val result = adminRepository.getLoyaltySettingsConfiguration()) {
+                _reportState.value = AdminLoyaltyReportUiState.Loading
+                val settingsRequest = async { adminRepository.getLoyaltySettingsConfiguration() }
+                val reportRequest = async { adminRepository.getLoyaltyReport() }
+                val nextState = when (val result = settingsRequest.await()) {
                     is AdminLoyaltySettingsResult.Success -> AdminLoyaltySettingsUiState.Loaded(result.config.toForm())
                     is AdminLoyaltySettingsResult.Failure -> result.error.toAdminLoyaltySettingsState()
+                }
+                val nextReportState = when (val result = reportRequest.await()) {
+                    is AdminLoyaltyReportResult.Success -> AdminLoyaltyReportUiState.Loaded(result.report)
+                    is AdminLoyaltyReportResult.Failure -> result.error.toAdminLoyaltyReportState()
                 }
                 if (requestSequence != loadSequence) return@launch
 
@@ -115,6 +148,7 @@ internal class AdminLoyaltySettingsViewModel(
                 if (currentUid == requestedUid) {
                     loadedUid = requestedUid
                     _uiState.value = nextState
+                    _reportState.value = nextReportState
                 } else {
                     handleSessionChangedDuringRequest()
                 }
@@ -140,6 +174,7 @@ internal class AdminLoyaltySettingsViewModel(
         if (requestedUid == null) {
             clearLoadedConfig()
             _uiState.value = AdminLoyaltySettingsUiState.Unauthenticated
+            _reportState.value = AdminLoyaltyReportUiState.Unauthenticated
             return
         }
 
@@ -178,9 +213,11 @@ internal class AdminLoyaltySettingsViewModel(
                     _saveState.value = result.error.toAdminLoyaltySettingsSaveState()
                     if (result.error is AdminError.Permission) {
                         _uiState.value = AdminLoyaltySettingsUiState.NotAdmin
+                        _reportState.value = AdminLoyaltyReportUiState.NotAdmin
                     } else if (result.error is AdminError.Unauthenticated) {
                         clearLoadedConfig()
                         _uiState.value = AdminLoyaltySettingsUiState.Unauthenticated
+                        _reportState.value = AdminLoyaltyReportUiState.Unauthenticated
                     }
                 }
             }
@@ -287,6 +324,18 @@ private fun AdminError.toAdminLoyaltySettingsState(): AdminLoyaltySettingsUiStat
         is AdminError.NotFound -> AdminLoyaltySettingsUiState.Error(message = message, retryable = true)
         is AdminError.Unavailable -> AdminLoyaltySettingsUiState.Error(message = message, retryable = true)
         is AdminError.Backend -> AdminLoyaltySettingsUiState.Error(message = message, retryable = true)
+    }
+}
+
+private fun AdminError.toAdminLoyaltyReportState(): AdminLoyaltyReportUiState {
+    return when (this) {
+        is AdminError.Permission -> AdminLoyaltyReportUiState.NotAdmin
+        is AdminError.Unauthenticated -> AdminLoyaltyReportUiState.Unauthenticated
+        is AdminError.Validation,
+        is AdminError.Conflict -> AdminLoyaltyReportUiState.Error(message = message, retryable = false)
+        is AdminError.NotFound,
+        is AdminError.Unavailable,
+        is AdminError.Backend -> AdminLoyaltyReportUiState.Error(message = message, retryable = true)
     }
 }
 

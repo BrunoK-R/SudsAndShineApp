@@ -80,6 +80,13 @@ class FirebaseAdminRepository(
         return api.getLoyaltySettingsConfiguration(idToken)
     }
 
+    override suspend fun getLoyaltyReport(): AdminLoyaltyReportResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminLoyaltyReportResult.Failure(unauthenticatedError())
+
+        return api.getLoyaltyReport(idToken)
+    }
+
     override suspend fun getNotificationSettingsConfiguration(): AdminNotificationSettingsResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminNotificationSettingsResult.Failure(unauthenticatedError())
