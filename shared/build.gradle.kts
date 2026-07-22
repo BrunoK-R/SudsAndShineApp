@@ -24,6 +24,7 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "shared"
             isStatic = true
+            binaryOption("bundleId", "org.sudsmobile.app.shared")
         }
     }
 

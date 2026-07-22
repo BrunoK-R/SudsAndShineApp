@@ -23,6 +23,7 @@ kotlin {
         it.binaries.framework {
             baseName = "data"
             isStatic = true
+            binaryOption("bundleId", "org.sudsmobile.app.data")
         }
     }
 
