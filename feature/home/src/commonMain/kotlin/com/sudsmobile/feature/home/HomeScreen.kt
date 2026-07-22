@@ -484,7 +484,7 @@ private fun HomeLoyaltyCard(
         HomeUiState.Idle,
         HomeUiState.Loading -> LoyaltyCard(
             title = "Programa de Fidelização",
-            progressLabel = "A calcular lavagens",
+            progressLabel = "A calcular selos",
             remainingLabel = "",
             progress = 0f,
             body = "O progresso será atualizado assim que a sessão estiver pronta.",
@@ -493,10 +493,10 @@ private fun HomeLoyaltyCard(
 
         is HomeUiState.Unauthenticated -> LoyaltyCard(
             title = "Programa de Fidelização",
-            progressLabel = "Entre para acumular lavagens",
+            progressLabel = "Entre para acumular selos",
             remainingLabel = "Conta necessária",
             progress = 0f,
-            body = "As lavagens concluídas contam automaticamente para a próxima oferta.",
+            body = "Lavagens pagas e bónus de indicação contam para a próxima oferta.",
             onClick = onRequestSignIn,
         )
 
@@ -528,7 +528,7 @@ private fun LoyaltyCard(
 ) {
     LoyaltyCard(
         title = "Programa de Fidelização",
-        progressLabel = "${loyalty.completedWashes} de ${loyalty.targetWashes} lavagens",
+        progressLabel = "${loyalty.completedWashes} de ${loyalty.targetWashes} selos",
         remainingLabel = if (loyalty.rewardReady) {
             "Oferta pronta"
         } else {
@@ -538,7 +538,7 @@ private fun LoyaltyCard(
         body = if (loyalty.rewardReady) {
             "Tem uma lavagem grátis disponível para a próxima visita."
         } else {
-            "Mais ${loyalty.remainingWashes} lavagens para ganhar 1 lavagem grátis!"
+            "Mais ${loyalty.remainingWashes} selos para ganhar 1 lavagem grátis!"
         },
         onClick = onOpenRewards,
     )

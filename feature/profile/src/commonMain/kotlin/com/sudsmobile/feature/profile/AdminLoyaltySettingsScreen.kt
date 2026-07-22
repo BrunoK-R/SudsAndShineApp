@@ -399,8 +399,20 @@ private fun AdminLoyaltyReportCard(report: AdminLoyaltyReport) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     AdminLoyaltyMetric(
+                        value = summary.totalStamps.toString(),
+                        label = "Selos no total",
+                        modifier = Modifier.weight(1f),
+                    )
+                    AdminLoyaltyMetric(
+                        value = summary.bonusStamps.toString(),
+                        label = "Selos de indicação",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AdminLoyaltyMetric(
                         value = summary.qualifyingWashes.toString(),
-                        label = "Selos atribuídos",
+                        label = "Lavagens elegíveis",
                         modifier = Modifier.weight(1f),
                     )
                     AdminLoyaltyMetric(
@@ -473,7 +485,7 @@ private fun AdminLoyaltyReportCard(report: AdminLoyaltyReport) {
                         modifier = Modifier.size(17.dp),
                     )
                     Text(
-                        text = "O cálculo usa as ${summary.reservationsScanned} marcações mais recentes.",
+                        text = summary.loyaltyReportTruncationLabel(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -558,11 +570,18 @@ private fun com.sudsmobile.data.admin.AdminLoyaltyReportSummary.loyaltyReportSco
         .filter { it.isNotBlank() }
         .distinct()
         .joinToString(" – ")
-    val scan = "$reservationsScanned marcações analisadas"
+    val adjustments = adjustmentsScanned.takeIf { it > 0 }?.let { " · $it ajustes" }.orEmpty()
+    val scan = "$reservationsScanned marcações analisadas$adjustments"
     return if (period.isBlank()) scan else "$scan · $period"
 }
 
+private fun com.sudsmobile.data.admin.AdminLoyaltyReportSummary.loyaltyReportTruncationLabel(): String {
+    val adjustments = adjustmentsScanned.takeIf { it > 0 }?.let { " e $it ajustes" }.orEmpty()
+    return "O cálculo usa as $reservationsScanned marcações mais recentes$adjustments."
+}
+
 private fun AdminLoyaltyReportEvent.loyaltyEventTitle(): String = when (kind) {
+    "stamp_adjustment" -> "Selo de indicação"
     "reward_earned" -> "Recompensa conquistada"
     "reward_redeemed" -> "Recompensa utilizada"
     "reward_reserved" -> "Recompensa reservada"
@@ -573,7 +592,7 @@ private fun AdminLoyaltyReportEvent.loyaltyEventTitle(): String = when (kind) {
 private fun AdminLoyaltyReportEvent.loyaltyEventDetail(): String {
     val customer = customerName.ifBlank { customerEmail.ifBlank { "Cliente" } }
     val booking = reservationCode.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
-    val progress = if (kind == "stamp_granted" && stampPosition > 0 && stampsRequired > 0) {
+    val progress = if (kind in setOf("stamp_granted", "stamp_adjustment") && stampPosition > 0 && stampsRequired > 0) {
         " · selo $stampPosition/$stampsRequired"
     } else {
         ""

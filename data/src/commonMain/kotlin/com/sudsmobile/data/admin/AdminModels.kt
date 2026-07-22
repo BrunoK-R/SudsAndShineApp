@@ -252,6 +252,9 @@ data class AdminLoyaltyReportSummary(
     val truncated: Boolean,
     val periodStartIso: String = "",
     val periodEndIso: String = "",
+    val bonusStamps: Int = 0,
+    val totalStamps: Int = qualifyingWashes + bonusStamps,
+    val adjustmentsScanned: Int = 0,
 )
 
 data class AdminLoyaltyReportEvent(

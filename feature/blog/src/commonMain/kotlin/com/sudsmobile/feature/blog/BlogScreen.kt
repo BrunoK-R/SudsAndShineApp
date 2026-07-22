@@ -25,8 +25,10 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,12 +51,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.viewmodel.koinViewModel
 
+@Suppress("DEPRECATION")
 @Composable
 fun BlogScreen(
     contentPadding: PaddingValues,
@@ -64,9 +70,15 @@ fun BlogScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
+    val referralViewModel: ReferralViewModel = koinViewModel()
+    val referralUiState by referralViewModel.uiState.collectAsStateWithLifecycle()
+    val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(sessionState, bookingRevision) {
         viewModel.refreshForSession()
+    }
+    LaunchedEffect(sessionState) {
+        referralViewModel.refreshForSession()
     }
 
     Column(
@@ -87,8 +99,16 @@ fun BlogScreen(
         ) {
             LoyaltyContent(
                 uiState = uiState,
+                referralUiState = referralUiState,
                 onRetry = viewModel::loadRewards,
                 onRedeemReward = viewModel::redeemReward,
+                onRetryReferral = { referralViewModel.refreshForSession(force = true) },
+                onReferralCodeChange = referralViewModel::updateClaimCode,
+                onClaimReferral = referralViewModel::claimReferralCode,
+                onCopyReferral = { shareMessage ->
+                    clipboardManager.setText(AnnotatedString(shareMessage))
+                    referralViewModel.markShareCopied()
+                },
                 onRequestSignIn = onRequestSignIn,
                 onBookWash = onBookWash,
             )
@@ -132,8 +152,13 @@ private fun LoyaltyHeader() {
 @Composable
 private fun LoyaltyContent(
     uiState: LoyaltyUiState,
+    referralUiState: ReferralUiState,
     onRetry: () -> Unit,
     onRedeemReward: () -> Unit,
+    onRetryReferral: () -> Unit,
+    onReferralCodeChange: (String) -> Unit,
+    onClaimReferral: () -> Unit,
+    onCopyReferral: (String) -> Unit,
     onRequestSignIn: () -> Unit,
     onBookWash: () -> Unit,
 ) {
@@ -177,8 +202,15 @@ private fun LoyaltyContent(
                 onRedeemReward = onRedeemReward,
             )
             IssuedRewardCodesCard(rewardCodes = uiState.rewardCodes)
+            ReferralCard(
+                uiState = referralUiState,
+                onRetry = onRetryReferral,
+                onCodeChange = onReferralCodeChange,
+                onClaim = onClaimReferral,
+                onCopy = onCopyReferral,
+            )
             StampGridCard(progress = uiState.progress)
-            HowItWorksCard()
+            HowItWorksCard(stampsRequired = uiState.progress.targetWashes)
             StampHistoryCard(history = emptyList())
             BookWashButton(onClick = onBookWash)
         }
@@ -193,8 +225,15 @@ private fun LoyaltyContent(
                 onRedeemReward = onRedeemReward,
             )
             IssuedRewardCodesCard(rewardCodes = uiState.rewardCodes)
+            ReferralCard(
+                uiState = referralUiState,
+                onRetry = onRetryReferral,
+                onCodeChange = onReferralCodeChange,
+                onClaim = onClaimReferral,
+                onCopy = onCopyReferral,
+            )
             StampGridCard(progress = uiState.progress)
-            HowItWorksCard()
+            HowItWorksCard(stampsRequired = uiState.progress.targetWashes)
             StampHistoryCard(history = uiState.history)
             BookWashButton(onClick = onBookWash)
         }
@@ -429,6 +468,245 @@ private fun RewardCodeRow(rewardCode: LoyaltyRewardCodeUi) {
             )
         }
     }
+}
+
+@Composable
+private fun ReferralCard(
+    uiState: ReferralUiState,
+    onRetry: () -> Unit,
+    onCodeChange: (String) -> Unit,
+    onClaim: () -> Unit,
+    onCopy: (String) -> Unit,
+) {
+    when (uiState) {
+        ReferralUiState.Idle,
+        ReferralUiState.Loading -> LoyaltyStatusCard(
+            title = "A preparar o seu convite",
+            body = "Estamos a criar um código pessoal e seguro.",
+            loading = true,
+            icon = Icons.Filled.PersonAdd,
+        )
+        ReferralUiState.Unauthenticated -> Unit
+        is ReferralUiState.Error -> LoyaltyStatusCard(
+            title = "Indicações indisponíveis",
+            body = uiState.message,
+            icon = Icons.Filled.PersonAdd,
+            actionLabel = if (uiState.retryable) "Tentar novamente" else null,
+            onAction = if (uiState.retryable) onRetry else null,
+        )
+        is ReferralUiState.Loaded -> ReferralLoadedCard(
+            state = uiState,
+            onRetry = onRetry,
+            onCodeChange = onCodeChange,
+            onClaim = onClaim,
+            onCopy = onCopy,
+        )
+    }
+}
+
+@Composable
+private fun ReferralLoadedCard(
+    state: ReferralUiState.Loaded,
+    onRetry: () -> Unit,
+    onCodeChange: (String) -> Unit,
+    onClaim: () -> Unit,
+    onCopy: (String) -> Unit,
+) {
+    val program = state.program
+    val submitting = state.actionState is ReferralActionUiState.Submitting
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            SectionTitle(
+                icon = Icons.Filled.PersonAdd,
+                title = "Convide um amigo",
+            )
+            Text(
+                text = "Partilhe o seu código. Depois da primeira lavagem paga do seu amigo, cada um recebe ${program.rewardPoints.toStampLabel()} extra.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f),
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "O seu código",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.72f),
+                        )
+                        Text(
+                            text = program.code,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.CardGiftcard,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+
+            Button(
+                onClick = { onCopy(program.shareMessage) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                ),
+            ) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Copiar convite", fontWeight = FontWeight.Bold)
+            }
+
+            if (program.claimedCount > 0) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    ReferralStat(value = program.qualifiedCount, label = "Concluídas")
+                    ReferralStat(value = program.pendingCount, label = "Pendentes")
+                    ReferralStat(value = program.bonusPointsEarned, label = "Selos ganhos")
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (program.referredByStatus == null && program.canClaimCode) {
+                Text(
+                    text = "Recebeu um código? Associe-o nos primeiros ${program.attributionDays} dias e antes da primeira lavagem paga.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = state.claimCode,
+                    onValueChange = onCodeChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !submitting,
+                    singleLine = true,
+                    label = { Text("Código de indicação") },
+                    placeholder = { Text("SUDS-XXXXXXXXXX") },
+                )
+                OutlinedButton(
+                    onClick = onClaim,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !submitting && state.claimCode.isNotBlank(),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    if (submitting) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Associar código", fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else if (program.referredByStatus != null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = program.referredByStatus,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "Código ${program.referredByCode.orEmpty()}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Text(
+                        text = program.claimIneligibleMessage
+                            ?: "Este código já não pode ser associado a esta conta.",
+                        modifier = Modifier.padding(14.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            when (val action = state.actionState) {
+                ReferralActionUiState.Idle,
+                ReferralActionUiState.Submitting -> Unit
+                ReferralActionUiState.Copied -> ReferralFeedback(
+                    message = "Convite copiado. Já pode colá-lo numa mensagem.",
+                    error = false,
+                )
+                is ReferralActionUiState.Success -> ReferralFeedback(message = action.message, error = false)
+                is ReferralActionUiState.Error -> ReferralFeedback(message = action.message, error = true)
+            }
+
+            OutlinedButton(
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !submitting,
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Atualizar estado")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReferralStat(value: Int, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.tertiary,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ReferralFeedback(message: String, error: Boolean) {
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+    )
 }
 
 @Composable
@@ -699,7 +977,7 @@ private fun StampCell(
 }
 
 @Composable
-private fun HowItWorksCard() {
+private fun HowItWorksCard(stampsRequired: Int = 10) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -716,13 +994,13 @@ private fun HowItWorksCard() {
             )
             HowItWorksStep(
                 number = "1",
-                title = "Faça Lavagens",
-                description = "Cada lavagem conta como 1 selo",
+                title = "Ganhe selos",
+                description = "Cada lavagem paga conta como 1 selo; indicações qualificadas também dão selos",
             )
             HowItWorksStep(
                 number = "2",
                 title = "Acumule Selos",
-                description = "Junte 10 selos no total",
+                description = "Junte $stampsRequired selos no total",
             )
             HowItWorksStep(
                 number = "3",
@@ -793,7 +1071,7 @@ private fun StampHistoryCard(history: List<LoyaltyHistoryItemUi>) {
             )
             if (history.isEmpty()) {
                 Text(
-                    text = "Ainda não tem lavagens concluídas a contar para recompensas.",
+                    text = "Ainda não tem selos no histórico de recompensas.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -937,7 +1215,7 @@ private fun LoyaltyProgressUi.progressMessage(): String {
     return if (rewardReady) {
         "Tem uma recompensa pronta para usar na próxima lavagem."
     } else {
-        "Mais $remainingWashes lavagens para ganhar 1 lavagem grátis."
+        "Mais $remainingWashes selos para ganhar 1 lavagem grátis."
     }
 }
 
@@ -948,3 +1226,5 @@ private fun Int.toRewardLabel(): String {
         "$this recompensas"
     }
 }
+
+private fun Int.toStampLabel(): String = if (this == 1) "1 selo" else "$this selos"

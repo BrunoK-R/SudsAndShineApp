@@ -38,6 +38,10 @@ import com.sudsmobile.data.profile.UserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfilePhotoRepository
 import com.sudsmobile.data.profile.UserProfileRepository
 import com.sudsmobile.data.profile.ProfilePhotoFunctionsApi
+import com.sudsmobile.data.referral.FirebaseReferralRepository
+import com.sudsmobile.data.referral.KtorReferralFunctionsApi
+import com.sudsmobile.data.referral.ReferralFunctionsApi
+import com.sudsmobile.data.referral.ReferralRepository
 import com.sudsmobile.data.vehicle.FirebaseUserVehicleRepository
 import com.sudsmobile.data.vehicle.KtorVehicleFunctionsApi
 import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
@@ -69,6 +73,8 @@ val dataModule = module {
     single { MutableBookingChangeNotifier() }
     single<BookingChangeNotifier> { get<MutableBookingChangeNotifier>() }
     single<BookingRepository> { FirebaseBookingRepository(get(), get(), get()) }
+    single<ReferralFunctionsApi> { KtorReferralFunctionsApi(get(), get()) }
+    single<ReferralRepository> { FirebaseReferralRepository(get(), get()) }
     single<AdminFunctionsApi> { KtorAdminFunctionsApi(get(), get()) }
     single<AdminRepository> { FirebaseAdminRepository(get(), get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }

@@ -133,7 +133,7 @@ Run these checks from store-distributed builds against production. Save account,
 
 These are useful retention/revenue features, but they should not block the first pilot unless the business makes them contractual launch requirements.
 
-- [ ] **Referrals:** introduce a referral code/link, attribution window, qualification event, abuse controls, transparent status, and ledger-backed reward for both parties.
+- [x] **Referrals:** personal invite codes, a 30-day attribution window, first-paid-wash qualification, self/replacement controls, privacy-safe status, and ledger-backed stamps for both parties are implemented.
 - [ ] **Prepaid packages:** define included services, validity, transfer/refund rules, purchase/payment source, remaining uses, atomic redemption, and admin correction/audit.
 - [ ] **Memberships:** define tier/price/cadence, entitlements, renewal/failure/cancellation states, payment-provider webhooks, customer self-service, and revenue/support reporting.
 

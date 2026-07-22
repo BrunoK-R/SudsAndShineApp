@@ -522,10 +522,12 @@ class KtorAdminFunctionsApiTest {
                 """
                 {
                   "result": {
-                    "source": "reservations",
+                    "source": "loyalty_ledger",
                     "summary": {
                       "stampsRequired": 10,
                       "qualifyingWashes": 21,
+                      "bonusStamps": 2,
+                      "totalStamps": 23,
                       "rewardsEarned": 2,
                       "rewardsRedeemed": 1,
                       "rewardsReserved": 1,
@@ -533,6 +535,7 @@ class KtorAdminFunctionsApiTest {
                       "estimatedAvailableRewards": 1,
                       "activeCustomers": 4,
                       "reservationsScanned": 28,
+                      "adjustmentsScanned": 2,
                       "truncated": false,
                       "periodStart": "2026-01-02T10:00:00.000Z",
                       "periodEnd": "2026-07-20T12:30:00.000Z"
@@ -572,6 +575,9 @@ class KtorAdminFunctionsApiTest {
         assertEquals("/test-project/europe-west1/getAdminLoyaltyReport", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
         assertEquals(21, success.report.summary.qualifyingWashes)
+        assertEquals(2, success.report.summary.bonusStamps)
+        assertEquals(23, success.report.summary.totalStamps)
+        assertEquals(2, success.report.summary.adjustmentsScanned)
         assertEquals(2, success.report.summary.rewardsEarned)
         assertEquals("2026-01-02T10:00:00.000Z", success.report.summary.periodStartIso)
         val event = success.report.events.single()

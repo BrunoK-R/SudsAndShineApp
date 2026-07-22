@@ -70,6 +70,12 @@ data class FirebaseFunctionsConfig(
     val redeemMyLoyaltyRewardUrl: String
         get() = functionUrl("redeemMyLoyaltyReward")
 
+    val getMyReferralUrl: String
+        get() = functionUrl("getMyReferral")
+
+    val claimMyReferralCodeUrl: String
+        get() = functionUrl("claimMyReferralCode")
+
     val syncMyRoleUrl: String
         get() = functionUrl("syncMyRole")
 
