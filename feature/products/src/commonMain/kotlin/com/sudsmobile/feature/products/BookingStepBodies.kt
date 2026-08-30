@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -114,13 +113,13 @@ internal fun BookingVehicleStepContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .offset(y = (-16).dp),
+            .padding(top = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
             text = "Selecione um veículo guardado ou apenas a categoria para calcular o preço correto",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         when (vehiclesState) {
@@ -231,7 +230,7 @@ internal fun DateTimeStepContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .offset(y = (-16).dp),
+            .padding(top = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         when (availabilityState) {
@@ -323,7 +322,7 @@ internal fun BookingContactContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .offset(y = (-16).dp),
+            .padding(top = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         BookingContactProfileCard(

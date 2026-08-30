@@ -1,35 +1,44 @@
 package com.sudsmobile.feature.products
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsSpacing
+import com.sudsmobile.shared.ui.SudsProgressSegments
 
 @Composable
 internal fun BookingServiceHeader(onBack: () -> Unit) {
     BookingStepHeader(
-        title = "Escolha o Serviço",
-        subtitle = "Passo 1 de 4",
+        title = "Escolha o serviço",
+        eyebrow = "PASSO 1 DE 4",
+        progressIndex = bookingProgressIndex(BookingStep.Service),
         onBack = onBack,
     )
 }
@@ -37,8 +46,9 @@ internal fun BookingServiceHeader(onBack: () -> Unit) {
 @Composable
 internal fun BookingVehicleHeader(onBack: () -> Unit) {
     BookingStepHeader(
-        title = "Tipo de Veículo",
-        subtitle = "Passo 2 de 4",
+        title = "Tipo de veículo",
+        eyebrow = "PASSO 2 DE 4",
+        progressIndex = bookingProgressIndex(BookingStep.Vehicle),
         onBack = onBack,
     )
 }
@@ -46,8 +56,9 @@ internal fun BookingVehicleHeader(onBack: () -> Unit) {
 @Composable
 internal fun BookingDateTimeHeader(onBack: () -> Unit) {
     BookingStepHeader(
-        title = "Data e Hora",
-        subtitle = "Passo 3 de 4",
+        title = "Data e hora",
+        eyebrow = "PASSO 3 DE 4",
+        progressIndex = bookingProgressIndex(BookingStep.DateTime),
         onBack = onBack,
     )
 }
@@ -55,8 +66,9 @@ internal fun BookingDateTimeHeader(onBack: () -> Unit) {
 @Composable
 internal fun BookingContactHeader(onBack: () -> Unit) {
     BookingStepHeader(
-        title = "Dados de Contacto",
-        subtitle = "Passo 4 de 4",
+        title = "Dados de contacto",
+        eyebrow = "PASSO 4 DE 4",
+        progressIndex = bookingProgressIndex(BookingStep.Contact),
         onBack = onBack,
     )
 }
@@ -64,8 +76,9 @@ internal fun BookingContactHeader(onBack: () -> Unit) {
 @Composable
 internal fun BookingConfirmationHeader(onBack: () -> Unit) {
     BookingStepHeader(
-        title = "Confirmar pedido",
-        subtitle = "Reveja os detalhes antes de enviar",
+        title = "Rever pedido",
+        eyebrow = "CONFIRMAÇÃO",
+        progressIndex = null,
         onBack = onBack,
     )
 }
@@ -73,55 +86,77 @@ internal fun BookingConfirmationHeader(onBack: () -> Unit) {
 @Composable
 private fun BookingStepHeader(
     title: String,
-    subtitle: String,
+    eyebrow: String,
+    progressIndex: Int?,
     onBack: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        OutlinedButton(
-            onClick = onBack,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
+            .statusBarsPadding()
+            .heightIn(min = if (progressIndex == null) 88.dp else 132.dp)
+            .padding(
+                horizontal = SudsSpacing.contentGutter,
+                vertical = SudsSpacing.sm,
             ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(8.dp))
-            Text("Voltar", style = MaterialTheme.typography.labelLarge)
+            Surface(
+                modifier = Modifier
+                    .size(SudsSpacing.minimumTouchTarget)
+                    .clickable(role = Role.Button, onClick = onBack)
+                    .semantics { contentDescription = "Voltar" },
+                shape = CircleShape,
+                color = SudsColors.glassStrong,
+                border = BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder),
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(SudsSpacing.xl),
+                        tint = SudsColors.onBrand,
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
+            ) {
+                Text(
+                    text = eyebrow,
+                    color = SudsColors.cyanMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = title,
+                    color = SudsColors.onBrand,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (progressIndex != null) {
+                Text(
+                    text = "${progressIndex + 1}/4",
+                    color = SudsColors.champagne,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
 
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
+        if (progressIndex != null) {
+            Spacer(Modifier.height(SudsSpacing.md))
+            SudsProgressSegments(
+                currentStepIndex = progressIndex,
+                totalSteps = 4,
+            )
+        }
     }
 }

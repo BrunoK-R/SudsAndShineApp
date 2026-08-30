@@ -1,7 +1,7 @@
 package com.sudsmobile.feature.products
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -76,6 +75,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -101,16 +103,9 @@ import com.sudsmobile.data.booking.BookingWaitlistEntry
 import com.sudsmobile.data.booking.BookingWaitlistJoinRequest
 import com.sudsmobile.data.booking.toBookingPaymentStatus
 import com.sudsmobile.data.booking.toBookingReservationStatus
+import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
+import com.sudsmobile.shared.ui.SudsBrandBackground
 import org.koin.compose.viewmodel.koinViewModel
-
-private enum class BookingStep {
-    Service,
-    Vehicle,
-    DateTime,
-    Contact,
-    Confirmation,
-    Success,
-}
 
 internal val bookingVehicleCategories = listOf(
     BookingVehicleUi(
@@ -302,6 +297,18 @@ private fun ProductsScreenContent(
     val savedVehicles = (vehiclesState as? BookingVehiclesUiState.Loaded)?.vehicles.orEmpty()
     val vehicleOptions = savedVehicles + bookingVehicleCategories
     val selectedVehicle = vehicleOptions.firstOrNull { it.id == selectedVehicleId }
+    val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
+    val hapticFeedback = LocalHapticFeedback.current
+    val stepDistancePx = with(LocalDensity.current) { 24.dp.roundToPx() }
+    val selectionPriceLabel = selectedService?.let { service ->
+        bookingSelectionPriceLabel(
+            passengerPriceLabel = service.passengerPrice,
+            passengerPriceCents = service.passengerPriceCents,
+            suvPriceCents = service.suvPriceCents,
+            vehicleType = selectedVehicle?.type,
+            extrasPriceCents = selectedExtras.sumOf { extra -> extra.priceCents },
+        )
+    }
     val availabilityMonth = when (availabilityState) {
         is BookingAvailabilityUiState.Empty -> availabilityState.month
         is BookingAvailabilityUiState.Loaded -> availabilityState.month
@@ -549,336 +556,360 @@ private fun ProductsScreenContent(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + 104.dp),
-        ) {
-            when (currentStep) {
-                BookingStep.Service -> {
-                    BookingServiceHeader(onBack = onBack)
+    BookingTheme {
+        SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = contentPadding.calculateBottomPadding() + 176.dp),
+                ) {
+                    AnimatedContent(
+                        targetState = currentStep,
+                        transitionSpec = {
+                            bookingStepTransition(
+                                from = initialState,
+                                to = targetState,
+                                reduceMotion = reduceMotion,
+                                distancePx = stepDistancePx,
+                            )
+                        },
+                        contentKey = { step -> step.name },
+                        label = "booking step content",
+                    ) { animatedStep ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            when (animatedStep) {
+                                BookingStep.Service -> {
+                                    BookingServiceHeader(onBack = onBack)
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .padding(top = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        BookingServiceStepContent(
-                            catalogState = catalogState,
-                            presetsState = presetsState,
-                            presetMutationState = presetMutationState,
-                            selectedServiceId = selectedServiceId,
-                            selectedExtraIds = selectedExtraIds,
-                            unavailableInitialServiceId = unavailableInitialServiceId,
-                            onRetryCatalog = onLoadCatalog,
-                            onRetryPresets = onLoadPresets,
-                            onPresetSelected = ::applySelectionPreset,
-                            onDeletePreset = onDeletePreset,
-                            onDismissPresetMutation = onDismissPresetMutation,
-                            onServiceSelected = { service ->
-                                if (selectedServiceId != service.id) {
-                                    selectedDateId = null
-                                    selectedTime = null
-                                    availabilityAnchorDate = null
-                                    minimumAvailabilityMonthAnchor = null
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp)
+                                            .padding(top = 24.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        BookingServiceStepContent(
+                                            catalogState = catalogState,
+                                            presetsState = presetsState,
+                                            presetMutationState = presetMutationState,
+                                            selectedServiceId = selectedServiceId,
+                                            selectedExtraIds = selectedExtraIds,
+                                            unavailableInitialServiceId = unavailableInitialServiceId,
+                                            onRetryCatalog = onLoadCatalog,
+                                            onRetryPresets = onLoadPresets,
+                                            onPresetSelected = ::applySelectionPreset,
+                                            onDeletePreset = onDeletePreset,
+                                            onDismissPresetMutation = onDismissPresetMutation,
+                                            onServiceSelected = { service ->
+                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                if (selectedServiceId != service.id) {
+                                                    selectedDateId = null
+                                                    selectedTime = null
+                                                    availabilityAnchorDate = null
+                                                    minimumAvailabilityMonthAnchor = null
+                                                }
+                                                unavailableInitialServiceId = null
+                                                selectedServiceId = service.id
+                                                onClearSubmitError()
+                                            },
+                                            onExtraToggled = { extra ->
+                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                selectedExtraIds = if (extra.id in selectedExtraIds) {
+                                                    selectedExtraIds - extra.id
+                                                } else {
+                                                    selectedExtraIds + extra.id
+                                                }
+                                                onClearSubmitError()
+                                            },
+                                        )
+                                    }
                                 }
-                                unavailableInitialServiceId = null
-                                selectedServiceId = service.id
-                                onClearSubmitError()
-                            },
-                            onExtraToggled = { extra ->
-                                selectedExtraIds = if (extra.id in selectedExtraIds) {
-                                    selectedExtraIds - extra.id
-                                } else {
-                                    selectedExtraIds + extra.id
+
+                                BookingStep.Vehicle -> {
+                                    BookingVehicleHeader(
+                                        onBack = { currentStepName = BookingStep.Service.name },
+                                    )
+
+                                    BookingVehicleStepContent(
+                                        vehiclesState = vehiclesState,
+                                        selectedVehicleId = selectedVehicleId,
+                                        onRetryVehicles = onLoadVehicles,
+                                        onRequestSignIn = onRequestSignIn,
+                                        onManageVehicles = onManageVehicles,
+                                        onVehicleSelected = { vehicle ->
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedVehicleId = vehicle.id
+                                            onClearSubmitError()
+                                        },
+                                    )
                                 }
-                                onClearSubmitError()
-                            },
-                        )
+
+                                BookingStep.DateTime -> {
+                                    BookingDateTimeHeader(
+                                        onBack = { currentStepName = BookingStep.Vehicle.name },
+                                    )
+
+                                    DateTimeStepContent(
+                                        availabilityState = availabilityState,
+                                        waitlistState = waitlistState,
+                                        serviceId = selectedService?.id.orEmpty(),
+                                        serviceName = selectedService?.name.orEmpty(),
+                                        serviceDurationMinutes = selectedService?.durationMinutes ?: 0,
+                                        selectedDateId = selectedDateId,
+                                        selectedTime = selectedTime,
+                                        onDateSelected = { dateId ->
+                                            selectedDateId = dateId
+                                            selectedTime = null
+                                            onClearSubmitError()
+                                        },
+                                        onTimeSelected = {
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedTime = it
+                                            onClearSubmitError()
+                                        },
+                                        onRetryAvailability = {
+                                            selectedService?.let {
+                                                onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                            }
+                                        },
+                                        onJoinWaitlist = { dateId ->
+                                            selectedService?.let { service ->
+                                                onJoinWaitlist(
+                                                    BookingWaitlistJoinRequest(
+                                                        dateId = dateId,
+                                                        serviceId = service.id,
+                                                        serviceName = service.name,
+                                                        serviceDurationMinutes = service.durationMinutes,
+                                                    ),
+                                                )
+                                            }
+                                        },
+                                        onCancelWaitlist = onCancelWaitlist,
+                                        onRequestSignIn = onRequestSignIn,
+                                        minimumMonthAnchor = minimumAvailabilityMonthAnchor,
+                                        onPreviousMonth = {
+                                            val currentAnchor = availabilityMonth?.monthAnchorDate()
+                                            val previousAnchor = shiftMonthAnchorDate(currentAnchor, monthOffset = -1)
+                                            val minimumAnchor = minimumAvailabilityMonthAnchor
+                                            if (
+                                                previousAnchor != null &&
+                                                minimumAnchor != null &&
+                                                previousAnchor >= minimumAnchor
+                                            ) {
+                                                selectedDateId = null
+                                                selectedTime = null
+                                                availabilityAnchorDate = if (previousAnchor == minimumAnchor) {
+                                                    null
+                                                } else {
+                                                    previousAnchor
+                                                }
+                                                onClearSubmitError()
+                                            }
+                                        },
+                                        onNextMonth = {
+                                            val nextAnchor = shiftMonthAnchorDate(
+                                                availabilityMonth?.monthAnchorDate(),
+                                                monthOffset = 1,
+                                            )
+                                            if (nextAnchor != null) {
+                                                selectedDateId = null
+                                                selectedTime = null
+                                                availabilityAnchorDate = nextAnchor
+                                                onClearSubmitError()
+                                            }
+                                        },
+                                    )
+                                }
+
+                                BookingStep.Contact -> {
+                                    BookingContactHeader(
+                                        onBack = { currentStepName = BookingStep.DateTime.name },
+                                    )
+
+                                    BookingContactContent(
+                                        contactProfileState = contactProfileState,
+                                        name = contactName,
+                                        phone = contactPhone,
+                                        email = contactEmail,
+                                        notes = contactNotes,
+                                        acceptsPrivacy = acceptsPrivacy,
+                                        onNameChange = {
+                                            contactName = it
+                                            onClearSubmitError()
+                                        },
+                                        onPhoneChange = {
+                                            contactPhone = it
+                                            onClearSubmitError()
+                                        },
+                                        onEmailChange = {
+                                            contactEmail = it
+                                            onClearSubmitError()
+                                        },
+                                        onNotesChange = {
+                                            contactNotes = it
+                                            onClearSubmitError()
+                                        },
+                                        onAcceptsPrivacyChange = {
+                                            acceptsPrivacy = it
+                                            onClearSubmitError()
+                                        },
+                                        onRetryContactProfile = onLoadContactProfile,
+                                        onRequestSignIn = onRequestSignIn,
+                                        onApplyContactProfile = { profile ->
+                                            applyContactProfile(profile, replaceExisting = true)
+                                            onClearSubmitError()
+                                        },
+                                    )
+                                }
+
+                                BookingStep.Confirmation -> {
+                                    BookingConfirmationHeader(
+                                        onBack = { currentStepName = BookingStep.Contact.name },
+                                    )
+
+                                    BookingConfirmationContent(
+                                        service = selectedService,
+                                        selectedExtras = selectedExtras,
+                                        vehicle = selectedVehicle,
+                                        date = selectedDate,
+                                        time = selectedTime,
+                                        name = contactName,
+                                        phone = contactPhone,
+                                        email = contactEmail,
+                                        notes = contactNotes,
+                                        loyaltyRewardCode = loyaltyRewardCode,
+                                        onLoyaltyRewardCodeChange = {
+                                            loyaltyRewardCode = it
+                                            onClearSubmitError()
+                                        },
+                                        businessInfoState = businessInfoState,
+                                        onRetryBusinessInfo = { onLoadBusinessInfo(true) },
+                                        rewardsState = rewardsState,
+                                        presetsState = presetsState,
+                                        presetMutationState = presetMutationState,
+                                        onRetryRewards = onLoadRewards,
+                                        onSavePreset = onSavePreset,
+                                        onDismissPresetMutation = onDismissPresetMutation,
+                                        sessionState = sessionState,
+                                        onRequestSignIn = onRequestSignIn,
+                                        onEditService = {
+                                            currentStepName = BookingStep.Service.name
+                                            onClearSubmitError()
+                                        },
+                                        onEditDateTime = {
+                                            currentStepName = BookingStep.DateTime.name
+                                            onClearSubmitError()
+                                        },
+                                        onEditContact = {
+                                            currentStepName = BookingStep.Contact.name
+                                            onClearSubmitError()
+                                        },
+                                        submitState = submitState,
+                                        onSubmitErrorAction = { resolution ->
+                                            when (resolution) {
+                                                BookingSubmitResolution.ChangeSlot -> {
+                                                    selectedTime = null
+                                                    currentStepName = BookingStep.DateTime.name
+                                                    onClearSubmitError()
+                                                    selectedService?.let {
+                                                        onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                                    }
+                                                }
+                                                BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
+                                                BookingSubmitResolution.SignIn -> onRequestSignIn()
+                                                BookingSubmitResolution.None -> Unit
+                                            }
+                                        },
+                                    )
+                                }
+
+                                BookingStep.Success -> {
+                                    BookingSuccessContent(
+                                        service = selectedService,
+                                        selectedExtras = selectedExtras,
+                                        date = selectedDate,
+                                        time = selectedTime,
+                                        businessInfoState = businessInfoState,
+                                        reservationId = reservationId,
+                                        reservationCode = reservationCode,
+                                        loyaltyRewardApplied = successLoyaltyRewardApplied,
+                                        loyaltyRewardCode = successLoyaltyRewardCode,
+                                        paymentStatus = successPaymentStatus,
+                                        reservationStatus = successReservationStatus,
+                                        pendingExpiresAtIso = successPendingExpiresAt,
+                                        onAddToCalendar = {},
+                                        onViewBooking = onViewBooking,
+                                        onHome = onHome,
+                                        onOpenPayment = onOpenPayment,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
-                BookingStep.Vehicle -> {
-                    BookingVehicleHeader(
-                        onBack = { currentStepName = BookingStep.Service.name },
-                    )
-
-                    BookingVehicleStepContent(
-                        vehiclesState = vehiclesState,
-                        selectedVehicleId = selectedVehicleId,
-                        onRetryVehicles = onLoadVehicles,
-                        onRequestSignIn = onRequestSignIn,
-                        onManageVehicles = onManageVehicles,
-                        onVehicleSelected = { vehicle ->
-                            selectedVehicleId = vehicle.id
-                            onClearSubmitError()
-                        },
-                    )
-                }
-
-                BookingStep.DateTime -> {
-                    BookingDateTimeHeader(
-                        onBack = { currentStepName = BookingStep.Vehicle.name },
-                    )
-
-                    DateTimeStepContent(
-                        availabilityState = availabilityState,
-                        waitlistState = waitlistState,
-                        serviceId = selectedService?.id.orEmpty(),
-                        serviceName = selectedService?.name.orEmpty(),
-                        serviceDurationMinutes = selectedService?.durationMinutes ?: 0,
-                        selectedDateId = selectedDateId,
-                        selectedTime = selectedTime,
-                        onDateSelected = { dateId ->
-                            selectedDateId = dateId
-                            selectedTime = null
-                            onClearSubmitError()
-                        },
-                        onTimeSelected = {
-                            selectedTime = it
-                            onClearSubmitError()
-                        },
-                        onRetryAvailability = {
-                            selectedService?.let {
-                                onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
-                            }
-                        },
-                        onJoinWaitlist = { dateId ->
-                            selectedService?.let { service ->
-                                onJoinWaitlist(
-                                    BookingWaitlistJoinRequest(
-                                        dateId = dateId,
-                                        serviceId = service.id,
-                                        serviceName = service.name,
-                                        serviceDurationMinutes = service.durationMinutes,
-                                    ),
-                                )
-                            }
-                        },
-                        onCancelWaitlist = onCancelWaitlist,
-                        onRequestSignIn = onRequestSignIn,
-                        minimumMonthAnchor = minimumAvailabilityMonthAnchor,
-                        onPreviousMonth = {
-                            val currentAnchor = availabilityMonth?.monthAnchorDate()
-                            val previousAnchor = shiftMonthAnchorDate(currentAnchor, monthOffset = -1)
-                            val minimumAnchor = minimumAvailabilityMonthAnchor
-                            if (
-                                previousAnchor != null &&
-                                minimumAnchor != null &&
-                                previousAnchor >= minimumAnchor
-                            ) {
-                                selectedDateId = null
-                                selectedTime = null
-                                availabilityAnchorDate = if (previousAnchor == minimumAnchor) {
-                                    null
-                                } else {
-                                    previousAnchor
-                                }
-                                onClearSubmitError()
-                            }
-                        },
-                        onNextMonth = {
-                            val nextAnchor = shiftMonthAnchorDate(
-                                availabilityMonth?.monthAnchorDate(),
-                                monthOffset = 1,
-                            )
-                            if (nextAnchor != null) {
-                                selectedDateId = null
-                                selectedTime = null
-                                availabilityAnchorDate = nextAnchor
-                                onClearSubmitError()
-                            }
-                        },
-                    )
-                }
-
-                BookingStep.Contact -> {
-                    BookingContactHeader(
-                        onBack = { currentStepName = BookingStep.DateTime.name },
-                    )
-
-                    BookingContactContent(
-                        contactProfileState = contactProfileState,
-                        name = contactName,
-                        phone = contactPhone,
-                        email = contactEmail,
-                        notes = contactNotes,
-                        acceptsPrivacy = acceptsPrivacy,
-                        onNameChange = {
-                            contactName = it
-                            onClearSubmitError()
-                        },
-                        onPhoneChange = {
-                            contactPhone = it
-                            onClearSubmitError()
-                        },
-                        onEmailChange = {
-                            contactEmail = it
-                            onClearSubmitError()
-                        },
-                        onNotesChange = {
-                            contactNotes = it
-                            onClearSubmitError()
-                        },
-                        onAcceptsPrivacyChange = {
-                            acceptsPrivacy = it
-                            onClearSubmitError()
-                        },
-                        onRetryContactProfile = onLoadContactProfile,
-                        onRequestSignIn = onRequestSignIn,
-                        onApplyContactProfile = { profile ->
-                            applyContactProfile(profile, replaceExisting = true)
-                            onClearSubmitError()
-                        },
-                    )
-                }
-
-                BookingStep.Confirmation -> {
-                    BookingConfirmationHeader(
-                        onBack = { currentStepName = BookingStep.Contact.name },
-                    )
-
-                    BookingConfirmationContent(
-                        service = selectedService,
-                        selectedExtras = selectedExtras,
-                        vehicle = selectedVehicle,
-                        date = selectedDate,
-                        time = selectedTime,
-                        name = contactName,
-                        phone = contactPhone,
-                        email = contactEmail,
-                        notes = contactNotes,
-                        loyaltyRewardCode = loyaltyRewardCode,
-                        onLoyaltyRewardCodeChange = {
-                            loyaltyRewardCode = it
-                            onClearSubmitError()
-                        },
-                        businessInfoState = businessInfoState,
-                        onRetryBusinessInfo = { onLoadBusinessInfo(true) },
-                        rewardsState = rewardsState,
-                        presetsState = presetsState,
-                        presetMutationState = presetMutationState,
-                        onRetryRewards = onLoadRewards,
-                        onSavePreset = onSavePreset,
-                        onDismissPresetMutation = onDismissPresetMutation,
-                        sessionState = sessionState,
-                        onRequestSignIn = onRequestSignIn,
-                        onEditService = {
-                            currentStepName = BookingStep.Service.name
-                            onClearSubmitError()
-                        },
-                        onEditDateTime = {
-                            currentStepName = BookingStep.DateTime.name
-                            onClearSubmitError()
-                        },
-                        onEditContact = {
-                            currentStepName = BookingStep.Contact.name
-                            onClearSubmitError()
-                        },
-                        submitState = submitState,
-                        onSubmitErrorAction = { resolution ->
-                            when (resolution) {
-                                BookingSubmitResolution.ChangeSlot -> {
-                                    selectedTime = null
-                                    currentStepName = BookingStep.DateTime.name
-                                    onClearSubmitError()
-                                    selectedService?.let {
-                                        onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                if (currentStep != BookingStep.Success) {
+                    ContinueBar(
+                        enabled = isBookingContinueEnabled(
+                            step = currentStep,
+                            hasService = selectedService != null,
+                            hasVehicleSelection = selectedVehicleId != null,
+                            hasResolvedVehicle = selectedVehicle != null,
+                            hasDate = selectedDate != null,
+                            hasTime = selectedTime != null,
+                            contactFormValid = contactFormValid,
+                            submissionLoading = submitState is BookingSubmitUiState.Loading,
+                        ),
+                        onClick = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            when (currentStep) {
+                                BookingStep.Service -> currentStepName = BookingStep.Vehicle.name
+                                BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
+                                BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
+                                BookingStep.Contact -> currentStepName = BookingStep.Confirmation.name
+                                BookingStep.Confirmation -> when (
+                                    (submitState as? BookingSubmitUiState.Error)?.resolution
+                                ) {
+                                    BookingSubmitResolution.ChangeSlot -> {
+                                        selectedTime = null
+                                        currentStepName = BookingStep.DateTime.name
+                                        onClearSubmitError()
+                                        selectedService?.let {
+                                            onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                        }
                                     }
+                                    BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
+                                    BookingSubmitResolution.SignIn -> onRequestSignIn()
+                                    BookingSubmitResolution.None,
+                                    null -> onSubmitBooking(bookingDraft)
                                 }
-                                BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
-                                BookingSubmitResolution.SignIn -> onRequestSignIn()
-                                BookingSubmitResolution.None -> Unit
+                                BookingStep.Success -> Unit
                             }
                         },
-                    )
-                }
-
-                BookingStep.Success -> {
-                    BookingSuccessContent(
-                        service = selectedService,
-                        selectedExtras = selectedExtras,
-                        date = selectedDate,
-                        time = selectedTime,
-                        businessInfoState = businessInfoState,
-                        reservationId = reservationId,
-                        reservationCode = reservationCode,
-                        loyaltyRewardApplied = successLoyaltyRewardApplied,
-                        loyaltyRewardCode = successLoyaltyRewardCode,
-                        paymentStatus = successPaymentStatus,
-                        reservationStatus = successReservationStatus,
-                        pendingExpiresAtIso = successPendingExpiresAt,
-                        onAddToCalendar = {},
-                        onViewBooking = onViewBooking,
-                        onHome = onHome,
-                        onOpenPayment = onOpenPayment,
+                        label = when (currentStep) {
+                            BookingStep.Contact -> "Rever Marcação"
+                            BookingStep.Confirmation -> if (submitState is BookingSubmitUiState.Loading) {
+                                "A enviar pedido..."
+                            } else if (submitState is BookingSubmitUiState.Error) {
+                                submitState.resolution.continueLabel()
+                            } else {
+                                "Enviar pedido"
+                            }
+                            else -> "Continuar"
+                        },
+                        summaryTitle = if (currentStep == BookingStep.Confirmation) {
+                            "Rever e enviar"
+                        } else {
+                            selectedService?.name
+                        },
+                        summaryDetail = if (currentStep == BookingStep.Confirmation) null else selectionPriceLabel,
+                        contentPadding = contentPadding,
+                        modifier = Modifier.align(Alignment.BottomCenter),
                     )
                 }
             }
-        }
-
-        if (currentStep != BookingStep.Success) {
-            ContinueBar(
-                enabled = when (currentStep) {
-                    BookingStep.Service -> selectedService != null
-                    BookingStep.Vehicle -> selectedVehicleId != null
-                    BookingStep.DateTime -> selectedDate != null && selectedTime != null
-                    BookingStep.Contact -> contactFormValid
-                    BookingStep.Confirmation -> selectedService != null &&
-                        selectedVehicle != null &&
-                        selectedDate != null &&
-                        selectedTime != null &&
-                        contactFormValid &&
-                        submitState !is BookingSubmitUiState.Loading
-                    BookingStep.Success -> false
-                },
-                onClick = {
-                    when (currentStep) {
-                        BookingStep.Service -> currentStepName = BookingStep.Vehicle.name
-                        BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
-                        BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
-                        BookingStep.Contact -> currentStepName = BookingStep.Confirmation.name
-                        BookingStep.Confirmation -> when (
-                            (submitState as? BookingSubmitUiState.Error)?.resolution
-                        ) {
-                            BookingSubmitResolution.ChangeSlot -> {
-                                selectedTime = null
-                                currentStepName = BookingStep.DateTime.name
-                                onClearSubmitError()
-                                selectedService?.let {
-                                    onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
-                                }
-                            }
-                            BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
-                            BookingSubmitResolution.SignIn -> onRequestSignIn()
-                            BookingSubmitResolution.None,
-                            null -> onSubmitBooking(bookingDraft)
-                        }
-                        BookingStep.Success -> Unit
-                    }
-                },
-                label = when (currentStep) {
-                    BookingStep.Contact -> "Rever Marcação"
-                    BookingStep.Confirmation -> if (submitState is BookingSubmitUiState.Loading) {
-                        "A enviar pedido..."
-                    } else if (submitState is BookingSubmitUiState.Error) {
-                        submitState.resolution.continueLabel()
-                    } else {
-                        "Enviar pedido"
-                    }
-                    else -> "Continuar"
-                },
-                contentPadding = contentPadding,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
         }
     }
 }
@@ -916,8 +947,7 @@ private fun BookingConfirmationContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .offset(y = (-16).dp)
-            .padding(top = 0.dp),
+            .padding(top = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ConfirmationCard(
