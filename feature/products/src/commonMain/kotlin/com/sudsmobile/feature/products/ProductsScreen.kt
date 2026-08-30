@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Notes
@@ -56,8 +55,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -71,15 +68,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontStyle
@@ -101,7 +99,6 @@ import com.sudsmobile.data.booking.BookingReservationStatus
 import com.sudsmobile.data.booking.BookingSelectionPreset
 import com.sudsmobile.data.booking.BookingWaitlistEntry
 import com.sudsmobile.data.booking.BookingWaitlistJoinRequest
-import com.sudsmobile.data.booking.toSelectionPreset
 import com.sudsmobile.data.booking.toBookingPaymentStatus
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import org.koin.compose.viewmodel.koinViewModel
@@ -115,7 +112,7 @@ private enum class BookingStep {
     Success,
 }
 
-private val bookingVehicleCategories = listOf(
+internal val bookingVehicleCategories = listOf(
     BookingVehicleUi(
         id = "passenger",
         name = "Passageiros",
@@ -883,108 +880,6 @@ private fun ProductsScreenContent(
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
-    }
-}
-
-@Composable
-private fun BookingServiceHeader(onBack: () -> Unit) {
-    BookingStepHeader(
-        title = "Escolha o Serviço",
-        subtitle = "Passo 1 de 4",
-        onBack = onBack,
-    )
-}
-
-@Composable
-private fun BookingVehicleHeader(onBack: () -> Unit) {
-    BookingStepHeader(
-        title = "Tipo de Veículo",
-        subtitle = "Passo 2 de 4",
-        onBack = onBack,
-    )
-}
-
-@Composable
-private fun BookingDateTimeHeader(onBack: () -> Unit) {
-    BookingStepHeader(
-        title = "Data e Hora",
-        subtitle = "Passo 3 de 4",
-        onBack = onBack,
-    )
-}
-
-@Composable
-private fun BookingContactHeader(onBack: () -> Unit) {
-    BookingStepHeader(
-        title = "Dados de Contacto",
-        subtitle = "Passo 4 de 4",
-        onBack = onBack,
-    )
-}
-
-@Composable
-private fun BookingConfirmationHeader(onBack: () -> Unit) {
-    BookingStepHeader(
-        title = "Confirmar pedido",
-        subtitle = "Reveja os detalhes antes de enviar",
-        onBack = onBack,
-    )
-}
-
-@Composable
-private fun BookingStepHeader(
-    title: String,
-    subtitle: String,
-    onBack: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        OutlinedButton(
-            onClick = onBack,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.size(8.dp))
-            Text("Voltar", style = MaterialTheme.typography.labelLarge)
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
     }
 }
 
@@ -2552,7 +2447,7 @@ private fun ConfirmationSentCard(pendingValidation: Boolean) {
 }
 
 @Composable
-private fun BookingContactProfileCard(
+internal fun BookingContactProfileCard(
     state: BookingContactProfileUiState,
     onRetry: () -> Unit,
     onRequestSignIn: () -> Unit,
@@ -2675,117 +2570,6 @@ private fun ContactProfileMessageCard(
     }
 }
 
-@Composable
-private fun BookingContactContent(
-    contactProfileState: BookingContactProfileUiState,
-    name: String,
-    phone: String,
-    email: String,
-    notes: String,
-    acceptsPrivacy: Boolean,
-    onNameChange: (String) -> Unit,
-    onPhoneChange: (String) -> Unit,
-    onEmailChange: (String) -> Unit,
-    onNotesChange: (String) -> Unit,
-    onAcceptsPrivacyChange: (Boolean) -> Unit,
-    onRetryContactProfile: () -> Unit,
-    onRequestSignIn: () -> Unit,
-    onApplyContactProfile: (BookingContactProfileUi) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .offset(y = (-16).dp)
-            .padding(top = 0.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        BookingContactProfileCard(
-            state = contactProfileState,
-            onRetry = onRetryContactProfile,
-            onRequestSignIn = onRequestSignIn,
-            onApplyProfile = onApplyContactProfile,
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-            shape = RoundedCornerShape(18.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                BookingContactField(
-                    label = "Nome Completo *",
-                    value = name,
-                    placeholder = "João Silva",
-                    icon = Icons.Filled.Person,
-                    onValueChange = onNameChange,
-                )
-                BookingContactField(
-                    label = "Telemóvel *",
-                    value = phone,
-                    placeholder = "913 005 855",
-                    icon = Icons.Filled.Phone,
-                    keyboardType = KeyboardType.Phone,
-                    onValueChange = onPhoneChange,
-                )
-                BookingContactField(
-                    label = "Email *",
-                    value = email,
-                    placeholder = "seuemail@exemplo.com",
-                    icon = Icons.Filled.Email,
-                    keyboardType = KeyboardType.Email,
-                    onValueChange = onEmailChange,
-                )
-                BookingContactField(
-                    label = "Observações (Opcional)",
-                    value = notes,
-                    placeholder = "Alguma informação adicional que devamos saber...",
-                    icon = Icons.AutoMirrored.Filled.Notes,
-                    singleLine = false,
-                    minLines = 4,
-                    onValueChange = onNotesChange,
-                )
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            shape = RoundedCornerShape(18.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onAcceptsPrivacyChange(!acceptsPrivacy) }
-                    .padding(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Checkbox(
-                    checked = acceptsPrivacy,
-                    onCheckedChange = onAcceptsPrivacyChange,
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = MaterialTheme.colorScheme.tertiary,
-                        checkmarkColor = MaterialTheme.colorScheme.onTertiary,
-                        uncheckedColor = MaterialTheme.colorScheme.outline,
-                    ),
-                )
-                Text(
-                    text = "Aceito a Política de Privacidade e autorizo o processamento dos meus dados para efeitos de marcação. *",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-            }
-        }
-    }
-}
-
 private fun BookingContactProfileUi.contactSummary(): String {
     val parts = listOfNotNull(
         displayName.takeIf { it.isNotBlank() },
@@ -2800,7 +2584,7 @@ private fun BookingContactProfileUi.contactSummary(): String {
 }
 
 @Composable
-private fun BookingContactField(
+internal fun BookingContactField(
     label: String,
     value: String,
     placeholder: String,
@@ -2854,122 +2638,7 @@ private fun BookingContactField(
 }
 
 @Composable
-private fun DateTimeStepContent(
-    availabilityState: BookingAvailabilityUiState,
-    waitlistState: BookingWaitlistUiState,
-    serviceId: String,
-    serviceName: String,
-    serviceDurationMinutes: Int,
-    selectedDateId: String?,
-    selectedTime: String?,
-    onDateSelected: (String) -> Unit,
-    onTimeSelected: (String) -> Unit,
-    onRetryAvailability: () -> Unit,
-    onJoinWaitlist: (String) -> Unit,
-    onCancelWaitlist: (BookingWaitlistEntry) -> Unit,
-    onRequestSignIn: () -> Unit,
-    minimumMonthAnchor: String?,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit,
-) {
-    val month = when (availabilityState) {
-        is BookingAvailabilityUiState.Empty -> availabilityState.month
-        is BookingAvailabilityUiState.Loaded -> availabilityState.month
-        else -> null
-    }
-    val selectedDay = month?.days?.firstOrNull { it.id == selectedDateId }
-    val activeWaitlistEntry = waitlistState.entries.firstOrNull { entry ->
-        entry.status.equals("active", ignoreCase = true) &&
-            entry.dateId == selectedDateId &&
-            entry.serviceId == serviceId &&
-            entry.serviceDurationMinutes == serviceDurationMinutes
-    }
-    val currentMonthAnchor = month?.monthAnchorDate()
-    val canNavigatePrevious = currentMonthAnchor != null &&
-        minimumMonthAnchor != null &&
-        currentMonthAnchor > minimumMonthAnchor
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .offset(y = (-16).dp)
-            .padding(top = 0.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        when (availabilityState) {
-            BookingAvailabilityUiState.Idle,
-            BookingAvailabilityUiState.Loading -> AvailabilityLoadingCard()
-
-            is BookingAvailabilityUiState.Loaded -> {
-                CalendarSelectionCard(
-                    month = availabilityState.month,
-                    selectedDateId = selectedDateId,
-                    canNavigatePrevious = canNavigatePrevious,
-                    onPreviousMonth = onPreviousMonth,
-                    onNextMonth = onNextMonth,
-                    onDateSelected = onDateSelected,
-                )
-
-                TimeSelectionCard(
-                    slots = selectedDay?.slots.orEmpty(),
-                    selectedTime = selectedTime,
-                    onTimeSelected = onTimeSelected,
-                )
-
-                if (selectedDay?.available == false && selectedDay.waitlistEligible) {
-                    WaitlistAlertCard(
-                        dateLabel = selectedDay.summaryLabel,
-                        serviceName = serviceName,
-                        state = waitlistState,
-                        activeEntry = activeWaitlistEntry,
-                        onJoin = { onJoinWaitlist(selectedDay.id) },
-                        onCancel = onCancelWaitlist,
-                        onRequestSignIn = onRequestSignIn,
-                    )
-                }
-            }
-
-            is BookingAvailabilityUiState.Empty -> {
-                CalendarSelectionCard(
-                    month = availabilityState.month,
-                    selectedDateId = selectedDateId,
-                    canNavigatePrevious = canNavigatePrevious,
-                    onPreviousMonth = onPreviousMonth,
-                    onNextMonth = onNextMonth,
-                    onDateSelected = onDateSelected,
-                )
-
-                if (selectedDay?.waitlistEligible == true) {
-                    WaitlistAlertCard(
-                        dateLabel = selectedDay.summaryLabel,
-                        serviceName = serviceName,
-                        state = waitlistState,
-                        activeEntry = activeWaitlistEntry,
-                        onJoin = { onJoinWaitlist(selectedDay.id) },
-                        onCancel = onCancelWaitlist,
-                        onRequestSignIn = onRequestSignIn,
-                    )
-                } else {
-                    AvailabilityStatusCard(
-                        title = "Sem horários disponíveis",
-                        body = "Escolha um dia útil para receber um aviso se surgir uma vaga em ${availabilityState.month.monthTitle}.",
-                        onRetry = onRetryAvailability,
-                    )
-                }
-            }
-
-            is BookingAvailabilityUiState.Error -> AvailabilityStatusCard(
-                title = "Não foi possível carregar horários",
-                body = availabilityState.message,
-                onRetry = onRetryAvailability,
-            )
-        }
-    }
-}
-
-@Composable
-private fun AvailabilityLoadingCard() {
+internal fun AvailabilityLoadingCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -3004,7 +2673,7 @@ private fun AvailabilityLoadingCard() {
 }
 
 @Composable
-private fun AvailabilityStatusCard(
+internal fun AvailabilityStatusCard(
     title: String,
     body: String,
     onRetry: () -> Unit,
@@ -3065,7 +2734,7 @@ private fun AvailabilityStatusCard(
 }
 
 @Composable
-private fun WaitlistAlertCard(
+internal fun WaitlistAlertCard(
     dateLabel: String,
     serviceName: String,
     state: BookingWaitlistUiState,
@@ -3214,7 +2883,7 @@ private fun WaitlistAlertCard(
 }
 
 @Composable
-private fun CalendarSelectionCard(
+internal fun CalendarSelectionCard(
     month: BookingAvailabilityMonth,
     selectedDateId: String?,
     canNavigatePrevious: Boolean,
@@ -3405,7 +3074,7 @@ private fun CalendarDayCell(
 }
 
 @Composable
-private fun TimeSelectionCard(
+internal fun TimeSelectionCard(
     slots: List<BookingAvailabilitySlot>,
     selectedTime: String?,
     onTimeSelected: (String) -> Unit,
@@ -3439,12 +3108,14 @@ private fun TimeSelectionCard(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             slotRow.forEach { slot ->
-                                TimeSlotButton(
-                                    slot = slot,
-                                    selected = selectedTime == slot.time,
-                                    onSelected = { onTimeSelected(slot.time) },
-                                    modifier = Modifier.weight(1f),
-                                )
+                                key(slot.time) {
+                                    TimeSlotButton(
+                                        slot = slot,
+                                        selected = selectedTime == slot.time,
+                                        onSelected = { onTimeSelected(slot.time) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
                             }
 
                             repeat(3 - slotRow.size) {
@@ -3533,73 +3204,7 @@ private fun SectionHeader(
 }
 
 @Composable
-private fun BookingServiceStepContent(
-    catalogState: ProductCatalogUiState,
-    presetsState: BookingPresetsUiState,
-    presetMutationState: BookingPresetMutationUiState,
-    selectedServiceId: String?,
-    selectedExtraIds: List<String>,
-    unavailableInitialServiceId: String?,
-    onRetryCatalog: () -> Unit,
-    onRetryPresets: () -> Unit,
-    onPresetSelected: (BookingSelectionPreset) -> Unit,
-    onDeletePreset: (String) -> Unit,
-    onDismissPresetMutation: () -> Unit,
-    onServiceSelected: (ProductServiceUi) -> Unit,
-    onExtraToggled: (ProductExtraUi) -> Unit,
-) {
-    BookingFavoritePresetsSection(
-        presetsState = presetsState,
-        mutationState = presetMutationState,
-        onRetry = onRetryPresets,
-        onSelected = { onPresetSelected(it.toSelectionPreset()) },
-        onDelete = onDeletePreset,
-        onDismissMutation = onDismissPresetMutation,
-    )
-
-    if (unavailableInitialServiceId != null) {
-        AvailabilityStatusCard(
-            title = "Serviço indisponível",
-            body = "O serviço escolhido já não está disponível no catálogo. Escolha outra opção.",
-            onRetry = onRetryCatalog,
-        )
-    }
-
-    when (catalogState) {
-        ProductCatalogUiState.Idle,
-        ProductCatalogUiState.Loading -> CatalogLoadingCard()
-
-        is ProductCatalogUiState.Loaded -> {
-            catalogState.services.forEach { service ->
-                BookingServiceCard(
-                    service = service,
-                    selected = selectedServiceId == service.id,
-                    onSelected = { onServiceSelected(service) },
-                )
-            }
-            BookingExtrasSelectionSection(
-                extras = catalogState.extras.filter { it.isEligibleFor(selectedServiceId) },
-                selectedExtraIds = selectedExtraIds,
-                onExtraToggled = onExtraToggled,
-            )
-        }
-
-        ProductCatalogUiState.Empty -> AvailabilityStatusCard(
-            title = "Sem serviços disponíveis",
-            body = "O catálogo de serviços ainda não tem opções ativas.",
-            onRetry = onRetryCatalog,
-        )
-
-        is ProductCatalogUiState.Error -> AvailabilityStatusCard(
-            title = "Não foi possível carregar serviços",
-            body = catalogState.message,
-            onRetry = onRetryCatalog,
-        )
-    }
-}
-
-@Composable
-private fun BookingFavoritePresetsSection(
+internal fun BookingFavoritePresetsSection(
     presetsState: BookingPresetsUiState,
     mutationState: BookingPresetMutationUiState,
     onRetry: () -> Unit,
@@ -3659,13 +3264,15 @@ private fun BookingFavoritePresetsSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             presetsState.presets.forEach { preset ->
-                FavoriteBookingPresetCard(
-                    preset = preset,
-                    deleting = mutationState is BookingPresetMutationUiState.Deleting &&
-                        mutationState.presetId == preset.id,
-                    onSelected = { onSelected(preset) },
-                    onDelete = { onDelete(preset.id) },
-                )
+                key(preset.id) {
+                    FavoriteBookingPresetCard(
+                        preset = preset,
+                        deleting = mutationState is BookingPresetMutationUiState.Deleting &&
+                            mutationState.presetId == preset.id,
+                        onSelected = { onSelected(preset) },
+                        onDelete = { onDelete(preset.id) },
+                    )
+                }
             }
             Spacer(Modifier.height(6.dp))
         }
@@ -3827,7 +3434,7 @@ private fun BookingPresetMutationMessage(
 }
 
 @Composable
-private fun CatalogLoadingCard() {
+internal fun CatalogLoadingCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
@@ -3862,369 +3469,7 @@ private fun CatalogLoadingCard() {
 }
 
 @Composable
-private fun BookingServiceCard(
-    service: ProductServiceUi,
-    selected: Boolean,
-    onSelected: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSelected),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        ),
-        border = BorderStroke(
-            width = 2.dp,
-            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Surface(
-                modifier = Modifier.size(64.dp),
-                shape = RoundedCornerShape(18.dp),
-                color = if (selected) {
-                    MaterialTheme.colorScheme.tertiary
-                } else {
-                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f)
-                },
-                contentColor = if (selected) {
-                    MaterialTheme.colorScheme.onTertiary
-                } else {
-                    MaterialTheme.colorScheme.tertiary
-                },
-            ) {
-                Icon(
-                    imageVector = service.icon,
-                    contentDescription = null,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        text = service.name,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (service.popular) {
-                        PopularBadge()
-                    }
-                }
-
-                Text(
-                    text = service.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "A partir de",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = service.passengerPrice,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AccessTime,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = service.durationLabel,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            if (selected) {
-                Surface(
-                    modifier = Modifier.size(24.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        modifier = Modifier.padding(5.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BookingExtrasSelectionSection(
-    extras: List<ProductExtraUi>,
-    selectedExtraIds: List<String>,
-    onExtraToggled: (ProductExtraUi) -> Unit,
-) {
-    if (extras.isEmpty()) return
-
-    Spacer(Modifier.height(8.dp))
-
-    Text(
-        text = "Extras opcionais",
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-        fontWeight = FontWeight.Bold,
-    )
-    Text(
-        text = "Adicione cuidados ao serviço escolhido",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        extras.chunked(2).forEach { rowExtras ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                rowExtras.forEach { extra ->
-                    BookingExtraCard(
-                        extra = extra,
-                        selected = extra.id in selectedExtraIds,
-                        onSelected = { onExtraToggled(extra) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                if (rowExtras.size == 1) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BookingExtraCard(
-    extra: ProductExtraUi,
-    selected: Boolean,
-    onSelected: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSelected),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        ),
-        border = BorderStroke(
-            width = 1.5.dp,
-            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
-            ) {
-                Surface(
-                    modifier = Modifier.size(42.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f)
-                    },
-                    contentColor = if (selected) {
-                        MaterialTheme.colorScheme.onTertiary
-                    } else {
-                        MaterialTheme.colorScheme.tertiary
-                    },
-                ) {
-                    Icon(
-                        imageVector = extra.icon,
-                        contentDescription = null,
-                        modifier = Modifier.padding(10.dp),
-                    )
-                }
-                Surface(
-                    modifier = Modifier.size(22.dp),
-                    shape = CircleShape,
-                    color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.surfaceContainer,
-                    contentColor = if (selected) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurfaceVariant,
-                ) {
-                    Icon(
-                        imageVector = if (selected) Icons.Filled.Check else Icons.Filled.Add,
-                        contentDescription = null,
-                        modifier = Modifier.padding(5.dp),
-                    )
-                }
-            }
-            Text(
-                text = extra.name,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (extra.description.isNotBlank()) {
-                Text(
-                    text = extra.description,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                text = extra.price,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.tertiary,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PopularBadge() {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-    ) {
-        Text(
-            text = "Popular",
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-        )
-    }
-}
-
-@Composable
-private fun BookingVehicleStepContent(
-    vehiclesState: BookingVehiclesUiState,
-    selectedVehicleId: String?,
-    onRetryVehicles: () -> Unit,
-    onRequestSignIn: () -> Unit,
-    onManageVehicles: () -> Unit,
-    onVehicleSelected: (BookingVehicleUi) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .offset(y = (-16).dp)
-            .padding(top = 0.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(
-            text = "Selecione um veículo guardado ou apenas a categoria para calcular o preço correto",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
-        )
-
-        when (vehiclesState) {
-            BookingVehiclesUiState.Idle,
-            BookingVehiclesUiState.Loading -> VehicleStateCard(
-                title = "A carregar veículos",
-                body = "Estamos a consultar os veículos associados à sua conta.",
-                icon = Icons.Filled.DirectionsCar,
-                loading = true,
-            )
-
-            BookingVehiclesUiState.Unauthenticated -> VehicleStateCard(
-                title = "Use os seus veículos guardados",
-                body = "Entre na conta para escolher um veículo registado nesta marcação.",
-                icon = Icons.Filled.Lock,
-                actionLabel = "Entrar",
-                onAction = onRequestSignIn,
-            )
-
-            BookingVehiclesUiState.Empty -> VehicleStateCard(
-                title = "Sem veículos guardados",
-                body = "Pode adicionar veículos ao perfil para acelerar futuras marcações.",
-                icon = Icons.Filled.Add,
-                actionLabel = "Gerir veículos",
-                onAction = onManageVehicles,
-            )
-
-            is BookingVehiclesUiState.Error -> VehicleStateCard(
-                title = "Não foi possível carregar veículos",
-                body = vehiclesState.message,
-                icon = Icons.Filled.Info,
-                actionLabel = if (vehiclesState.retryable) "Tentar novamente" else null,
-                onAction = if (vehiclesState.retryable) onRetryVehicles else null,
-            )
-
-            is BookingVehiclesUiState.Loaded -> {
-                VehicleSectionTitle("Veículos guardados")
-                vehiclesState.vehicles.forEach { vehicle ->
-                    BookingVehicleCard(
-                        vehicle = vehicle,
-                        selected = selectedVehicleId == vehicle.id,
-                        onSelected = { onVehicleSelected(vehicle) },
-                    )
-                }
-            }
-        }
-
-        VehicleSectionTitle(
-            if (vehiclesState is BookingVehiclesUiState.Loaded) {
-                "Ou selecione a categoria"
-            } else {
-                "Tipo de veículo"
-            },
-        )
-
-        bookingVehicleCategories.forEach { vehicle ->
-            BookingVehicleCard(
-                vehicle = vehicle,
-                selected = selectedVehicleId == vehicle.id,
-                onSelected = { onVehicleSelected(vehicle) },
-            )
-        }
-
-        VehicleHelpCard()
-    }
-}
-
-@Composable
-private fun VehicleSectionTitle(title: String) {
+internal fun VehicleSectionTitle(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleSmall,
@@ -4234,7 +3479,7 @@ private fun VehicleSectionTitle(title: String) {
 }
 
 @Composable
-private fun VehicleStateCard(
+internal fun VehicleStateCard(
     title: String,
     body: String,
     icon: ImageVector,
@@ -4302,7 +3547,7 @@ private fun VehicleStateCard(
 }
 
 @Composable
-private fun BookingVehicleCard(
+internal fun BookingVehicleCard(
     vehicle: BookingVehicleUi,
     selected: Boolean,
     onSelected: () -> Unit,
@@ -4310,7 +3555,11 @@ private fun BookingVehicleCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onSelected),
+            .clickable(onClick = onSelected)
+            .semantics {
+                role = Role.RadioButton
+                stateDescription = if (selected) "Selecionado" else "Não selecionado"
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
@@ -4402,7 +3651,7 @@ private fun DefaultBookingVehicleChip() {
 }
 
 @Composable
-private fun VehicleHelpCard() {
+internal fun VehicleHelpCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -4487,7 +3736,7 @@ private fun ProductServiceUi.priceCentsForVehicle(vehicleType: String?): Int {
     return if (vehicleType == "suv") suvPriceCents else passengerPriceCents
 }
 
-private fun ProductExtraUi.isEligibleFor(serviceId: String?): Boolean {
+internal fun ProductExtraUi.isEligibleFor(serviceId: String?): Boolean {
     return eligibleServiceIds.isEmpty() || serviceId in eligibleServiceIds
 }
 
@@ -4507,46 +3756,4 @@ private fun List<ProductExtraUi>.countLabel(): String {
 
 private fun BookingVehicleUi.icon(): ImageVector {
     return if (type == "suv") Icons.Filled.AirportShuttle else Icons.Filled.DirectionsCar
-}
-
-@Composable
-private fun ContinueBar(
-    enabled: Boolean,
-    onClick: () -> Unit,
-    label: String,
-    contentPadding: PaddingValues,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
-    ) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Button(
-                onClick = onClick,
-                enabled = enabled,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(top = 16.dp, bottom = contentPadding.calculateBottomPadding() + 16.dp)
-                    .height(56.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.inverseSurface,
-                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-    }
 }
