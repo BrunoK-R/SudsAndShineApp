@@ -1,21 +1,6 @@
 package com.sudsmobile.navigation
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,13 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -68,6 +47,7 @@ import com.sudsmobile.feature.products.ProductsScreen
 import com.sudsmobile.feature.products.ServicesScreen
 import com.sudsmobile.feature.profile.ProfileScreen
 import com.sudsmobile.feature.profile.VehiclesScreen
+import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
 import org.koin.compose.koinInject
 
 @Composable
@@ -85,7 +65,9 @@ fun MainNavigation(
     val latestOnNotificationRouteConsumed by rememberUpdatedState(onNotificationRouteConsumed)
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
-    val showBottomBar = mainDestinations.any { it.route == currentRoute }
+    val showBottomBar = isMainDestinationRoute(currentRoute)
+    val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
+    val transitionDistancePx = with(LocalDensity.current) { 24.dp.roundToPx() }
     var initialBookingServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var initialBookingSelectionPreset by remember { mutableStateOf<BookingSelectionPreset?>(null) }
     var initialBookingRequestKey by rememberSaveable { mutableStateOf(0L) }
@@ -146,7 +128,7 @@ fun MainNavigation(
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                SudsBottomBar(
+                SudsNavigationBar(
                     currentRoute = currentRoute,
                     onDestinationClick = { route ->
                         if (route == Routes.Products) {
@@ -168,6 +150,39 @@ fun MainNavigation(
         NavHost(
             navController = navController,
             startDestination = Routes.Home,
+            enterTransition = {
+                mainEnterTransition(
+                    fromRoute = initialState.destination.route,
+                    toRoute = targetState.destination.route,
+                    reduceMotion = reduceMotion,
+                    distancePx = transitionDistancePx,
+                )
+            },
+            exitTransition = {
+                mainExitTransition(
+                    fromRoute = initialState.destination.route,
+                    toRoute = targetState.destination.route,
+                    reduceMotion = reduceMotion,
+                    distancePx = transitionDistancePx,
+                )
+            },
+            popEnterTransition = {
+                mainEnterTransition(
+                    fromRoute = initialState.destination.route,
+                    toRoute = targetState.destination.route,
+                    reduceMotion = reduceMotion,
+                    distancePx = transitionDistancePx,
+                )
+            },
+            popExitTransition = {
+                mainExitTransition(
+                    fromRoute = initialState.destination.route,
+                    toRoute = targetState.destination.route,
+                    reduceMotion = reduceMotion,
+                    distancePx = transitionDistancePx,
+                )
+            },
+            sizeTransform = { null },
         ) {
             composable(Routes.Home) {
                 HomeScreen(
@@ -416,7 +431,7 @@ private fun NavHostController.navigateToNotificationRoute(route: String) {
             saveState = true
         }
         launchSingleTop = true
-        restoreState = mainDestinations.any { it.route == route }
+        restoreState = isMainDestinationRoute(route)
     }
 }
 
@@ -427,89 +442,4 @@ internal fun String.invalidatesBookingsFromNotification(): Boolean {
         route == Routes.Loyalty ||
         route == Routes.History ||
         route.startsWith("rating/")
-}
-
-@Composable
-private fun SudsBottomBar(
-    currentRoute: String?,
-    onDestinationClick: (String) -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-    ) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .height(80.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                mainDestinations.forEach { destination ->
-                    SudsBottomBarItem(
-                        destination = destination,
-                        selected = currentRoute == destination.route,
-                        onClick = { onDestinationClick(destination.route) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SudsBottomBarItem(
-    destination: MainNavDestination,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val iconColor = if (selected) {
-        MaterialTheme.colorScheme.tertiary
-    } else {
-        MaterialTheme.colorScheme.outline
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .selectable(
-                selected = selected,
-                onClick = onClick,
-                role = Role.Tab,
-            )
-            .semantics {
-                contentDescription = destination.label
-            }
-            .padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = destination.icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(24.dp),
-        )
-        Text(
-            text = destination.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = contentColor,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-            softWrap = false,
-        )
-    }
 }

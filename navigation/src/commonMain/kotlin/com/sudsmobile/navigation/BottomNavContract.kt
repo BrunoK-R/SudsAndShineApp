@@ -7,10 +7,66 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 
-val mainDestinations = listOf(
+val mainTabDestinations = listOf(
     MainNavDestination(Routes.Home, "Início", Icons.Filled.Home),
-    MainNavDestination(Routes.Products, "Marcar", Icons.Filled.CalendarMonth),
-    MainNavDestination(Routes.Cart, "Marcações", Icons.Filled.History),
-    MainNavDestination(Routes.Loyalty, "Recompensas", Icons.Filled.CardGiftcard),
+    MainNavDestination(Routes.Cart, "Marcações", Icons.Filled.History, compactLabel = "Agenda"),
+    MainNavDestination(Routes.Loyalty, "Recompensas", Icons.Filled.CardGiftcard, compactLabel = "Prémios"),
     MainNavDestination(Routes.Profile, "Perfil", Icons.Filled.Person),
 )
+
+val bookingDestination = MainNavDestination(
+    route = Routes.Products,
+    label = "Marcar lavagem",
+    icon = Icons.Filled.CalendarMonth,
+    compactLabel = "Marcar",
+)
+
+/** Visual order in the shell, including the raised booking action. */
+val mainDestinations = listOf(
+    mainTabDestinations[0],
+    mainTabDestinations[1],
+    bookingDestination,
+    mainTabDestinations[2],
+    mainTabDestinations[3],
+)
+
+enum class MainNavigationSelection {
+    Home,
+    Bookings,
+    Booking,
+    Rewards,
+    Profile,
+}
+
+enum class NavigationTransitionDirection {
+    Backward,
+    None,
+    Forward,
+}
+
+fun mainNavigationSelection(route: String?): MainNavigationSelection? = when (route) {
+    Routes.Home -> MainNavigationSelection.Home
+    Routes.Cart -> MainNavigationSelection.Bookings
+    Routes.Products -> MainNavigationSelection.Booking
+    Routes.Loyalty -> MainNavigationSelection.Rewards
+    Routes.Profile -> MainNavigationSelection.Profile
+    else -> null
+}
+
+fun isMainDestinationRoute(route: String?): Boolean = mainNavigationSelection(route) != null
+
+fun navigationTransitionDirection(
+    fromRoute: String?,
+    toRoute: String?,
+): NavigationTransitionDirection {
+    val fromIndex = mainDestinations.indexOfFirst { it.route == fromRoute }
+    val toIndex = mainDestinations.indexOfFirst { it.route == toRoute }
+    if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) {
+        return NavigationTransitionDirection.None
+    }
+    return if (toIndex > fromIndex) {
+        NavigationTransitionDirection.Forward
+    } else {
+        NavigationTransitionDirection.Backward
+    }
+}
