@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -81,6 +82,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.data.booking.BookingAvailabilityDay
 import com.sudsmobile.data.booking.BookingAvailabilityMonth
 import com.sudsmobile.data.booking.BookingAvailabilitySlot
+import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsCustomerTheme
+import com.sudsmobile.shared.ui.SudsBrandBackground
+import com.sudsmobile.shared.ui.SudsCompactTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 private enum class BookingsTab(val label: String) {
@@ -151,26 +156,24 @@ fun CartScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        BookingsHeader()
+    SudsCustomerTheme {
+        SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                BookingsHeader()
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(
-                start = 24.dp,
-                top = 16.dp,
-                end = 24.dp,
-                bottom = contentPadding.calculateBottomPadding() + 24.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            bookingsContent(
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(
+                        start = 24.dp,
+                        top = 16.dp,
+                        end = 24.dp,
+                        bottom = contentPadding.calculateBottomPadding() + 24.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    bookingsContent(
                 uiState = uiState,
                 businessInfoState = businessInfoState,
                 cancellationState = cancellationState,
@@ -264,44 +267,24 @@ fun CartScreen(
                     }
                     viewModel.clearCancellationState()
                 },
-                onConfirmCancellation = viewModel::cancelBooking,
-            )
+                        onConfirmCancellation = viewModel::cancelBooking,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun BookingsHeader() {
-    Column(
+    SudsCompactTopBar(
+        title = "Marcações",
+        eyebrow = "A sua agenda",
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 28.dp, bottom = 32.dp),
-    ) {
-        Text(
-            text = "Marcações",
-            modifier = Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Gerir as suas marcações",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+            .statusBarsPadding()
+            .padding(top = 8.dp, bottom = 4.dp)
+            .semantics { heading() },
+    )
 }
 
 @Composable
@@ -313,9 +296,9 @@ private fun BookingsSegmentedTabs(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        color = SudsColors.glass,
         shape = RoundedCornerShape(14.dp),
-        shadowElevation = 4.dp,
+        shadowElevation = 0.dp,
     ) {
         Row(
             modifier = Modifier.padding(4.dp),
@@ -330,9 +313,9 @@ private fun BookingsSegmentedTabs(
                         .clip(RoundedCornerShape(10.dp))
                         .background(
                             if (selected) {
-                                MaterialTheme.colorScheme.tertiary
+                                SudsColors.cyan
                             } else {
-                                MaterialTheme.colorScheme.surfaceContainerLowest
+                                SudsColors.transparent
                             },
                         )
                         .clickable(role = Role.Tab) { onTabSelected(tab) }
@@ -346,9 +329,9 @@ private fun BookingsSegmentedTabs(
                         text = tab.label,
                         style = MaterialTheme.typography.labelLarge,
                         color = if (selected) {
-                            MaterialTheme.colorScheme.onTertiary
+                            SudsColors.onAction
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            SudsColors.onBrandMuted
                         },
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                     )

@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -59,7 +59,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
@@ -70,6 +69,10 @@ import coil3.compose.AsyncImage
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.auth.AuthUser
+import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsCustomerTheme
+import com.sudsmobile.shared.ui.SudsBrandBackground
+import com.sudsmobile.shared.ui.SudsCompactTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 private data class ProfileStat(
@@ -352,15 +355,23 @@ private fun ProfileScreenContent(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-    ) {
-        if (authenticatedUser != null) {
-            ProfileHeader(
+    SudsCustomerTheme {
+        SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+            ) {
+                SudsCompactTopBar(
+                    title = "Perfil",
+                    eyebrow = "A sua conta",
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(top = 8.dp, bottom = 4.dp),
+                )
+                if (authenticatedUser != null) {
+                    ProfileHeader(
                 user = authenticatedUser,
                 statsState = statsState,
                 preferencesState = preferencesState,
@@ -368,21 +379,21 @@ private fun ProfileScreenContent(
                 onRetryStats = onRetryStats,
                 onOpenRewards = onOpenRewards,
                 onEditPhoto = { showProfilePhotoActions = true },
-            )
-        } else if (isRestoringSession) {
-            RestoringProfileHeader()
-        } else {
-            GuestProfileHeader(onRequestSignIn = onRequestSignIn)
-        }
+                    )
+                } else if (isRestoringSession) {
+                    RestoringProfileHeader()
+                } else {
+                    GuestProfileHeader(onRequestSignIn = onRequestSignIn)
+                }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            NearestLocationCard(
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    NearestLocationCard(
                 businessInfoState = businessInfoState,
                 onRetryBusinessInfo = onRetryBusinessInfo,
                 onOpenMaps = { mapsUri -> uriHandler.openUri(mapsUri) },
@@ -432,12 +443,13 @@ private fun ProfileScreenContent(
             } else {
                 GuestProfileCard(onRequestSignIn = onRequestSignIn)
             }
-            AppVersionText()
+                    AppVersionText()
+                }
+            }
         }
-    }
 
-    if (showProfilePhotoActions) {
-        ProfilePhotoActionsDialog(
+        if (showProfilePhotoActions) {
+            ProfilePhotoActionsDialog(
             hasPhoto = profilePhotoState.hasPhotoOverride() ?: preferencesState.photoUrlOrBlank().isNotBlank(),
             saving = profilePhotoSaving,
             onChooseFromGallery = launchProfileImagePicker,
@@ -446,11 +458,11 @@ private fun ProfileScreenContent(
                 onRemoveProfilePhoto()
             },
             onDismiss = { if (!profilePhotoSaving) showProfilePhotoActions = false },
-        )
-    }
+            )
+        }
 
-    pendingCropImage?.let { sourceImage ->
-        ProfileAvatarCropDialog(
+        pendingCropImage?.let { sourceImage ->
+            ProfileAvatarCropDialog(
             sourceImage = sourceImage,
             onDismissRequest = { pendingCropImage = null },
             onCropApplied = { croppedBytes ->
@@ -461,13 +473,13 @@ private fun ProfileScreenContent(
                 pendingCropImage = null
                 localProfilePhotoError = message
             },
-        )
-    }
+            )
+        }
 
-    val remotePhotoError = profilePhotoState as? ProfilePhotoUiState.Error
-    val photoErrorMessage = localProfilePhotoError ?: remotePhotoError?.message
-    if (photoErrorMessage != null) {
-        ProfilePhotoErrorDialog(
+        val remotePhotoError = profilePhotoState as? ProfilePhotoUiState.Error
+        val photoErrorMessage = localProfilePhotoError ?: remotePhotoError?.message
+        if (photoErrorMessage != null) {
+            ProfilePhotoErrorDialog(
             message = photoErrorMessage,
             retryable = localProfilePhotoError == null && remotePhotoError?.retryable == true,
             onRetry = onRetryProfilePhoto,
@@ -475,7 +487,8 @@ private fun ProfileScreenContent(
                 localProfilePhotoError = null
                 onDismissProfilePhotoError()
             },
-        )
+            )
+        }
     }
 }
 
@@ -498,18 +511,8 @@ private fun ProfileHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
             .padding(horizontal = 24.dp)
-            .padding(top = 28.dp, bottom = 40.dp),
+            .padding(top = 8.dp, bottom = 20.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -576,13 +579,13 @@ private fun ProfileHeader(
                 Text(
                     text = displayName,
                     style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    color = SudsColors.onBrand,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = user.email,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.62f),
+                    color = SudsColors.onBrandMuted,
                 )
             }
         }
@@ -618,18 +621,8 @@ private fun RestoringProfileHeader() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
             .padding(horizontal = 24.dp)
-            .padding(top = 28.dp, bottom = 36.dp),
+            .padding(top = 8.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(
@@ -640,7 +633,7 @@ private fun RestoringProfileHeader() {
             Surface(
                 modifier = Modifier.size(72.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
+                color = SudsColors.glass,
                 contentColor = MaterialTheme.colorScheme.tertiaryContainer,
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -655,13 +648,13 @@ private fun RestoringProfileHeader() {
                 Text(
                     text = "A validar sessão",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    color = SudsColors.onBrand,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "Estamos a recuperar a sua conta neste dispositivo.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.66f),
+                    color = SudsColors.onBrandMuted,
                 )
             }
         }
@@ -673,18 +666,8 @@ private fun GuestProfileHeader(onRequestSignIn: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
             .padding(horizontal = 24.dp)
-            .padding(top = 28.dp, bottom = 36.dp),
+            .padding(top = 8.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(
@@ -695,7 +678,7 @@ private fun GuestProfileHeader(onRequestSignIn: () -> Unit) {
             Surface(
                 modifier = Modifier.size(72.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
+                color = SudsColors.glass,
                 contentColor = MaterialTheme.colorScheme.tertiaryContainer,
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -710,13 +693,13 @@ private fun GuestProfileHeader(onRequestSignIn: () -> Unit) {
                 Text(
                     text = "Área pessoal",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    color = SudsColors.onBrand,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "Entre para ver os seus dados e marcações.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.66f),
+                    color = SudsColors.onBrandMuted,
                 )
             }
         }
@@ -975,8 +958,8 @@ private fun ProfileStatCard(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        color = SudsColors.glass,
+        contentColor = SudsColors.onBrand,
     ) {
         Column(
             modifier = Modifier
@@ -991,7 +974,7 @@ private fun ProfileStatCard(
                     color = if (stat.highlighted) {
                         MaterialTheme.colorScheme.tertiaryContainer
                     } else {
-                        MaterialTheme.colorScheme.inverseOnSurface
+                        SudsColors.onBrand
                     },
                     strokeWidth = 2.dp,
                 )
@@ -1002,7 +985,7 @@ private fun ProfileStatCard(
                     color = if (stat.highlighted) {
                         MaterialTheme.colorScheme.tertiaryContainer
                     } else {
-                        MaterialTheme.colorScheme.inverseOnSurface
+                        SudsColors.onBrand
                     },
                     fontWeight = FontWeight.Bold,
                 )
@@ -1010,7 +993,7 @@ private fun ProfileStatCard(
             Text(
                 text = stat.label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.64f),
+                color = SudsColors.onBrandMuted,
                 textAlign = TextAlign.Center,
             )
         }
@@ -1041,8 +1024,8 @@ private fun ProfileStatsStatus(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f),
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        color = SudsColors.glass,
+        contentColor = SudsColors.onBrand,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1053,7 +1036,7 @@ private fun ProfileStatsStatus(
                 text = message,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
+                color = SudsColors.onBrandMuted,
             )
             if (retryable) {
                 TextButton(

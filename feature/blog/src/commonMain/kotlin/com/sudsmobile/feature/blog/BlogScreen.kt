@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -50,14 +50,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsCustomerTheme
+import com.sudsmobile.shared.ui.SudsBrandBackground
+import com.sudsmobile.shared.ui.SudsCompactTopBar
+import com.sudsmobile.shared.ui.SudsGlassCard
 import org.koin.compose.viewmodel.koinViewModel
 
 @Suppress("DEPRECATION")
@@ -85,23 +91,24 @@ fun BlogScreen(
         entitlementsViewModel.refreshForSession()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-    ) {
-        LoyaltyHeader()
+    SudsCustomerTheme {
+        SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+            ) {
+                LoyaltyHeader()
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            LoyaltyContent(
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    LoyaltyContent(
                 uiState = uiState,
                 referralUiState = referralUiState,
                 entitlementsUiState = entitlementsUiState,
@@ -116,43 +123,24 @@ fun BlogScreen(
                     referralViewModel.markShareCopied()
                 },
                 onRequestSignIn = onRequestSignIn,
-                onBookWash = onBookWash,
-            )
+                        onBookWash = onBookWash,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun LoyaltyHeader() {
-    Column(
+    SudsCompactTopBar(
+        title = "Recompensas",
+        eyebrow = "Clube de brilho",
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 28.dp, bottom = 32.dp),
-    ) {
-        Text(
-            text = "Recompensas",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Acompanhe o seu progresso",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+            .statusBarsPadding()
+            .padding(top = 8.dp, bottom = 4.dp)
+            .semantics { heading() },
+    )
 }
 
 @Composable
@@ -948,11 +936,9 @@ private fun LoyaltyStatusCard(
 
 @Composable
 private fun MainProgressCard(progress: LoyaltyProgressUi) {
-    Card(
+    SudsGlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiary),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-        shape = RoundedCornerShape(18.dp),
+        containerColor = SudsColors.glassStrong,
     ) {
         Box {
             Icon(
@@ -962,11 +948,10 @@ private fun MainProgressCard(progress: LoyaltyProgressUi) {
                     .align(Alignment.TopEnd)
                     .padding(top = 12.dp, end = 8.dp)
                     .size(128.dp),
-                tint = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.10f),
+                tint = SudsColors.champagne.copy(alpha = 0.10f),
             )
 
             Column(
-                modifier = Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 Row(
@@ -976,13 +961,13 @@ private fun MainProgressCard(progress: LoyaltyProgressUi) {
                     Icon(
                         imageVector = Icons.Filled.CardGiftcard,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onTertiary,
+                        tint = SudsColors.champagne,
                         modifier = Modifier.size(26.dp),
                     )
                     Text(
                         text = "Programa de Fidelização",
                         style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onTertiary,
+                        color = SudsColors.onBrand,
                         fontWeight = FontWeight.Bold,
                     )
                 }
@@ -1009,15 +994,15 @@ private fun MainProgressCard(progress: LoyaltyProgressUi) {
                             .fillMaxWidth()
                             .height(10.dp)
                             .clip(CircleShape),
-                        color = MaterialTheme.colorScheme.onTertiary,
-                        trackColor = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.20f),
+                        color = SudsColors.champagne,
+                        trackColor = SudsColors.glassStrong,
                     )
                 }
 
                 Text(
                     text = progress.progressMessage(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.90f),
+                    color = SudsColors.onBrandMuted,
                 )
             }
         }
@@ -1037,12 +1022,12 @@ private fun ProgressStat(
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.78f),
+            color = SudsColors.onBrandMuted,
         )
         Text(
             text = value,
             style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onTertiary,
+            color = SudsColors.onBrand,
             fontWeight = FontWeight.Bold,
         )
     }
@@ -1050,20 +1035,16 @@ private fun ProgressStat(
 
 @Composable
 private fun StampGridCard(progress: LoyaltyProgressUi) {
-    Card(
+    SudsGlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-        shape = RoundedCornerShape(18.dp),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 text = "Seus Selos",
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = SudsColors.onBrand,
                 fontWeight = FontWeight.Bold,
             )
 
@@ -1093,38 +1074,27 @@ private fun StampCell(
     earned: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier.height(56.dp),
-        color = if (earned) {
-            MaterialTheme.colorScheme.tertiary
-        } else {
-            MaterialTheme.colorScheme.surfaceContainer
-        },
-        contentColor = if (earned) {
-            MaterialTheme.colorScheme.onTertiary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        shape = RoundedCornerShape(16.dp),
-        border = if (earned) {
-            null
-        } else {
-            CardDefaults.outlinedCardBorder()
-        },
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            if (earned) {
-                Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
-                    contentDescription = "Selo ganho",
-                    modifier = Modifier.size(26.dp),
-                )
-            } else {
-                Text(
-                    text = "${index + 1}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Surface(
+            modifier = Modifier.size(44.dp),
+            color = if (earned) SudsColors.champagne else SudsColors.glassStrong,
+            contentColor = if (earned) SudsColors.onAction else SudsColors.onBrandMuted,
+            shape = CircleShape,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                if (earned) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = "Selo ganho",
+                        modifier = Modifier.size(22.dp),
+                    )
+                } else {
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }
