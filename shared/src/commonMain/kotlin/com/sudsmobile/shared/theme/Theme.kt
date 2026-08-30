@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryLight,
@@ -85,6 +86,7 @@ private val DarkColorScheme = darkColorScheme(
 fun SudsAndShineTheme(
     darkTheme: Boolean = false,
     dynamicColor: Boolean = false,
+    motionPreferences: SudsMotionPreferences? = null,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
@@ -93,9 +95,14 @@ fun SudsAndShineTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = sudsTypography(),
-        content = content,
-    )
+    val resolvedMotionPreferences = motionPreferences ?: rememberSudsMotionPreferences()
+
+    CompositionLocalProvider(LocalSudsMotionPreferences provides resolvedMotionPreferences) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = sudsTypography(),
+            shapes = SudsShapes.material,
+            content = content,
+        )
+    }
 }

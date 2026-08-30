@@ -2,6 +2,31 @@ package com.sudsmobile.shared.theme
 
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Customer-facing brand colours. These are intentionally separate from the
+ * Material colour schemes below so legacy and admin surfaces can migrate
+ * independently.
+ */
+object SudsColors {
+    val ink = Color(0xFF07151F)
+    val navy = Color(0xFF102C3C)
+    val navyElevated = Color(0xFF183D50)
+    val cyan = Color(0xFF54D8E8)
+    val cyanMuted = Color(0xFF9AE8EF)
+    val champagne = Color(0xFFF4D57A)
+    val glass = Color(0x1FFFFFFF)
+    val glassStrong = Color(0x2EFFFFFF)
+    val glassBorder = Color(0x38FFFFFF)
+    val onBrand = Color(0xFFF7FBFD)
+    val onBrandMuted = Color(0xB8F7FBFD)
+    val onAction = Color(0xFF05232A)
+    val success = Color(0xFF75D6A7)
+    val warning = Color(0xFFFFC56E)
+    val error = Color(0xFFFF9B9B)
+    val scrim = Color(0x99030D13)
+    val transparent = Color(0x00000000)
+}
+
 internal val PrimaryLight = Color(0xFF36618E)
 internal val OnPrimaryLight = Color(0xFFFFFFFF)
 internal val PrimaryContainerLight = Color(0xFFD2E4FF)
