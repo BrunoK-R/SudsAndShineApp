@@ -64,6 +64,22 @@ class HomeLayoutModelTest {
         )
     }
 
+    @Test
+    fun pixelReferenceFixtureKeepsAcceptanceCopyAndOrderDeterministic() {
+        val fixture = homePixelReferenceState()
+
+        assertEquals("Olá, Bruno", fixture.identity.greeting)
+        assertEquals("Leiria", fixture.homeHeaderLocationLabel())
+        assertEquals("Lavagem Premium", fixture.nextBooking?.service)
+        assertEquals("Ter, 1 de setembro", fixture.nextBooking?.date)
+        assertEquals("10:30", fixture.nextBooking?.time)
+        assertEquals(7, fixture.loyalty.currentWashes)
+        assertEquals(
+            listOf("Exterior", "Completa", "Detailing"),
+            fixture.featuredServices.map(HomeFeaturedServiceUi::name),
+        )
+    }
+
     private fun homeStates(): List<HomeUiState> = listOf(
         HomeUiState.Idle,
         HomeUiState.Loading,

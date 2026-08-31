@@ -55,6 +55,30 @@ fun mainNavigationSelection(route: String?): MainNavigationSelection? = when (ro
 
 fun isMainDestinationRoute(route: String?): Boolean = mainNavigationSelection(route) != null
 
+internal fun navigationIndicatorOffset(
+    totalWidth: Float,
+    visualSlot: Int,
+    indicatorSize: Float,
+): Float {
+    val slotWidth = totalWidth / mainDestinations.size
+    return (slotWidth * visualSlot) + ((slotWidth - indicatorSize) / 2f)
+}
+
+internal fun navigationIndicatorVerticalOffset(
+    totalHeight: Float,
+    topPadding: Float,
+    bottomPadding: Float,
+    iconSize: Float,
+    labelLineHeight: Float,
+    indicatorSize: Float,
+): Float {
+    val availableHeight = totalHeight - topPadding - bottomPadding
+    val contentHeight = iconSize + labelLineHeight
+    val iconTop = topPadding + ((availableHeight - contentHeight) / 2f)
+    val iconCenter = iconTop + (iconSize / 2f)
+    return iconCenter - (indicatorSize / 2f)
+}
+
 fun navigationTransitionDirection(
     fromRoute: String?,
     toRoute: String?,

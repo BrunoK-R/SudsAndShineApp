@@ -64,52 +64,42 @@ fun SplashScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = (-24).dp),
+                .offset(y = (-18).dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Image(
-                painter = painterResource(Res.drawable.suds_splash_mark),
-                contentDescription = null,
-                modifier = Modifier.size(246.dp),
-                contentScale = ContentScale.Fit,
-            )
+            SplashBrandEmblem()
+            Spacer(Modifier.height(26.dp))
 
             Text(
                 text = "Suds & Shine",
                 color = SplashWhite,
-                fontSize = 30.sp,
+                fontSize = 34.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = (-0.7).sp,
-                lineHeight = 36.sp,
+                letterSpacing = (-0.9).sp,
+                lineHeight = 40.sp,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "SOLUTIONS",
-                color = SplashBlue,
-                fontSize = 12.sp,
+                color = Color(0xFFFFD66B),
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 4.sp,
+                letterSpacing = 3.5.sp,
                 lineHeight = 18.sp,
                 textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(18.dp))
-            Surface(
-                modifier = Modifier
-                    .width(40.dp)
-                    .height(2.dp),
-                color = SplashBlue,
-                shape = RoundedCornerShape(1.dp),
-            ) {}
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(20.dp))
+            SplashSignatureRule()
+            Spacer(Modifier.height(13.dp))
             Text(
                 text = "LAVAGEM AUTOMÓVEL  ·  DETAILING",
-                modifier = Modifier.alpha(0.68f),
+                modifier = Modifier.alpha(0.62f),
                 color = SplashWhite,
-                fontSize = 10.sp,
+                fontSize = 9.sp,
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.35.sp,
-                lineHeight = 15.sp,
+                letterSpacing = 1.25.sp,
+                lineHeight = 14.sp,
                 textAlign = TextAlign.Center,
             )
         }
@@ -119,6 +109,42 @@ fun SplashScreen(
                 .align(Alignment.BottomCenter)
                 .offset(y = (-48).dp),
         )
+    }
+}
+
+@Composable
+private fun SplashBrandEmblem() {
+    Image(
+        painter = painterResource(Res.drawable.suds_splash_mark),
+        contentDescription = null,
+        modifier = Modifier.size(216.dp),
+        contentScale = ContentScale.Fit,
+    )
+}
+
+@Composable
+private fun SplashSignatureRule() {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            modifier = Modifier.size(4.dp),
+            color = SplashBlue.copy(alpha = 0.65f),
+            shape = CircleShape,
+        ) {}
+        Surface(
+            modifier = Modifier
+                .width(38.dp)
+                .height(2.dp),
+            color = SplashBlue,
+            shape = RoundedCornerShape(1.dp),
+        ) {}
+        Surface(
+            modifier = Modifier.size(4.dp),
+            color = SplashBlue.copy(alpha = 0.65f),
+            shape = CircleShape,
+        ) {}
     }
 }
 

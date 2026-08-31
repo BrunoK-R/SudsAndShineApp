@@ -52,6 +52,7 @@ import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsMotion
 import com.sudsmobile.shared.theme.SudsShapes
 import com.sudsmobile.shared.theme.SudsSpacing
+import com.sudsmobile.shared.ui.SudsWashCalendarIcon
 
 object SudsNavigationBarDefaults {
     val shellHeight = 96.dp
@@ -102,13 +103,26 @@ fun SudsNavigationBar(
             shadowElevation = 14.dp,
         ) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
-                val slotWidth = maxWidth / 5
-                val compact = maxWidth < 360.dp
-                val targetOffset = if (selectedVisualSlot >= 0) {
-                    slotWidth * selectedVisualSlot
-                } else {
-                    slotWidth * 2
-                }
+                val indicatorSize = 38.dp
+                val tabTopPadding = SudsSpacing.xs
+                val tabBottomPadding = SudsSpacing.xxs
+                val tabIconSize = 22.dp
+                val tabLabelLineHeight = 12.dp
+                val compact = maxWidth < 330.dp
+                val indicatorSlot = selectedVisualSlot.takeIf { it >= 0 } ?: 2
+                val targetOffset = navigationIndicatorOffset(
+                    totalWidth = maxWidth.value,
+                    visualSlot = indicatorSlot,
+                    indicatorSize = indicatorSize.value,
+                ).dp
+                val indicatorVerticalOffset = navigationIndicatorVerticalOffset(
+                    totalHeight = maxHeight.value,
+                    topPadding = tabTopPadding.value,
+                    bottomPadding = tabBottomPadding.value,
+                    iconSize = tabIconSize.value,
+                    labelLineHeight = tabLabelLineHeight.value,
+                    indicatorSize = indicatorSize.value,
+                ).dp
                 val indicatorOffset = animateDpAsState(
                     targetValue = targetOffset,
                     animationSpec = if (reduceMotion) {
@@ -131,12 +145,13 @@ fun SudsNavigationBar(
 
                 Box(
                     modifier = Modifier
-                        .offset(x = indicatorOffset.value, y = SudsSpacing.xs)
-                        .width(slotWidth)
-                        .height(32.dp)
-                        .padding(horizontal = SudsSpacing.sm)
+                        .offset(x = indicatorOffset.value, y = indicatorVerticalOffset)
+                        .size(indicatorSize)
                         .alpha(indicatorAlpha.value)
-                        .background(SudsColors.glassStrong, SudsShapes.capsule),
+                        .background(
+                            SudsColors.cyan.copy(alpha = 0.08f),
+                            SudsShapes.capsule,
+                        ),
                 )
 
                 Row(
@@ -277,22 +292,11 @@ private fun SudsBookingNavigationAction(
             ),
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = bookingDestination.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(25.dp),
+                SudsWashCalendarIcon(
+                    tint = SudsColors.onAction,
+                    size = 30.dp,
                 )
             }
         }
-        Text(
-            text = bookingDestination.compactLabel,
-            color = if (selected) SudsColors.cyan else SudsColors.onBrand,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 9.sp,
-                lineHeight = 11.sp,
-            ),
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-        )
     }
 }

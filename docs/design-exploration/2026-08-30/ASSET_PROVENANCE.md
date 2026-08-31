@@ -9,6 +9,26 @@ The pixel-parity pass uses four text-free raster assets generated with the built
 | `shared/.../drawable/suds_service_premium.jpg` | Premium/detailing service |
 | `shared/.../drawable/suds_service_exterior.jpg` | Exterior wash service |
 | `shared/.../drawable/suds_brand_mark.png` | Existing approved Suds & Shine mark, resized for shared UI use |
+| `feature/onboarding/.../drawable/suds_splash_mark.png` | User-selected car-wash mark, prepared on the shared splash navy |
+
+## Splash mark
+
+The splash uses the mark explicitly selected by the user from
+`/Users/mafaldaribeiro/.codex/generated_images/01a05466-a1f9-7ae1-ad5c-4bde0a80b6ff/exec-815685e3-1fa8-4eba-a64e-e24532ec6d13.png`.
+That source contained a checkerboard baked into an RGB image rather than a real alpha channel. A faithful image-generation edit was therefore made to preserve the white car, cyan foam, circular swooshes, and sparkles while replacing only the checkerboard with the app's `#142539` splash background. The resulting production copy was resized to 768 × 768 and its outer edge was blended to exactly `#142539`, preventing a visible bitmap boundary during the native-to-Compose splash handoff.
+
+```text
+Prepare the supplied Suds & Shine car-wash mark as a production splash-screen
+bitmap. Preserve the supplied logo composition faithfully: the same white sports
+car silhouette, deep navy linework, cyan foam bubbles, twin cyan/navy circular
+swooshes, sparkle details, proportions, orientation, and centered scale. Replace
+only the visible gray-and-white checkerboard with one perfectly uniform, flat,
+solid deep navy background color RGB 20,37,57 / hex #142539, extending to every
+edge. No checker pattern, texture, vignette, gradient, shadow, glow, panel, border,
+text, or additional element. Keep the white car opaque bright white and all
+cyan/navy details crisp. Square output with generous navy safe padding and no
+cropped strokes.
+```
 
 ## Final prompt set
 

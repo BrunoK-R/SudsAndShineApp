@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
+import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsSpacing
 import com.sudsmobile.shared.ui.SudsBrandBackground
 import org.koin.compose.viewmodel.koinViewModel
@@ -24,6 +26,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun HomeScreen(
     contentPadding: PaddingValues,
+    visualFixtureEnabled: Boolean = false,
     onBookService: () -> Unit = {},
     onBookSelectedService: (String) -> Unit = { onBookService() },
     onViewServices: () -> Unit = {},
@@ -43,7 +46,7 @@ fun HomeScreen(
 
     HomeScreenContent(
         contentPadding = contentPadding,
-        uiState = uiState,
+        uiState = if (visualFixtureEnabled) homePixelReferenceState() else uiState,
         onBookService = onBookService,
         onBookSelectedService = onBookSelectedService,
         onViewServices = onViewServices,
@@ -89,7 +92,11 @@ internal fun HomeScreenContent(
     val identity = uiState.identityOrDefault()
 
     SudsBrandBackground(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(SudsColors.scrim.copy(alpha = 0.65f)),
+        ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,

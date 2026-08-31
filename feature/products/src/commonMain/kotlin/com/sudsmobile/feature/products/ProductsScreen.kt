@@ -134,6 +134,7 @@ internal val bookingVehicleCategories = listOf(
 @Composable
 fun ProductsScreen(
     contentPadding: PaddingValues,
+    visualFixtureEnabled: Boolean = false,
     initialServiceId: String? = null,
     initialSelectionPreset: BookingSelectionPreset? = null,
     initialServiceRequestKey: Long = 0L,
@@ -160,8 +161,14 @@ fun ProductsScreen(
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        catalogViewModel.loadCatalog()
+    LaunchedEffect(visualFixtureEnabled) {
+        if (!visualFixtureEnabled) catalogViewModel.loadCatalog()
+    }
+
+    val renderedCatalogState = if (visualFixtureEnabled) {
+        bookingPixelReferenceCatalog()
+    } else {
+        catalogState
     }
 
     ProductsScreenContent(
@@ -169,7 +176,7 @@ fun ProductsScreen(
         initialServiceId = initialServiceId,
         initialSelectionPreset = initialSelectionPreset,
         initialServiceRequestKey = initialServiceRequestKey,
-        catalogState = catalogState,
+        catalogState = renderedCatalogState,
         vehiclesState = vehiclesState,
         vehicleRevision = vehicleRevision,
         bookingRevision = bookingRevision,

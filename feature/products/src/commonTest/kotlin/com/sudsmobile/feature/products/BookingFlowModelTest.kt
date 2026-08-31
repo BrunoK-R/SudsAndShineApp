@@ -142,6 +142,41 @@ class BookingFlowModelTest {
         assertEquals(services, services.filteredBy(BookingServiceFilter.All))
     }
 
+    @Test
+    fun compactsReferenceServiceDescriptionsWithoutChangingUnknownCatalogCopy() {
+        assertEquals(
+            "Exterior e interior",
+            service("standard", "Lavagem Standard").bookingReferenceDescription(),
+        )
+        assertEquals(
+            "Acabamento premium",
+            service("premium", "Lavagem Premium").bookingReferenceDescription(),
+        )
+        assertEquals(
+            "Exterior cuidado",
+            service("exterior", "Lavagem Exterior").bookingReferenceDescription(),
+        )
+        assertEquals(
+            "Limpeza sazonal",
+            service("seasonal", "Cuidado sazonal").copy(
+                description = "Limpeza sazonal",
+            ).bookingReferenceDescription(),
+        )
+    }
+
+    @Test
+    fun pixelReferenceCatalogKeepsVisualAcceptanceOrderAndPremiumSelection() {
+        val fixture = bookingPixelReferenceCatalog()
+
+        assertEquals(
+            listOf("standard", "premium", "exterior"),
+            fixture.services.map(ProductServiceUi::id),
+        )
+        assertEquals("premium", preferredBookingServiceId(fixture.services))
+        assertEquals("45 min", fixture.services[1].durationLabel)
+        assertEquals("32,00€", fixture.services[1].passengerPrice)
+    }
+
     private fun service(
         id: String,
         name: String,

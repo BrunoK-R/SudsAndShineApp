@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.math.abs
 
 class BottomNavContractTest {
 
@@ -57,5 +58,35 @@ class BottomNavContractTest {
     fun compactPortugueseLabelsRemainMeaningful() {
         assertEquals("Agenda", mainTabDestinations.first { it.route == Routes.Cart }.compactLabel)
         assertEquals("Prémios", mainTabDestinations.first { it.route == Routes.Loyalty }.compactLabel)
+    }
+
+    @Test
+    fun selectedIndicatorCenterMatchesEveryVisualIconSlot() {
+        val totalWidth = 377f
+        val indicatorSize = 38f
+        val slotWidth = totalWidth / 5f
+
+        listOf(0, 1, 3, 4).forEach { slot ->
+            val offset = navigationIndicatorOffset(totalWidth, slot, indicatorSize)
+            val indicatorCenter = offset + (indicatorSize / 2f)
+            val iconSlotCenter = (slotWidth * slot) + (slotWidth / 2f)
+
+            assertTrue(abs(indicatorCenter - iconSlotCenter) < 0.001f)
+        }
+    }
+
+    @Test
+    fun selectedIndicatorCenterMatchesTabIconVertically() {
+        val indicatorOffset = navigationIndicatorVerticalOffset(
+            totalHeight = 72f,
+            topPadding = 4f,
+            bottomPadding = 2f,
+            iconSize = 22f,
+            labelLineHeight = 12f,
+            indicatorSize = 38f,
+        )
+
+        assertEquals(12f, indicatorOffset)
+        assertEquals(31f, indicatorOffset + 19f)
     }
 }

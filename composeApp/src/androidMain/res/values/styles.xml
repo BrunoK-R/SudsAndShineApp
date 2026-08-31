@@ -11,6 +11,6 @@
     </style>
 
     <style name="Theme.SudsAndShine.Starting" parent="Theme.SudsAndShine">
-        <item name="android:windowBackground">@drawable/suds_launch_screen</item>
+        <item name="android:windowBackground">@color/launcher_background</item>
     </style>
 </resources>

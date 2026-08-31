@@ -19,6 +19,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun App(
     pendingNotificationRoute: String? = null,
     onNotificationRouteConsumed: () -> Unit = {},
+    visualFixtureEnabled: Boolean = false,
 ) {
     val onboardingGateViewModel: OnboardingGateViewModel = koinViewModel()
     val onboardingGateState by onboardingGateViewModel.uiState.collectAsStateWithLifecycle()
@@ -30,6 +31,7 @@ fun App(
             onResetOnboardingPreference = onboardingGateViewModel::resetOnboardingPreference,
             pendingNotificationRoute = pendingNotificationRoute,
             onNotificationRouteConsumed = onNotificationRouteConsumed,
+            visualFixtureEnabled = visualFixtureEnabled,
         )
     }
 }
@@ -41,6 +43,7 @@ private fun AppContent(
     onResetOnboardingPreference: suspend () -> Unit,
     pendingNotificationRoute: String?,
     onNotificationRouteConsumed: () -> Unit,
+    visualFixtureEnabled: Boolean,
 ) {
     var splashComplete by rememberSaveable { mutableStateOf(false) }
 
@@ -53,6 +56,7 @@ private fun AppContent(
             onResetOnboardingPreference = onResetOnboardingPreference,
             pendingNotificationRoute = pendingNotificationRoute,
             onNotificationRouteConsumed = onNotificationRouteConsumed,
+            visualFixtureEnabled = visualFixtureEnabled,
             renderOnboarding = { actionsEnabled, onSkip, onComplete ->
                 DefaultOnboardingScreen(
                     actionsEnabled = actionsEnabled,
@@ -74,6 +78,7 @@ private fun AppPreview() {
             onResetOnboardingPreference = {},
             pendingNotificationRoute = null,
             onNotificationRouteConsumed = {},
+            visualFixtureEnabled = false,
         )
     }
 }

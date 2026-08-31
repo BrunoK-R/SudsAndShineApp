@@ -33,21 +33,25 @@ fun SudsBrandBackground(
     Box(
         modifier = modifier.background(
             Brush.verticalGradient(
-                colors = listOf(SudsColors.ink, SudsColors.navy, SudsColors.navyElevated),
+                colors = listOf(
+                    SudsColors.brandBackgroundTop,
+                    SudsColors.brandBackgroundMiddle,
+                    SudsColors.brandBackgroundBottom,
+                ),
             ),
         ),
         contentAlignment = contentAlignment,
     ) {
         Canvas(Modifier.fillMaxSize()) {
             drawCircle(
-                color = SudsColors.cyan.copy(alpha = 0.08f),
-                radius = size.minDimension * 0.58f,
-                center = Offset(size.width * 0.94f, size.height * 0.08f),
+                color = SudsColors.cyan.copy(alpha = 0.035f),
+                radius = size.minDimension * 0.34f,
+                center = Offset(size.width * 1.04f, size.height * 0.11f),
             )
             drawCircle(
-                color = SudsColors.champagne.copy(alpha = 0.05f),
-                radius = size.minDimension * 0.38f,
-                center = Offset(size.width * 0.04f, size.height * 0.72f),
+                color = SudsColors.champagne.copy(alpha = 0.018f),
+                radius = size.minDimension * 0.28f,
+                center = Offset(size.width * -0.12f, size.height * 0.82f),
             )
         }
         content()

@@ -69,6 +69,7 @@ import com.sudsmobile.shared.ui.SudsBrandMark
 import com.sudsmobile.shared.ui.SudsSectionHeader
 import com.sudsmobile.shared.ui.SudsStatus
 import com.sudsmobile.shared.ui.SudsStatusCard
+import com.sudsmobile.shared.ui.SudsWashCalendarIcon
 import com.sudsmobile.shared.ui.automotivePhotoKindForKey
 
 @Composable
@@ -199,24 +200,20 @@ private fun HomeNotificationAction(
             }
             .clickable(enabled = enabled, onClick = onClick),
         shape = CircleShape,
-        color = SudsColors.glassStrong,
-        border = androidx.compose.foundation.BorderStroke(
-            width = SudsSpacing.hairline,
-            color = SudsColors.glassBorder,
-        ),
+        color = Color.Transparent,
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = Icons.Filled.NotificationsNone,
                 contentDescription = null,
                 tint = SudsColors.onBrand,
-                modifier = Modifier.size(23.dp),
+                modifier = Modifier.size(26.dp),
             )
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 10.dp, end = 10.dp)
-                    .size(6.dp)
+                    .padding(top = 8.dp, end = 8.dp)
+                    .size(7.dp)
                     .clip(CircleShape)
                     .background(SudsColors.champagne),
             )
@@ -340,20 +337,20 @@ private fun UpcomingBookingHero(
             )
             Column(
                 modifier = Modifier
-                    .fillMaxWidth(0.68f)
+                    .fillMaxWidth(0.58f)
                     .align(Alignment.CenterStart)
                     .padding(SudsSpacing.xl),
                 verticalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
             ) {
                 Text(
                     text = "PRÓXIMA LAVAGEM",
-                    color = SudsColors.champagne,
+                    color = SudsColors.cyanMuted,
                     style = MaterialTheme.typography.labelMedium,
                 )
                 Text(
                     text = booking.service,
                     color = SudsColors.onBrand,
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.headlineLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -368,7 +365,7 @@ private fun UpcomingBookingHero(
                     Icon(
                         imageVector = Icons.Filled.CalendarMonth,
                         contentDescription = null,
-                        tint = SudsColors.cyanMuted,
+                        tint = SudsColors.champagne,
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
@@ -384,14 +381,14 @@ private fun UpcomingBookingHero(
                 ) {
                     Text(
                         text = "Ver detalhes",
-                        color = SudsColors.onBrand,
+                        color = SudsColors.cyanMuted,
                         style = MaterialTheme.typography.labelLarge,
                     )
                     Spacer(Modifier.width(SudsSpacing.xs))
                     Icon(
                         imageVector = Icons.Filled.ChevronRight,
                         contentDescription = null,
-                        tint = SudsColors.champagne,
+                        tint = SudsColors.cyanMuted,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -407,17 +404,19 @@ private fun UpcomingBookingHero(
                 }
                 .clickable(onClick = onBookService),
             shape = SudsShapes.capsule,
-            color = SudsColors.cyan,
+            color = Color.Transparent,
             contentColor = SudsColors.onAction,
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = SudsSpacing.xl),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.horizontalGradient(SudsColors.actionGradient))
+                    .padding(horizontal = SudsSpacing.xl),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Filled.CalendarMonth,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
+                SudsWashCalendarIcon(
+                    tint = SudsColors.onAction,
+                    size = 26.dp,
                 )
                 Text(
                     text = "Marcar lavagem",
@@ -538,7 +537,7 @@ private fun HomeLoyaltyBubble(
             horizontal = SudsSpacing.md,
             vertical = SudsSpacing.sm,
         ),
-        containerColor = SudsColors.glassStrong,
+        containerColor = SudsColors.ink.copy(alpha = 0.84f),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -583,12 +582,12 @@ private fun HomeLoyaltyBubble(
                             .size(16.dp)
                             .clip(CircleShape)
                             .background(
-                                if (completed) SudsColors.champagne
+                                if (completed) SudsColors.cyan.copy(alpha = 0.16f)
                                 else SudsColors.glassStrong,
                             )
                             .border(
                                 width = SudsSpacing.hairline,
-                                color = if (completed) SudsColors.champagne else SudsColors.glassBorder,
+                                color = if (completed) SudsColors.cyan else SudsColors.glassBorder,
                                 shape = CircleShape,
                             ),
                         contentAlignment = Alignment.Center,
@@ -597,7 +596,7 @@ private fun HomeLoyaltyBubble(
                             Icon(
                                 imageVector = Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                tint = SudsColors.onAction,
+                                tint = SudsColors.cyanMuted,
                                 modifier = Modifier.size(9.dp),
                             )
                         }
@@ -632,6 +631,7 @@ internal fun HomeFeaturedServicesSection(
                     label = "Ver todos",
                     onClick = onViewServices,
                     compact = true,
+                    contentColor = SudsColors.champagne,
                 )
             },
         )
@@ -884,11 +884,12 @@ private fun HomeTextAction(
     onClick: () -> Unit,
     trailingIcon: Boolean = false,
     compact: Boolean = false,
+    contentColor: Color = SudsColors.cyan,
 ) {
     TextButton(
         onClick = onClick,
         modifier = Modifier.heightIn(min = SudsSpacing.minimumTouchTarget),
-        colors = ButtonDefaults.textButtonColors(contentColor = SudsColors.cyan),
+        colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
         contentPadding = PaddingValues(
             horizontal = if (compact) SudsSpacing.xs else SudsSpacing.sm,
             vertical = SudsSpacing.xs,

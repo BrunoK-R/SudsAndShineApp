@@ -98,7 +98,7 @@ private fun BookingStepHeader(
                 .clickable(role = Role.Button, onClick = onBack)
                 .semantics { contentDescription = "Voltar" },
             shape = CircleShape,
-            color = SudsColors.glassStrong,
+            color = SudsColors.glass,
             border = BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder),
         ) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

@@ -53,6 +53,7 @@ import org.koin.compose.koinInject
 @Composable
 fun MainNavigation(
     onRequestSignIn: () -> Unit,
+    visualFixtureEnabled: Boolean = false,
     pendingNotificationRoute: String? = null,
     onNotificationRouteConsumed: () -> Unit = {},
 ) {
@@ -187,6 +188,7 @@ fun MainNavigation(
             composable(Routes.Home) {
                 HomeScreen(
                     contentPadding = paddingValues,
+                    visualFixtureEnabled = visualFixtureEnabled,
                     onBookService = { navigateToBooking() },
                     onBookSelectedService = { serviceId -> navigateToBooking(serviceId) },
                     onViewServices = { navController.navigate(Routes.Services) },
@@ -206,6 +208,7 @@ fun MainNavigation(
             composable(Routes.Products) {
                 ProductsScreen(
                     contentPadding = paddingValues,
+                    visualFixtureEnabled = visualFixtureEnabled,
                     initialServiceId = initialBookingServiceId,
                     initialSelectionPreset = initialBookingSelectionPreset,
                     initialServiceRequestKey = initialBookingRequestKey,

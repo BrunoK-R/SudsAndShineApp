@@ -14,7 +14,7 @@ object SudsSpacing {
     val xxxl = 40.dp
     val section = 48.dp
 
-    val contentGutter = 20.dp
+    val contentGutter = 18.dp
     val compactContentGutter = 16.dp
     val tabletContentGutter = 32.dp
     val minimumTouchTarget = 48.dp

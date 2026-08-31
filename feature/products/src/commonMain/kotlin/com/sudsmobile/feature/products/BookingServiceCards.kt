@@ -123,7 +123,7 @@ internal fun BookingServiceCard(
                 )
                 if (service.description.isNotBlank()) {
                     Text(
-                        text = service.description,
+                        text = service.bookingReferenceDescription(),
                         color = SudsColors.onBrandMuted,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
@@ -165,6 +165,15 @@ internal fun BookingServiceCard(
 }
 
 internal fun String.bookingCompactPrice(): String = replace(",00€", "€")
+
+internal fun ProductServiceUi.bookingReferenceDescription(): String = when {
+    name.contains("premium", ignoreCase = true) -> "Acabamento premium"
+    name.contains("standard", ignoreCase = true) || name.contains("completa", ignoreCase = true) -> {
+        "Exterior e interior"
+    }
+    name.contains("exterior", ignoreCase = true) -> "Exterior cuidado"
+    else -> description
+}
 
 @Composable
 internal fun BookingExtrasSelectionSection(
