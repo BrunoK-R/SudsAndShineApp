@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import sudsandshine.feature.onboarding.generated.resources.Res
@@ -129,17 +130,29 @@ internal suspend fun awaitMinimumSplashDuration(
 
 @Composable
 private fun SplashLoadingIndicator(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "splash-loading")
-    val pulse by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 700),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "splash-loading-pulse",
-    )
+    val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
+    if (reduceMotion) {
+        SplashLoadingIndicatorContent(modifier = modifier, pulse = 1f)
+    } else {
+        val transition = rememberInfiniteTransition(label = "splash-loading")
+        val pulse by transition.animateFloat(
+            initialValue = 0.35f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 700),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "splash-loading-pulse",
+        )
+        SplashLoadingIndicatorContent(modifier = modifier, pulse = pulse)
+    }
+}
 
+@Composable
+private fun SplashLoadingIndicatorContent(
+    modifier: Modifier,
+    pulse: Float,
+) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(7.dp),

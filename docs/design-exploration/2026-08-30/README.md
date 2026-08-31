@@ -31,6 +31,18 @@ The direction keeps the existing logo and navy/cyan equity, but gives the produc
 
 The detailed, ticket-by-ticket delivery plan is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
+## Implemented baseline
+
+The exploration has now been implemented across the customer journey. The final Android reference captures and release-hardening evidence are in [final/README.md](final/README.md).
+
+| Native launch | Home | Booking |
+| --- | --- | --- |
+| ![Final native launch](final/01-native-launch.png) | ![Final home](final/05-home.png) | ![Final booking](final/08-booking.png) |
+
+| Services | Rewards | Profile |
+| --- | --- | --- |
+| ![Final services](final/07-services.png) | ![Final rewards](final/10-rewards.png) | ![Final profile](final/11-profile.png) |
+
 ## Motion and navigation specification
 
 - **Scroll:** move the hero artwork at about `0.35x` content speed while fading it from `1.0` to `0.72`. Collapse the greeting into a 64 dp sticky bar; do not animate body text continuously.

@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -507,6 +508,7 @@ private fun HomeLoyaltyBubble(
             .fillMaxWidth()
             .semantics {
                 role = Role.Button
+                stateDescription = "$visibleCurrent de $safeTarget selos"
                 progressBarRangeInfo = ProgressBarRangeInfo(
                     current = visibleCurrent.toFloat(),
                     range = 0f..safeTarget.toFloat(),
@@ -579,8 +581,30 @@ private fun HomeLoyaltyBubble(
             style = MaterialTheme.typography.bodyMedium,
         )
         if (actionLabel != null) {
-            HomeTextAction(actionLabel, onClick)
+            HomeInlineAction(actionLabel)
         }
+    }
+}
+
+@Composable
+private fun HomeInlineAction(label: String) {
+    Row(
+        modifier = Modifier.heightIn(min = SudsSpacing.minimumTouchTarget),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = SudsColors.cyan,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.width(SudsSpacing.xs))
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = SudsColors.cyan,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 

@@ -18,7 +18,7 @@ object SudsColors {
     val glassStrong = Color(0x2EFFFFFF)
     val glassBorder = Color(0x38FFFFFF)
     val onBrand = Color(0xFFF7FBFD)
-    val onBrandMuted = Color(0xB8F7FBFD)
+    val onBrandMuted = Color(0xC4F7FBFD)
     val onAction = Color(0xFF05232A)
     val success = Color(0xFF75D6A7)
     val warning = Color(0xFFFFC56E)
