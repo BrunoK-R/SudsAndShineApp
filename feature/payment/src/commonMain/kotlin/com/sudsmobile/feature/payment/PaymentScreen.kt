@@ -50,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -74,88 +76,42 @@ fun PaymentScreen(
         viewModel.refreshForSession(targetReservationId = targetReservationId)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-    ) {
-        PaymentHeader(onBack = onBack)
-
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
         ) {
-            PaymentContent(
+            PaymentHeader(onBack = onBack)
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                PaymentContent(
                 uiState = uiState,
                 businessInfoState = businessInfoState,
                 onRetry = { viewModel.refreshForSession(targetReservationId = targetReservationId, force = true) },
                 onRetryBusinessInfo = { viewModel.loadBusinessInfo(force = true) },
                 onRequestSignIn = onRequestSignIn,
                 onBookWash = onBookWash,
-            )
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun PaymentHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onBack)
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiaryContainer,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = "Pagamentos",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Valores pendentes das suas próximas marcações",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    SudsSecondaryTopBar(
+        title = "Pagamentos",
+        eyebrow = "Conta e reservas",
+        onBack = onBack,
+    )
 }
 
 @Composable

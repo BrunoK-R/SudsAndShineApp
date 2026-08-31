@@ -40,6 +40,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsPrimaryButton
 
 private data class OnboardingSlide(
     val icon: ImageVector,
@@ -80,14 +83,14 @@ fun OnboardingScreen(
     val slide = onboardingSlides[currentSlide]
     val isLastSlide = currentSlide == onboardingSlides.lastIndex
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 24.dp, bottom = 36.dp),
-    ) {
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(horizontal = 24.dp)
+                .padding(top = 24.dp, bottom = 36.dp),
+        ) {
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -103,7 +106,7 @@ fun OnboardingScreen(
                 Text(
                     text = slide.title,
                     style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = SudsColors.onBrand,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                 )
@@ -111,7 +114,7 @@ fun OnboardingScreen(
                 Text(
                     text = slide.description,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = SudsColors.onBrandMuted,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -121,7 +124,8 @@ fun OnboardingScreen(
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
             SlideIndicators(currentSlide = currentSlide)
 
-            Button(
+            SudsPrimaryButton(
+                label = if (isLastSlide) "Começar" else "Seguinte",
                 onClick = {
                     if (isLastSlide) {
                         onComplete()
@@ -133,30 +137,14 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.inverseSurface,
-                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                ),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = if (isLastSlide) "Começar" else "Seguinte",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                leadingContent = if (isLastSlide) null else ({
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
                     )
-                    if (!isLastSlide) {
-                        Icon(
-                            imageVector = Icons.Filled.ChevronRight,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
-            }
+                }),
+            )
 
             Text(
                 text = "Saltar",
@@ -166,9 +154,10 @@ fun OnboardingScreen(
                     .clickable(enabled = actionsEnabled, onClick = onSkip)
                     .padding(horizontal = 20.dp, vertical = 10.dp),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = SudsColors.onBrandMuted,
                 fontWeight = FontWeight.Medium,
             )
+            }
         }
     }
 }
@@ -178,21 +167,21 @@ private fun OnboardingIllustration(icon: ImageVector) {
     Box(contentAlignment = Alignment.Center) {
         Surface(
             modifier = Modifier.size(176.dp),
-            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.44f),
+            color = SudsColors.champagne.copy(alpha = 0.16f),
             shape = CircleShape,
         ) {}
         Surface(
             modifier = Modifier.size(160.dp),
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.inverseSurface,
+            color = SudsColors.glassStrong,
             shadowElevation = 10.dp,
         ) {
             Box(
                 modifier = Modifier.background(
                     Brush.verticalGradient(
                         listOf(
-                            MaterialTheme.colorScheme.inverseSurface,
-                            MaterialTheme.colorScheme.secondary,
+                        SudsColors.navyElevated,
+                        SudsColors.glassStrong,
                         ),
                     ),
                 ),
@@ -202,7 +191,7 @@ private fun OnboardingIllustration(icon: ImageVector) {
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(88.dp),
-                    tint = MaterialTheme.colorScheme.tertiaryContainer,
+                    tint = SudsColors.champagne,
                 )
             }
         }
@@ -222,9 +211,9 @@ private fun SlideIndicators(currentSlide: Int) {
                     .padding(horizontal = 4.dp)
                     .size(width = if (index == currentSlide) 32.dp else 8.dp, height = 8.dp),
                 color = if (index == currentSlide) {
-                    MaterialTheme.colorScheme.tertiary
+                    SudsColors.cyan
                 } else {
-                    MaterialTheme.colorScheme.outlineVariant
+                    SudsColors.glassStrong
                 },
                 shape = CircleShape,
             ) {}

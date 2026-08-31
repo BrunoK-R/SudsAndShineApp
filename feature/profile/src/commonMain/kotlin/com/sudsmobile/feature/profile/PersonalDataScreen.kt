@@ -63,6 +63,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.data.auth.AuthSessionState
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -123,20 +125,20 @@ private fun PersonalDataScreenContent(
         photoUrl = loaded.form.photoUrl
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-    ) {
-        PersonalDataHeader(onBack = onBack)
-
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+        ) {
+            PersonalDataHeader(onBack = onBack)
+
+            Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .offset(y = (-16).dp),
+                .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             when (uiState) {
@@ -239,60 +241,18 @@ private fun PersonalDataScreenContent(
                     textAlign = TextAlign.Center,
                 )
             }
+            }
         }
     }
 }
 
 @Composable
 private fun PersonalDataHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 34.dp),
-    ) {
-        OutlinedButton(
-            onClick = onBack,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.42f)),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("Voltar", style = MaterialTheme.typography.labelLarge)
-        }
-
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = "Dados Pessoais",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Perfil associado à sua conta Suds & Shine",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    SudsSecondaryTopBar(
+        title = "Dados pessoais",
+        eyebrow = "A sua conta",
+        onBack = onBack,
+    )
 }
 
 @Composable

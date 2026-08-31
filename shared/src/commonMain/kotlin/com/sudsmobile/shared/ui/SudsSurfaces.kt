@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsCustomerTheme
 import com.sudsmobile.shared.theme.SudsShapes
 import com.sudsmobile.shared.theme.SudsSpacing
 
@@ -50,6 +51,21 @@ fun SudsBrandBackground(
             )
         }
         content()
+    }
+}
+
+@Composable
+fun SudsCustomerScreen(
+    modifier: Modifier = Modifier,
+    contentAlignment: Alignment = Alignment.TopStart,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    SudsCustomerTheme {
+        SudsBrandBackground(
+            modifier = modifier,
+            contentAlignment = contentAlignment,
+            content = content,
+        )
     }
 }
 

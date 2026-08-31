@@ -46,6 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -61,23 +63,23 @@ fun ServicesScreen(
         catalogViewModel.loadCatalog()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-    ) {
-        ServicesHeader(onBack = onBack)
-
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(top = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
         ) {
-            ServicesCatalogContent(
+            ServicesHeader(onBack = onBack)
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                ServicesCatalogContent(
                 catalogState = catalogState,
                 onRetryCatalog = catalogViewModel::loadCatalog,
                 onBookService = onBookService,
@@ -96,65 +98,19 @@ fun ServicesScreen(
                 )
             }
 
-            ServicesTipCard()
+                ServicesTipCard()
+            }
         }
     }
 }
 
 @Composable
 private fun ServicesHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp, vertical = 28.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onBack)
-                .padding(vertical = 6.dp, horizontal = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiaryContainer,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = "Nossos Serviços",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = "Escolha o serviço perfeito para o seu veículo",
-            modifier = Modifier.padding(top = 8.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    SudsSecondaryTopBar(
+        title = "Serviços",
+        eyebrow = "Cuidado automóvel",
+        onBack = onBack,
+    )
 }
 
 @Composable

@@ -53,6 +53,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.data.booking.BookingSelectionPreset
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -93,13 +95,12 @@ private fun HistoryScreenContent(
     onRateService: (String) -> Unit,
     onBookAgain: (BookingSelectionPreset) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
         item(
             key = "history-header",
             contentType = "header",
@@ -193,6 +194,7 @@ private fun HistoryScreenContent(
                     }
                 }
             }
+            }
         }
     }
 }
@@ -204,7 +206,6 @@ private fun HistoryContentItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .offset(y = (-16).dp)
             .padding(horizontal = 24.dp),
     ) {
         content()
@@ -213,56 +214,11 @@ private fun HistoryContentItem(
 
 @Composable
 private fun HistoryHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 24.dp, bottom = 32.dp),
-    ) {
-        TextButton(
-            onClick = onBack,
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Text(
-            text = "Histórico de Lavagens",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Lavagens concluídas e canceladas",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    SudsSecondaryTopBar(
+        title = "Histórico",
+        eyebrow = "As suas lavagens",
+        onBack = onBack,
+    )
 }
 
 @Composable

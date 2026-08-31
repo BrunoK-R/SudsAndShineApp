@@ -62,6 +62,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.shared.theme.SudsCustomerTheme
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -115,17 +118,19 @@ fun VehiclesScreen(
         onDismissMutation = viewModel::clearMutationState,
     )
 
-    if (showEditor) {
-        AddVehicleDialog(
-            draft = draft,
-            mutationState = mutationState,
-            onDraftChange = { draft = it },
-            onDismiss = {
-                showEditor = false
-                viewModel.clearMutationState()
-            },
-            onSave = { viewModel.saveVehicle(draft) },
-        )
+    SudsCustomerTheme {
+        if (showEditor) {
+            AddVehicleDialog(
+                draft = draft,
+                mutationState = mutationState,
+                onDraftChange = { draft = it },
+                onDismiss = {
+                    showEditor = false
+                    viewModel.clearMutationState()
+                },
+                onSave = { viewModel.saveVehicle(draft) },
+            )
+        }
     }
 }
 
@@ -143,23 +148,23 @@ private fun VehiclesScreenContent(
     onSetDefaultVehicle: (VehicleUi) -> Unit,
     onDismissMutation: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-    ) {
-        VehiclesHeader(
-            onBack = onBack,
-            onAddVehicle = onAddVehicle,
-        )
-
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+        ) {
+            VehiclesHeader(
+                onBack = onBack,
+                onAddVehicle = onAddVehicle,
+            )
+
+            Column(
+            modifier = Modifier
                 .fillMaxWidth()
-                .offset(y = (-16).dp)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             VehiclesMutationBanner(
@@ -203,6 +208,7 @@ private fun VehiclesScreenContent(
                     )
                 }
             }
+            }
         }
     }
 }
@@ -212,69 +218,15 @@ private fun VehiclesHeader(
     onBack: () -> Unit,
     onAddVehicle: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 24.dp, bottom = 32.dp),
-    ) {
-        TextButton(
-            onClick = onBack,
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = "Meus Veículos",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "Gerir os seus veículos",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-                )
-            }
-
+    SudsSecondaryTopBar(
+        title = "Veículos",
+        eyebrow = "A sua garagem",
+        onBack = onBack,
+        trailingContent = {
             Button(
                 onClick = onAddVehicle,
-                modifier = Modifier.size(52.dp),
-                shape = RoundedCornerShape(26.dp),
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(24.dp),
                 contentPadding = PaddingValues(0.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.tertiary,
@@ -284,11 +236,11 @@ private fun VehiclesHeader(
                 Icon(
                     imageVector = Icons.Filled.Add,
                     contentDescription = "Adicionar veículo",
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(24.dp),
                 )
             }
-        }
-    }
+        },
+    )
 }
 
 @Composable

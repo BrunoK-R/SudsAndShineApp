@@ -86,6 +86,8 @@ import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsCustomerTheme
 import com.sudsmobile.shared.ui.SudsBrandBackground
 import com.sudsmobile.shared.ui.SudsCompactTopBar
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 private enum class BookingsTab(val label: String) {
@@ -1875,11 +1877,7 @@ fun RatingScreen(
         return
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -2042,58 +2040,11 @@ private fun List<String>.toRatingLabels(): List<String> {
 
 @Composable
 private fun RatingHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 28.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onBack)
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiaryContainer,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Text(
-            text = "Avaliar Serviço",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Como foi a sua experiência?",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    SudsSecondaryTopBar(
+        title = "Avaliar serviço",
+        eyebrow = "A sua experiência",
+        onBack = onBack,
+    )
 }
 
 @Composable
@@ -2460,16 +2411,16 @@ private fun RatingSubmittedScreen(
     contentPadding: PaddingValues,
     onHome: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 48.dp, bottom = contentPadding.calculateBottomPadding() + 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(horizontal = 24.dp)
+                .padding(top = 48.dp, bottom = contentPadding.calculateBottomPadding() + 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
         Surface(
             modifier = Modifier.size(112.dp),
             shape = CircleShape,
@@ -2515,6 +2466,7 @@ private fun RatingSubmittedScreen(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
+            }
         }
     }
 }

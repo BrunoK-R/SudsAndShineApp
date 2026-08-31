@@ -57,6 +57,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.shared.ui.SudsCustomerScreen
+import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
 
 private data class ContactItem(
@@ -103,16 +105,16 @@ private fun ContactScreenContent(
         uriHandler.openUri(businessInfo.mapsUri)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
-    ) {
-        ContactHeader(onBack = onBack)
-
+    SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+        ) {
+            ContactHeader(onBack = onBack)
+
+            Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
@@ -160,6 +162,7 @@ private fun ContactScreenContent(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
+            }
             }
         }
     }
@@ -273,59 +276,11 @@ private fun ContactStatusCard(
 
 @Composable
 private fun ContactHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 18.dp, bottom = 32.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onBack)
-                .padding(vertical = 8.dp, horizontal = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiaryContainer,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        Text(
-            text = "Contacto e Apoio",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Estamos aqui para ajudar",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.68f),
-        )
-    }
+    SudsSecondaryTopBar(
+        title = "Contacto e apoio",
+        eyebrow = "Fale connosco",
+        onBack = onBack,
+    )
 }
 
 @Composable

@@ -1,5 +1,6 @@
 package com.sudsmobile.shared.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,15 +11,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sudsmobile.shared.theme.SudsColors
@@ -66,6 +76,55 @@ fun SudsCompactTopBar(
             trailingContent()
         }
     }
+}
+
+@Composable
+fun SudsSecondaryTopBar(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    eyebrow: String? = null,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null,
+) {
+    SudsCompactTopBar(
+        title = title,
+        eyebrow = eyebrow,
+        modifier = modifier
+            .statusBarsPadding()
+            .padding(top = SudsSpacing.sm, bottom = SudsSpacing.xs),
+        leadingContent = {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                color = SudsColors.glass,
+                contentColor = SudsColors.onBrand,
+                shape = CircleShape,
+            ) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.semantics { contentDescription = "Voltar" },
+                ) {
+                    Canvas(Modifier.size(20.dp)) {
+                        val strokeWidth = 2.dp.toPx()
+                        drawLine(
+                            color = SudsColors.onBrand,
+                            start = Offset(size.width * 0.68f, size.height * 0.16f),
+                            end = Offset(size.width * 0.34f, size.height * 0.5f),
+                            strokeWidth = strokeWidth,
+                            cap = StrokeCap.Round,
+                        )
+                        drawLine(
+                            color = SudsColors.onBrand,
+                            start = Offset(size.width * 0.34f, size.height * 0.5f),
+                            end = Offset(size.width * 0.68f, size.height * 0.84f),
+                            strokeWidth = strokeWidth,
+                            cap = StrokeCap.Round,
+                        )
+                    }
+                }
+            }
+        },
+        trailingContent = trailingContent,
+    )
 }
 
 @Composable
