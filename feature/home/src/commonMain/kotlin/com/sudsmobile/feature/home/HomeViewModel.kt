@@ -546,7 +546,7 @@ private fun ServiceCatalog.toFeaturedServices(): List<HomeFeaturedServiceUi> {
     return services
         .mapNotNull { it.toHomeFeaturedServiceOrNull() }
         .sortedWith(compareByDescending<HomeFeaturedServiceUi> { it.popular }.thenBy { it.name.lowercase() })
-        .take(2)
+        .take(3)
 }
 
 private fun ServiceCatalogService.toHomeFeaturedServiceOrNull(): HomeFeaturedServiceUi? {

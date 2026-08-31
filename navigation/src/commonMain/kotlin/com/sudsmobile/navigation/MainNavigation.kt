@@ -192,7 +192,7 @@ fun MainNavigation(
                     onViewServices = { navController.navigate(Routes.Services) },
                     onViewBookings = { navController.navigate(Routes.Cart) },
                     onOpenRewards = { navController.navigate(Routes.Loyalty) },
-                    onOpenProfile = { navController.navigate(Routes.Profile) },
+                    onOpenNotifications = { navController.navigate(Routes.NotificationPreferences) },
                     onRequestSignIn = onRequestSignIn,
                 )
             }

@@ -5,8 +5,8 @@ import com.sudsmobile.shared.theme.calculateCollapseProgress
 internal enum class HomeSection(val key: String) {
     Header("home_header"),
     Booking("home_booking"),
-    Loyalty("home_loyalty"),
     Services("home_services"),
+    Loyalty("home_loyalty"),
     Stats("home_stats"),
     Benefits("home_benefits"),
 }
@@ -39,6 +39,22 @@ internal fun homeBookingPresentation(uiState: HomeUiState): HomeBookingPresentat
     } else {
         HomeBookingPresentation.Upcoming
     }
+}
+
+internal fun HomeUiState.homeHeaderLocationLabel(): String {
+    val bookingLocation = (this as? HomeUiState.Loaded)
+        ?.nextBooking
+        ?.location
+        ?.substringBefore(",")
+        ?.trim()
+        ?.takeIf(String::isNotBlank)
+        ?: return identityOrDefault().subtitle
+
+    return bookingLocation
+        .substringAfter("Suds & Shine – ", bookingLocation)
+        .substringAfter("Suds & Shine - ", bookingLocation)
+        .trim()
+        .ifBlank { identityOrDefault().subtitle }
 }
 
 internal fun calculateHomeCollapseProgress(

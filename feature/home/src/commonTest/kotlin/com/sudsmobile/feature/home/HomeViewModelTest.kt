@@ -145,6 +145,8 @@ class HomeViewModelTest {
                         listOf(
                             service("standard", name = "Lavagem Standard"),
                             service("premium", name = "Lavagem Premium", popular = true),
+                            service("exterior", name = "Lavagem Exterior"),
+                            service("interior", name = "Lavagem Interior"),
                         ),
                     ),
                 ),
@@ -173,6 +175,11 @@ class HomeViewModelTest {
         assertEquals(7, loaded.loyalty.remainingWashes)
         assertEquals(false, loaded.loyalty.rewardReady)
         assertEquals("Lavagem Premium", loaded.featuredServices.first().name)
+        assertEquals(3, loaded.featuredServices.size)
+        assertEquals(
+            listOf("Lavagem Premium", "Lavagem Exterior", "Lavagem Interior"),
+            loaded.featuredServices.map(HomeFeaturedServiceUi::name),
+        )
         assertEquals(DefaultBusinessInfo.stats.first().value, loaded.stats.first().value)
     }
 

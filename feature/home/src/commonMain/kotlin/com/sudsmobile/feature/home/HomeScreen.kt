@@ -29,7 +29,7 @@ fun HomeScreen(
     onViewServices: () -> Unit = {},
     onViewBookings: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
-    onOpenProfile: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     onRequestSignIn: () -> Unit = {},
 ) {
     val viewModel: HomeViewModel = koinViewModel()
@@ -49,7 +49,7 @@ fun HomeScreen(
         onViewServices = onViewServices,
         onViewBookings = onViewBookings,
         onOpenRewards = onOpenRewards,
-        onOpenProfile = onOpenProfile,
+        onOpenNotifications = onOpenNotifications,
         onRequestSignIn = onRequestSignIn,
         onRetry = viewModel::retry,
     )
@@ -64,7 +64,7 @@ internal fun HomeScreenContent(
     onViewServices: () -> Unit,
     onViewBookings: () -> Unit,
     onOpenRewards: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onOpenNotifications: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -96,18 +96,16 @@ internal fun HomeScreenContent(
                 contentPadding = PaddingValues(
                     bottom = contentPadding.calculateBottomPadding() + SudsSpacing.xl,
                 ),
-                verticalArrangement = Arrangement.spacedBy(SudsSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(SudsSpacing.md),
             ) {
                 homeSections(uiState).forEach { section ->
                     item(key = section.key) {
                         when (section) {
                             HomeSection.Header -> HomeExpandedHeader(
                                 identity = identity,
-                                artworkTranslationPx = artworkTranslationPx,
-                                artworkAlpha = homeArtworkAlpha(collapseProgress),
+                                locationLabel = uiState.homeHeaderLocationLabel(),
                                 collapseProgress = collapseProgress,
-                                onBookService = onBookService,
-                                onOpenProfile = onOpenProfile,
+                                onOpenNotifications = onOpenNotifications,
                             )
 
                             HomeSection.Booking -> HomeBookingSection(
@@ -116,6 +114,8 @@ internal fun HomeScreenContent(
                                 onViewBookings = onViewBookings,
                                 onRequestSignIn = onRequestSignIn,
                                 onRetry = onRetry,
+                                artworkTranslationPx = artworkTranslationPx,
+                                artworkAlpha = homeArtworkAlpha(collapseProgress),
                                 modifier = Modifier.homeContentPadding(),
                             )
 
@@ -152,10 +152,9 @@ internal fun HomeScreenContent(
             }
 
             HomeCompactHeader(
-                identity = identity,
                 collapseProgress = collapseProgress,
                 reduceMotion = reduceMotion,
-                onOpenProfile = onOpenProfile,
+                onOpenNotifications = onOpenNotifications,
             )
         }
     }

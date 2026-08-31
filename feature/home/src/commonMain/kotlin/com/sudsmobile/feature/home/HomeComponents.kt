@@ -1,12 +1,12 @@
 package com.sudsmobile.feature.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,15 +23,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -43,8 +42,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -63,123 +63,85 @@ import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsShapes
 import com.sudsmobile.shared.theme.SudsSpacing
 import com.sudsmobile.shared.ui.SudsGlassCard
-import com.sudsmobile.shared.ui.SudsPrimaryButton
+import com.sudsmobile.shared.ui.SudsAutomotivePhoto
+import com.sudsmobile.shared.ui.SudsAutomotivePhotoKind
+import com.sudsmobile.shared.ui.SudsBrandMark
 import com.sudsmobile.shared.ui.SudsSectionHeader
-import com.sudsmobile.shared.ui.SudsServiceArtwork
 import com.sudsmobile.shared.ui.SudsStatus
 import com.sudsmobile.shared.ui.SudsStatusCard
-import com.sudsmobile.shared.ui.serviceArtworkStyleForKey
+import com.sudsmobile.shared.ui.automotivePhotoKindForKey
 
 @Composable
 internal fun HomeExpandedHeader(
     identity: HomeIdentityUi,
-    artworkTranslationPx: Float,
-    artworkAlpha: Float,
+    locationLabel: String,
     collapseProgress: Float,
-    onBookService: () -> Unit,
-    onOpenProfile: () -> Unit,
+    onOpenNotifications: () -> Unit,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .heightIn(min = 280.dp)
-            .padding(
-                start = SudsSpacing.contentGutter,
-                top = SudsSpacing.md,
-                end = SudsSpacing.contentGutter,
-                bottom = SudsSpacing.xl,
-            )
+            .height(64.dp)
+            .padding(horizontal = SudsSpacing.contentGutter)
             .then(
                 if (collapseProgress >= 0.5f) Modifier.clearAndSetSemantics { }
                 else Modifier,
             ),
-        verticalArrangement = Arrangement.spacedBy(SudsSpacing.xl),
+        horizontalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
+        SudsBrandMark(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape),
+            contentDescription = "Suds & Shine",
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
+            Text(
+                text = identity.greeting,
+                color = SudsColors.onBrand,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    imageVector = Icons.Filled.Place,
+                    contentDescription = null,
+                    tint = SudsColors.champagne,
+                    modifier = Modifier.size(14.dp),
+                )
+                Spacer(Modifier.width(SudsSpacing.xxs))
                 Text(
-                    text = identity.greeting,
-                    color = SudsColors.onBrand,
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = locationLabel,
+                    color = SudsColors.onBrandMuted,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = identity.subtitle,
-                    color = SudsColors.onBrandMuted,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            HomeAvatar(
-                initials = identity.initials,
-                onClick = onOpenProfile,
-            )
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(SudsSpacing.lg),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(SudsSpacing.xs)) {
-                Text(
-                    text = "CUIDADO AUTOMÓVEL",
-                    color = SudsColors.cyanMuted,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Text(
-                    text = "Brilho que se nota. Cuidado que fica.",
-                    color = SudsColors.onBrand,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SudsPrimaryButton(
-                    label = "Marcar agora",
-                    onClick = onBookService,
-                    modifier = Modifier
-                        .weight(1f)
-                        .widthIn(max = 216.dp)
-                        .semantics { contentDescription = "Marcar lavagem" },
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Filled.CalendarMonth,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
-                )
-                SudsServiceArtwork(
-                    modifier = Modifier.graphicsLayer {
-                        translationY = artworkTranslationPx
-                        alpha = artworkAlpha
-                    },
-                    size = 88.dp,
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = SudsColors.onBrandMuted,
+                    modifier = Modifier.size(15.dp),
                 )
             }
         }
+        HomeNotificationAction(onClick = onOpenNotifications)
     }
 }
 
 @Composable
 internal fun HomeCompactHeader(
-    identity: HomeIdentityUi,
     collapseProgress: Float,
     reduceMotion: Boolean,
-    onOpenProfile: () -> Unit,
+    onOpenNotifications: () -> Unit,
 ) {
     val progress = collapseProgress.coerceIn(0f, 1f)
     val visibleProgress = if (reduceMotion) {
@@ -204,45 +166,36 @@ internal fun HomeCompactHeader(
         horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
+        SudsBrandMark(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape),
+            contentDescription = "Suds & Shine",
+        )
+        Text(
+            text = "Início",
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
-        ) {
-            Text(
-                text = "SUDS & SHINE",
-                color = SudsColors.cyanMuted,
-                style = MaterialTheme.typography.labelSmall,
-            )
-            Text(
-                text = identity.greeting,
-                color = SudsColors.onBrand,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        HomeAvatar(
-            initials = identity.initials,
-            onClick = onOpenProfile,
+            color = SudsColors.onBrand,
+            style = MaterialTheme.typography.titleLarge,
+        )
+        HomeNotificationAction(
+            onClick = onOpenNotifications,
             enabled = interactive,
-            compact = true,
         )
     }
 }
 
 @Composable
-private fun HomeAvatar(
-    initials: String,
+private fun HomeNotificationAction(
     onClick: () -> Unit,
     enabled: Boolean = true,
-    compact: Boolean = false,
 ) {
     Surface(
         modifier = Modifier
-            .size(if (compact) SudsSpacing.minimumTouchTarget else 52.dp)
+            .size(SudsSpacing.minimumTouchTarget)
             .semantics {
                 role = Role.Button
-                contentDescription = "Abrir perfil"
+                contentDescription = "Abrir notificações"
             }
             .clickable(enabled = enabled, onClick = onClick),
         shape = CircleShape,
@@ -253,12 +206,19 @@ private fun HomeAvatar(
         ),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = initials,
-                color = SudsColors.champagne,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
+            Icon(
+                imageVector = Icons.Filled.NotificationsNone,
+                contentDescription = null,
+                tint = SudsColors.onBrand,
+                modifier = Modifier.size(23.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 10.dp)
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(SudsColors.champagne),
             )
         }
     }
@@ -271,6 +231,8 @@ internal fun HomeBookingSection(
     onViewBookings: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
+    artworkTranslationPx: Float,
+    artworkAlpha: Float,
     modifier: Modifier = Modifier,
 ) {
     when (homeBookingPresentation(uiState)) {
@@ -320,7 +282,10 @@ internal fun HomeBookingSection(
 
         HomeBookingPresentation.Upcoming -> UpcomingBookingHero(
             booking = (uiState as HomeUiState.Loaded).nextBooking!!,
+            onBookService = onBookService,
             onViewBookings = onViewBookings,
+            artworkTranslationPx = artworkTranslationPx,
+            artworkAlpha = artworkAlpha,
             modifier = modifier,
         )
     }
@@ -329,89 +294,145 @@ internal fun HomeBookingSection(
 @Composable
 private fun UpcomingBookingHero(
     booking: HomeBookingUi,
+    onBookService: () -> Unit,
     onViewBookings: () -> Unit,
+    artworkTranslationPx: Float,
+    artworkAlpha: Float,
     modifier: Modifier = Modifier,
 ) {
-    SudsGlassCard(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        containerColor = SudsColors.glassStrong,
-        contentPadding = PaddingValues(SudsSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(251.dp)
+                .clip(SudsShapes.card)
+                .border(BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder), SudsShapes.card)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "${booking.service}, ${booking.date}, ${booking.time}. Ver detalhes"
+                }
+                .clickable(onClick = onViewBookings),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            SudsAutomotivePhoto(
+                kind = SudsAutomotivePhotoKind.AppointmentHero,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = 1.06f
+                        scaleY = 1.06f
+                        translationY = artworkTranslationPx
+                        alpha = artworkAlpha
+                    },
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to SudsColors.ink.copy(alpha = 0.96f),
+                            0.56f to SudsColors.ink.copy(alpha = 0.74f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.68f)
+                    .align(Alignment.CenterStart)
+                    .padding(SudsSpacing.xl),
+                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
+            ) {
                 Text(
-                    text = "PRÓXIMA MARCAÇÃO",
-                    color = SudsColors.cyanMuted,
+                    text = "PRÓXIMA LAVAGEM",
+                    color = SudsColors.champagne,
                     style = MaterialTheme.typography.labelMedium,
                 )
                 Text(
                     text = booking.service,
                     color = SudsColors.onBrand,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = SudsSpacing.xxs),
+                    color = SudsColors.glassBorder,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        tint = SudsColors.cyanMuted,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "${booking.date.substringBefore(",")} · ${booking.time}",
+                        color = SudsColors.onBrand,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                    )
+                }
+                Row(
+                    modifier = Modifier.padding(top = SudsSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Ver detalhes",
+                        color = SudsColors.onBrand,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Spacer(Modifier.width(SudsSpacing.xs))
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = SudsColors.champagne,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
-            Surface(
-                shape = SudsShapes.capsule,
-                color = SudsColors.success.copy(alpha = 0.16f),
+        }
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(66.dp)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "Marcar lavagem"
+                }
+                .clickable(onClick = onBookService),
+            shape = SudsShapes.capsule,
+            color = SudsColors.cyan,
+            contentColor = SudsColors.onAction,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = SudsSpacing.xl),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    imageVector = Icons.Filled.CalendarMonth,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
                 Text(
-                    text = booking.statusLabel,
-                    modifier = Modifier.padding(
-                        horizontal = SudsSpacing.sm,
-                        vertical = SudsSpacing.xs,
-                    ),
-                    color = SudsColors.success,
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "Marcar lavagem",
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Icon(
+                    imageVector = Icons.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
-
-        Spacer(Modifier.height(SudsSpacing.lg))
-        HomeBookingDetail(Icons.Filled.CalendarMonth, booking.date)
-        HomeBookingDetail(Icons.Filled.AccessTime, booking.time)
-        HomeBookingDetail(Icons.Filled.Place, booking.location)
-        HomeBookingDetail(Icons.Filled.DirectionsCar, booking.vehicle)
-        HomeBookingDetail(Icons.Filled.Star, booking.price, emphasized = true)
-        Spacer(Modifier.height(SudsSpacing.sm))
-        HomeTextAction(
-            label = "Ver detalhes",
-            onClick = onViewBookings,
-            trailingIcon = true,
-        )
-    }
-}
-
-@Composable
-private fun HomeBookingDetail(
-    icon: ImageVector,
-    label: String,
-    emphasized: Boolean = false,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = SudsSpacing.xs),
-        horizontalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (emphasized) SudsColors.champagne else SudsColors.cyanMuted,
-            modifier = Modifier.size(20.dp),
-        )
-        Text(
-            text = label,
-            color = if (emphasized) SudsColors.onBrand else SudsColors.onBrandMuted,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal,
-        )
     }
 }
 
@@ -438,7 +459,6 @@ internal fun HomeLoyaltySection(
             target = 10,
             title = "Cada lavagem aproxima a próxima",
             body = "Entre para acumular selos e desbloquear ofertas.",
-            actionLabel = "Entrar e começar",
             onClick = onRequestSignIn,
             modifier = modifier,
         )
@@ -460,7 +480,6 @@ internal fun HomeLoyaltySection(
             target = 10,
             title = "Selos temporariamente indisponíveis",
             body = "Pode continuar a explorar as suas recompensas.",
-            actionLabel = "Ver recompensas",
             onClick = onOpenRewards,
             modifier = modifier,
         )
@@ -476,19 +495,17 @@ private fun HomeLoyaltyBubble(
     HomeLoyaltyBubble(
         current = loyalty.currentWashes,
         target = loyalty.targetWashes,
-        title = if (loyalty.rewardReady) "A sua oferta está pronta" else "O brilho também recompensa",
+        title = if (loyalty.rewardReady) "Oferta pronta" else "O seu brilho",
         body = if (loyalty.rewardReady) {
             "Tem uma lavagem grátis disponível para a próxima visita."
         } else {
             "Faltam ${loyalty.remainingWashes} selos para a próxima lavagem grátis."
         },
-        actionLabel = if (loyalty.rewardReady) "Usar oferta" else "Ver recompensas",
         onClick = onClick,
         modifier = modifier,
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HomeLoyaltyBubble(
     current: Int,
@@ -497,7 +514,6 @@ private fun HomeLoyaltyBubble(
     body: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    actionLabel: String? = null,
 ) {
     val safeTarget = target.coerceAtLeast(1)
     val visibleTarget = safeTarget.coerceAtMost(10)
@@ -508,6 +524,7 @@ private fun HomeLoyaltyBubble(
             .fillMaxWidth()
             .semantics {
                 role = Role.Button
+                contentDescription = "$title. $body"
                 stateDescription = "$visibleCurrent de $safeTarget selos"
                 progressBarRangeInfo = ProgressBarRangeInfo(
                     current = visibleCurrent.toFloat(),
@@ -516,95 +533,84 @@ private fun HomeLoyaltyBubble(
                 )
             }
             .clickable(onClick = onClick),
+        shape = SudsShapes.control,
+        contentPadding = PaddingValues(
+            horizontal = SudsSpacing.md,
+            vertical = SudsSpacing.sm,
+        ),
+        containerColor = SudsColors.glassStrong,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
-            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
+                modifier = Modifier.width(104.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
-                Text(
-                    text = "CLUBE DE BRILHO",
-                    color = SudsColors.champagne,
-                    style = MaterialTheme.typography.labelMedium,
-                )
                 Text(
                     text = title,
                     color = SudsColors.onBrand,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = "$visibleCurrent",
+                        color = SudsColors.cyan,
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Spacer(Modifier.width(SudsSpacing.xxs))
+                    Text(
+                        text = "de $safeTarget selos",
+                        modifier = Modifier.padding(bottom = 2.dp),
+                        color = SudsColors.onBrandMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
-            Icon(
-                imageVector = Icons.Filled.EmojiEvents,
-                contentDescription = null,
-                tint = SudsColors.champagne,
-                modifier = Modifier.size(28.dp),
-            )
-        }
-        Spacer(Modifier.height(SudsSpacing.md))
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
-            maxItemsInEachRow = 5,
-        ) {
-            repeat(visibleTarget) { index ->
-                val completed = index < visibleCurrent.coerceAtMost(visibleTarget)
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (completed) SudsColors.champagne
-                            else SudsColors.glassStrong,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (completed) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = null,
-                            tint = SudsColors.onAction,
-                            modifier = Modifier.size(16.dp),
-                        )
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                repeat(visibleTarget) { index ->
+                    val completed = index < visibleCurrent.coerceAtMost(visibleTarget)
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (completed) SudsColors.champagne
+                                else SudsColors.glassStrong,
+                            )
+                            .border(
+                                width = SudsSpacing.hairline,
+                                color = if (completed) SudsColors.champagne else SudsColors.glassBorder,
+                                shape = CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (completed) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                tint = SudsColors.onAction,
+                                modifier = Modifier.size(9.dp),
+                            )
+                        }
                     }
                 }
             }
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = SudsColors.onBrandMuted,
+                modifier = Modifier.size(20.dp),
+            )
         }
-        Spacer(Modifier.height(SudsSpacing.md))
-        Text(
-            text = body,
-            color = SudsColors.onBrandMuted,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        if (actionLabel != null) {
-            HomeInlineAction(actionLabel)
-        }
-    }
-}
-
-@Composable
-private fun HomeInlineAction(label: String) {
-    Row(
-        modifier = Modifier.heightIn(min = SudsSpacing.minimumTouchTarget),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            color = SudsColors.cyan,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.width(SudsSpacing.xs))
-        Icon(
-            imageVector = Icons.Filled.ChevronRight,
-            contentDescription = null,
-            tint = SudsColors.cyan,
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 
@@ -620,7 +626,6 @@ internal fun HomeFeaturedServicesSection(
     Column(verticalArrangement = Arrangement.spacedBy(SudsSpacing.md)) {
         SudsSectionHeader(
             title = "Escolha o seu cuidado",
-            supportingText = "Serviços pensados para cada rotina",
             modifier = Modifier.padding(horizontal = SudsSpacing.contentGutter),
             action = {
                 HomeTextAction(
@@ -646,7 +651,7 @@ internal fun HomeFeaturedServicesSection(
         } else {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = SudsSpacing.contentGutter),
-                horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
             ) {
                 items(
                     items = services,
@@ -675,77 +680,60 @@ private fun HomeServiceCard(
     service: HomeFeaturedServiceUi,
     onClick: () -> Unit,
 ) {
-    SudsGlassCard(
+    Box(
         modifier = Modifier
-            .width(238.dp)
-            .heightIn(min = 286.dp)
+            .width(136.dp)
+            .height(180.dp)
+            .clip(SudsShapes.control)
+            .background(SudsColors.glassStrong)
+            .border(SudsSpacing.hairline, SudsColors.glassBorder, SudsShapes.control)
             .semantics {
                 role = Role.Button
                 contentDescription = "${service.name}, a partir de ${service.price}, ${service.duration}"
             }
             .clickable(onClick = onClick),
-        contentPadding = PaddingValues(SudsSpacing.md),
     ) {
-        Box(Modifier.fillMaxWidth()) {
-            SudsServiceArtwork(
-                modifier = Modifier.align(Alignment.Center),
-                style = serviceArtworkStyleForKey("${service.id} ${service.name}"),
-                size = 118.dp,
+        SudsAutomotivePhoto(
+            kind = automotivePhotoKindForKey("${service.id} ${service.name}"),
+            modifier = Modifier.fillMaxSize(),
+            contentDescription = null,
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        0.5f to SudsColors.ink.copy(alpha = 0.12f),
+                        1f to SudsColors.ink.copy(alpha = 0.94f),
+                    ),
+                ),
+        )
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(SudsSpacing.sm)
+                .size(34.dp),
+            shape = CircleShape,
+            color = if (service.popular) SudsColors.champagne else SudsColors.glassStrong,
+        ) {
+            Icon(
+                imageVector = if (service.popular) Icons.Filled.AutoAwesome else service.icon,
+                contentDescription = null,
+                modifier = Modifier.padding(SudsSpacing.xs),
+                tint = if (service.popular) SudsColors.onAction else SudsColors.onBrand,
             )
-            if (service.popular) {
-                Surface(
-                    modifier = Modifier.align(Alignment.TopEnd),
-                    shape = SudsShapes.capsule,
-                    color = SudsColors.champagne,
-                ) {
-                    Text(
-                        text = "POPULAR",
-                        modifier = Modifier.padding(
-                            horizontal = SudsSpacing.sm,
-                            vertical = SudsSpacing.xxs,
-                        ),
-                        color = SudsColors.onAction,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
         }
-        Spacer(Modifier.height(SudsSpacing.md))
         Text(
             text = service.name,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(SudsSpacing.sm),
             color = SudsColors.onBrand,
             style = MaterialTheme.typography.titleMedium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(SudsSpacing.xs))
-        Text(
-            text = "A partir de ${service.price}",
-            color = SudsColors.champagne,
-            style = MaterialTheme.typography.labelLarge,
-        )
-        Text(
-            text = service.duration,
-            color = SudsColors.onBrandMuted,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Spacer(Modifier.height(SudsSpacing.sm))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Escolher serviço",
-                color = SudsColors.cyan,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = null,
-                tint = SudsColors.cyan,
-            )
-        }
     }
 }
 

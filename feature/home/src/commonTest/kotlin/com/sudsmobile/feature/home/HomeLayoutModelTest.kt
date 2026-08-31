@@ -26,11 +26,28 @@ class HomeLayoutModelTest {
 
     @Test
     fun everyStateKeepsStableKeyedSectionOrder() {
-        val expected = HomeSection.entries
+        val expected = listOf(
+            HomeSection.Header,
+            HomeSection.Booking,
+            HomeSection.Services,
+            HomeSection.Loyalty,
+            HomeSection.Stats,
+            HomeSection.Benefits,
+        )
         homeStates().forEach { state ->
             assertEquals(expected, homeSections(state))
             assertEquals(expected.map(HomeSection::key), homeSections(state).map(HomeSection::key))
         }
+    }
+
+    @Test
+    fun headerUsesCompactBookingLocationWhenAvailable() {
+        val state = loadedState(
+            nextBooking = booking().copy(location = "Suds & Shine - Leiria, Piso -1"),
+        )
+
+        assertEquals("Leiria", state.homeHeaderLocationLabel())
+        assertEquals("Bem-vindo de volta", emptyState().homeHeaderLocationLabel())
     }
 
     @Test
