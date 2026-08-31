@@ -33,6 +33,7 @@ fun HomeScreen(
     onViewBookings: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
+    onOpenProfile: () -> Unit = {},
     onRequestSignIn: () -> Unit = {},
 ) {
     val viewModel: HomeViewModel = koinViewModel()
@@ -53,6 +54,7 @@ fun HomeScreen(
         onViewBookings = onViewBookings,
         onOpenRewards = onOpenRewards,
         onOpenNotifications = onOpenNotifications,
+        onOpenProfile = onOpenProfile,
         onRequestSignIn = onRequestSignIn,
         onRetry = viewModel::retry,
     )
@@ -68,6 +70,7 @@ internal fun HomeScreenContent(
     onViewBookings: () -> Unit,
     onOpenRewards: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenProfile: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -113,6 +116,7 @@ internal fun HomeScreenContent(
                                 locationLabel = uiState.homeHeaderLocationLabel(),
                                 collapseProgress = collapseProgress,
                                 onOpenNotifications = onOpenNotifications,
+                                onOpenProfile = onOpenProfile,
                             )
 
                             HomeSection.Booking -> HomeBookingSection(
@@ -158,11 +162,14 @@ internal fun HomeScreenContent(
                 }
             }
 
-            HomeCompactHeader(
-                collapseProgress = collapseProgress,
-                reduceMotion = reduceMotion,
-                onOpenNotifications = onOpenNotifications,
-            )
+            if (collapseProgress > 0.01f) {
+                HomeCompactHeader(
+                    collapseProgress = collapseProgress,
+                    reduceMotion = reduceMotion,
+                    onOpenNotifications = onOpenNotifications,
+                    onOpenProfile = onOpenProfile,
+                )
+            }
         }
     }
 }

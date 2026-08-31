@@ -52,7 +52,7 @@ import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsMotion
 import com.sudsmobile.shared.theme.SudsShapes
 import com.sudsmobile.shared.theme.SudsSpacing
-import com.sudsmobile.shared.ui.SudsWashCalendarIcon
+import com.sudsmobile.shared.ui.SudsBookingNavigationMark
 
 object SudsNavigationBarDefaults {
     val shellHeight = 96.dp
@@ -292,9 +292,10 @@ private fun SudsBookingNavigationAction(
             ),
         ) {
             Box(contentAlignment = Alignment.Center) {
-                SudsWashCalendarIcon(
-                    tint = SudsColors.onAction,
-                    size = 30.dp,
+                SudsBookingNavigationMark(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(3.dp),
                 )
             }
         }

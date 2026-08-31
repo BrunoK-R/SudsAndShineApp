@@ -51,6 +51,15 @@ internal fun BookingVehicleHeader(onBack: () -> Unit) {
 }
 
 @Composable
+internal fun BookingExtrasHeader(onBack: () -> Unit) {
+    BookingStepHeader(
+        title = "Personalizar",
+        progressIndex = bookingProgressIndex(BookingStep.Extras),
+        onBack = onBack,
+    )
+}
+
+@Composable
 internal fun BookingDateTimeHeader(onBack: () -> Unit) {
     BookingStepHeader(
         title = "Data e hora",
@@ -125,13 +134,13 @@ private fun BookingStepHeader(
                 verticalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
             ) {
                 Text(
-                    text = "${progressIndex + 1} de 4",
+                text = "${progressIndex + 1} de $BookingProgressStepCount",
                     color = SudsColors.onBrandMuted,
                     style = MaterialTheme.typography.labelLarge,
                 )
                 SudsProgressSegments(
                     currentStepIndex = progressIndex,
-                    totalSteps = 4,
+                    totalSteps = BookingProgressStepCount,
                 )
             }
         }

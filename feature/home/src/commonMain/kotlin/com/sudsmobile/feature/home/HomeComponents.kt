@@ -78,6 +78,7 @@ internal fun HomeExpandedHeader(
     locationLabel: String,
     collapseProgress: Float,
     onOpenNotifications: () -> Unit,
+    onOpenProfile: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -95,8 +96,13 @@ internal fun HomeExpandedHeader(
         SudsBrandMark(
             modifier = Modifier
                 .size(52.dp)
-                .clip(CircleShape),
-            contentDescription = "Suds & Shine",
+                .clip(CircleShape)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "Abrir perfil"
+                }
+                .clickable(onClick = onOpenProfile),
+            contentDescription = null,
         )
         Column(
             modifier = Modifier.weight(1f),
@@ -143,6 +149,7 @@ internal fun HomeCompactHeader(
     collapseProgress: Float,
     reduceMotion: Boolean,
     onOpenNotifications: () -> Unit,
+    onOpenProfile: () -> Unit,
 ) {
     val progress = collapseProgress.coerceIn(0f, 1f)
     val visibleProgress = if (reduceMotion) {
@@ -170,8 +177,13 @@ internal fun HomeCompactHeader(
         SudsBrandMark(
             modifier = Modifier
                 .size(40.dp)
-                .clip(CircleShape),
-            contentDescription = "Suds & Shine",
+                .clip(CircleShape)
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "Abrir perfil"
+                }
+                .clickable(enabled = interactive, onClick = onOpenProfile),
+            contentDescription = null,
         )
         Text(
             text = "Início",
@@ -709,20 +721,22 @@ private fun HomeServiceCard(
                     ),
                 ),
         )
-        Surface(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(SudsSpacing.sm)
-                .size(34.dp),
-            shape = CircleShape,
-            color = if (service.popular) SudsColors.champagne else SudsColors.glassStrong,
-        ) {
-            Icon(
-                imageVector = if (service.popular) Icons.Filled.AutoAwesome else service.icon,
-                contentDescription = null,
-                modifier = Modifier.padding(SudsSpacing.xs),
-                tint = if (service.popular) SudsColors.onAction else SudsColors.onBrand,
-            )
+        if (service.popular) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(SudsSpacing.sm),
+                shape = SudsShapes.capsule,
+                color = SudsColors.champagne,
+                contentColor = SudsColors.onAction,
+            ) {
+                Text(
+                    text = "POPULAR",
+                    modifier = Modifier.padding(horizontal = SudsSpacing.sm, vertical = SudsSpacing.xxs),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Text(
             text = service.name,

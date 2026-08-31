@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sudsmobile.data.booking.BookingSelectionPreset
 import com.sudsmobile.data.booking.BookingWaitlistEntry
@@ -50,7 +51,6 @@ internal fun BookingServiceStepContent(
     presetsState: BookingPresetsUiState,
     presetMutationState: BookingPresetMutationUiState,
     selectedServiceId: String?,
-    selectedExtraIds: List<String>,
     unavailableInitialServiceId: String?,
     onRetryCatalog: () -> Unit,
     onRetryPresets: () -> Unit,
@@ -58,7 +58,6 @@ internal fun BookingServiceStepContent(
     onDeletePreset: (String) -> Unit,
     onDismissPresetMutation: () -> Unit,
     onServiceSelected: (ProductServiceUi) -> Unit,
-    onExtraToggled: (ProductExtraUi) -> Unit,
 ) {
     var selectedFilterName by rememberSaveable { mutableStateOf(BookingServiceFilter.All.name) }
     val selectedFilter = BookingServiceFilter.entries
@@ -101,11 +100,6 @@ internal fun BookingServiceStepContent(
                     )
                 }
             }
-            BookingExtrasSelectionSection(
-                extras = catalogState.extras.filter { it.isEligibleFor(selectedServiceId) },
-                selectedExtraIds = selectedExtraIds,
-                onExtraToggled = onExtraToggled,
-            )
         }
 
         ProductCatalogUiState.Empty -> AvailabilityStatusCard(
@@ -119,6 +113,68 @@ internal fun BookingServiceStepContent(
             body = catalogState.message,
             onRetry = onRetryCatalog,
         )
+    }
+}
+
+@Composable
+internal fun BookingExtrasStepContent(
+    service: ProductServiceUi?,
+    extras: List<ProductExtraUi>,
+    selectedExtraIds: List<String>,
+    onExtraToggled: (ProductExtraUi) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(top = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = SudsColors.glass),
+            border = BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder),
+            shape = SudsShapes.control,
+        ) {
+            Column(
+                modifier = Modifier.padding(SudsSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
+            ) {
+                Text(
+                    text = "SERVIÇO ESCOLHIDO",
+                    color = SudsColors.cyanMuted,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = service?.name ?: "Escolha primeiro um serviço",
+                    color = SudsColors.onBrand,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                service?.let {
+                    Text(
+                        text = "${it.durationLabel} · a partir de ${it.passengerPrice}",
+                        color = SudsColors.onBrandMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
+        if (extras.isEmpty()) {
+            Text(
+                text = "Este serviço não tem extras disponíveis. Pode continuar para escolher o veículo.",
+                color = SudsColors.onBrandMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        } else {
+            BookingExtrasSelectionSection(
+                extras = extras,
+                selectedExtraIds = selectedExtraIds,
+                onExtraToggled = onExtraToggled,
+            )
+        }
     }
 }
 

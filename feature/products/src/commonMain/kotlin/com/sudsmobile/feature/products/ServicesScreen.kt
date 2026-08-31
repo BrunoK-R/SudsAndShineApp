@@ -85,19 +85,6 @@ fun ServicesScreen(
                 onBookService = onBookService,
             )
 
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = "Extras Disponíveis",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                )
-                ServicesExtrasContent(
-                    catalogState = catalogState,
-                    onRetryCatalog = catalogViewModel::loadCatalog,
-                )
-            }
-
                 ServicesTipCard()
             }
         }
@@ -248,86 +235,11 @@ private fun ServiceCatalogCard(
     service: ProductServiceUi,
     onClick: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ServiceIconBadge(service.icon, size = 64.dp, cornerRadius = 18.dp)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = service.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (service.popular) {
-                    Row {
-                        Badge(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        ) {
-                            Text(
-                                text = "Mais Popular",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = service.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = service.durationLabel,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Clip,
-                        softWrap = false,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    PriceBlock("Passageiros", service.passengerPrice)
-                    PriceBlock("SUV", service.suvPrice)
-                }
-            }
-
-            Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
+    BookingServiceCard(
+        service = service,
+        selected = false,
+        onSelected = onClick,
+    )
 }
 
 @Composable
@@ -514,7 +426,7 @@ private fun ServicesTipCard() {
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Combine serviços e extras para um cuidado completo do seu veículo. Extras podem ser adicionados durante a marcação.",
+                    text = "Escolha o serviço ideal. No passo seguinte pode personalizar a marcação com extras opcionais.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

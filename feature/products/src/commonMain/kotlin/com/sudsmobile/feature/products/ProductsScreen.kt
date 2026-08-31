@@ -28,14 +28,12 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.AirportShuttle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Euro
@@ -75,6 +73,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
@@ -108,6 +108,8 @@ import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
 import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsSpacing
 import com.sudsmobile.shared.ui.SudsBrandBackground
+import com.sudsmobile.shared.ui.SudsVehiclePhoto
+import com.sudsmobile.shared.ui.SudsVehiclePhotoKind
 import org.koin.compose.viewmodel.koinViewModel
 
 internal val bookingVehicleCategories = listOf(
@@ -386,7 +388,7 @@ private fun ProductsScreenContent(
             val selectionId = "saved:$savedVehicleId"
             selectedVehicleId = selectionId
             pendingPresetVehicleId = selectionId
-            currentStepName = BookingStep.Vehicle.name
+            currentStepName = BookingStep.Extras.name
         } else {
             selectedVehicleId = if (preset.vehicleType == "suv") "suv" else "passenger"
             pendingPresetVehicleId = null
@@ -521,7 +523,7 @@ private fun ProductsScreenContent(
             availabilityAnchorDate = null
             minimumAvailabilityMonthAnchor = null
             unavailableInitialServiceId = null
-            currentStepName = BookingStep.Vehicle.name
+            currentStepName = BookingStep.Extras.name
             onClearSubmitError()
         }
     }
@@ -621,7 +623,6 @@ private fun ProductsScreenContent(
                                             presetsState = presetsState,
                                             presetMutationState = presetMutationState,
                                             selectedServiceId = selectedServiceId,
-                                            selectedExtraIds = selectedExtraIds,
                                             unavailableInitialServiceId = unavailableInitialServiceId,
                                             onRetryCatalog = onLoadCatalog,
                                             onRetryPresets = onLoadPresets,
@@ -640,22 +641,34 @@ private fun ProductsScreenContent(
                                                 selectedServiceId = service.id
                                                 onClearSubmitError()
                                             },
-                                            onExtraToggled = { extra ->
-                                                hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                selectedExtraIds = if (extra.id in selectedExtraIds) {
-                                                    selectedExtraIds - extra.id
-                                                } else {
-                                                    selectedExtraIds + extra.id
-                                                }
-                                                onClearSubmitError()
-                                            },
                                         )
                                     }
                                 }
 
+                                BookingStep.Extras -> {
+                                    BookingExtrasHeader(
+                                        onBack = { currentStepName = BookingStep.Service.name },
+                                    )
+
+                                    BookingExtrasStepContent(
+                                        service = selectedService,
+                                        extras = eligibleExtras,
+                                        selectedExtraIds = selectedExtraIds,
+                                        onExtraToggled = { extra ->
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedExtraIds = if (extra.id in selectedExtraIds) {
+                                                selectedExtraIds - extra.id
+                                            } else {
+                                                selectedExtraIds + extra.id
+                                            }
+                                            onClearSubmitError()
+                                        },
+                                    )
+                                }
+
                                 BookingStep.Vehicle -> {
                                     BookingVehicleHeader(
-                                        onBack = { currentStepName = BookingStep.Service.name },
+                                        onBack = { currentStepName = BookingStep.Extras.name },
                                     )
 
                                     BookingVehicleStepContent(
@@ -891,7 +904,8 @@ private fun ProductsScreenContent(
                         onClick = {
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             when (currentStep) {
-                                BookingStep.Service -> currentStepName = BookingStep.Vehicle.name
+                                BookingStep.Service -> currentStepName = BookingStep.Extras.name
+                                BookingStep.Extras -> currentStepName = BookingStep.Vehicle.name
                                 BookingStep.Vehicle -> currentStepName = BookingStep.DateTime.name
                                 BookingStep.DateTime -> currentStepName = BookingStep.Contact.name
                                 BookingStep.Contact -> currentStepName = BookingStep.Confirmation.name
@@ -932,7 +946,8 @@ private fun ProductsScreenContent(
                         },
                         summaryDetail = when {
                             currentStep == BookingStep.Confirmation -> null
-                            currentStep == BookingStep.Service && selectedService != null -> {
+                            (currentStep == BookingStep.Service || currentStep == BookingStep.Extras) &&
+                                selectedService != null -> {
                                 "${selectedService.durationLabel} · ${selectedService.passengerPrice}"
                             }
                             else -> selectionPriceLabel
@@ -3614,81 +3629,82 @@ internal fun BookingVehicleCard(
     selected: Boolean,
     onSelected: () -> Unit,
 ) {
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .height(166.dp)
             .clickable(onClick = onSelected)
             .semantics {
                 role = Role.RadioButton
                 stateDescription = if (selected) "Selecionado" else "Não selecionado"
             },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        ),
+        color = SudsColors.glass,
         border = BorderStroke(
             width = 2.dp,
-            color = if (selected) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant,
+            color = if (selected) SudsColors.cyan else SudsColors.glassBorder,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(18.dp),
+        shadowElevation = if (selected) 12.dp else 0.dp,
     ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                modifier = Modifier.size(80.dp),
-                shape = RoundedCornerShape(18.dp),
-                color = if (selected) {
-                    MaterialTheme.colorScheme.tertiary
-                } else {
-                    MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.30f)
-                },
-                contentColor = if (selected) {
-                    MaterialTheme.colorScheme.onTertiary
-                } else {
-                    MaterialTheme.colorScheme.tertiary
-                },
-            ) {
-                Icon(
-                    imageVector = vehicle.icon(),
-                    contentDescription = null,
-                    modifier = Modifier.padding(20.dp),
-                )
-            }
-
+        Box(Modifier.fillMaxSize()) {
+            SudsVehiclePhoto(
+                kind = vehicle.photoKind(),
+                modifier = Modifier.fillMaxSize(),
+                contentDescription = null,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to SudsColors.ink.copy(alpha = 0.98f),
+                            0.56f to SudsColors.ink.copy(alpha = 0.72f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(SudsSpacing.md),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                if (vehicle.isDefault) {
-                    DefaultBookingVehicleChip()
-                }
-                Text(
-                    text = vehicle.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = vehicle.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (selected) {
-                Surface(
-                    modifier = Modifier.size(32.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        modifier = Modifier.padding(7.dp),
+                    if (vehicle.isDefault) {
+                        DefaultBookingVehicleChip()
+                    } else {
+                        Spacer(Modifier.height(1.dp))
+                    }
+                    if (selected) {
+                        Surface(
+                            modifier = Modifier.size(32.dp),
+                            shape = CircleShape,
+                            color = SudsColors.cyan,
+                            contentColor = SudsColors.onAction,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                modifier = Modifier.padding(7.dp),
+                            )
+                        }
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = vehicle.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = SudsColors.onBrand,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = vehicle.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SudsColors.onBrandMuted,
                     )
                 }
             }
@@ -3816,6 +3832,6 @@ private fun List<ProductExtraUi>.countLabel(): String {
     return if (size == 1) "1 extra" else "$size extras"
 }
 
-private fun BookingVehicleUi.icon(): ImageVector {
-    return if (type == "suv") Icons.Filled.AirportShuttle else Icons.Filled.DirectionsCar
+private fun BookingVehicleUi.photoKind(): SudsVehiclePhotoKind {
+    return if (type == "suv") SudsVehiclePhotoKind.Suv else SudsVehiclePhotoKind.Passenger
 }

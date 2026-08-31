@@ -2,12 +2,15 @@ package com.sudsmobile.feature.products
 
 internal enum class BookingStep {
     Service,
+    Extras,
     Vehicle,
     DateTime,
     Contact,
     Confirmation,
     Success,
 }
+
+internal const val BookingProgressStepCount = 5
 
 internal enum class BookingStepDirection {
     Forward,
@@ -40,9 +43,10 @@ private fun ProductServiceUi.isDetailingService(): Boolean {
 
 internal fun bookingProgressIndex(step: BookingStep): Int? = when (step) {
     BookingStep.Service -> 0
-    BookingStep.Vehicle -> 1
-    BookingStep.DateTime -> 2
-    BookingStep.Contact -> 3
+    BookingStep.Extras -> 1
+    BookingStep.Vehicle -> 2
+    BookingStep.DateTime -> 3
+    BookingStep.Contact -> 4
     BookingStep.Confirmation,
     BookingStep.Success -> null
 }
@@ -67,6 +71,7 @@ internal fun isBookingContinueEnabled(
     submissionLoading: Boolean,
 ): Boolean = when (step) {
     BookingStep.Service -> hasService
+    BookingStep.Extras -> hasService
     BookingStep.Vehicle -> hasVehicleSelection
     BookingStep.DateTime -> hasDate && hasTime
     BookingStep.Contact -> contactFormValid

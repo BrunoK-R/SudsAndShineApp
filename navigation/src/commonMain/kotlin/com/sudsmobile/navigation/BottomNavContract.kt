@@ -55,6 +55,8 @@ fun mainNavigationSelection(route: String?): MainNavigationSelection? = when (ro
 
 fun isMainDestinationRoute(route: String?): Boolean = mainNavigationSelection(route) != null
 
+fun shouldRestoreMainDestinationState(route: String): Boolean = route != Routes.Home
+
 internal fun navigationIndicatorOffset(
     totalWidth: Float,
     visualSlot: Int,

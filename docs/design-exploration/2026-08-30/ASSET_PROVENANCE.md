@@ -1,6 +1,6 @@
 # Production automotive imagery
 
-The pixel-parity pass uses four text-free raster assets generated with the built-in image-generation tool. The approved AI Home and booking concepts were supplied only as composition, palette, lighting, and mood references. The source generations remain in Codex's generated-image store; the project copies are 1200 × 800 JPEG masters at quality 90.
+The pixel-parity pass uses eight text-free raster assets generated with the built-in image-generation tool. The approved AI Home and booking concepts were supplied only as composition, palette, lighting, and mood references. The service and appointment project copies are 1200 × 800 JPEG masters at quality 90; the newer vehicle and navigation assets use the production dimensions and WebP encoding documented below.
 
 | Project resource | Purpose |
 | --- | --- |
@@ -10,6 +10,9 @@ The pixel-parity pass uses four text-free raster assets generated with the built
 | `shared/.../drawable/suds_service_exterior.jpg` | Exterior wash service |
 | `shared/.../drawable/suds_brand_mark.png` | Existing approved Suds & Shine mark, resized for shared UI use |
 | `feature/onboarding/.../drawable/suds_splash_mark.png` | User-selected car-wash mark, prepared on the shared splash navy |
+| `shared/.../drawable/suds_vehicle_passenger.webp` | Passenger vehicle selection card |
+| `shared/.../drawable/suds_vehicle_suv.webp` | SUV vehicle selection card |
+| `shared/.../drawable/suds_booking_navigation.webp` | Branded central booking navigation action |
 
 ## Splash mark
 
@@ -31,6 +34,67 @@ cropped strokes.
 ```
 
 ## Final prompt set
+
+### Passenger vehicle
+
+```text
+Use case: photorealistic-natural
+Asset type: premium mobile booking vehicle-category card background
+Input images: Image 1 is the approved Suds & Shine automotive lighting, palette,
+realism, and mood reference only
+Primary request: a freshly detailed generic pearl-white compact passenger sedan
+in a dark professional wash studio, viewed from a low front three-quarter angle,
+with fine water beads and a subtle wet-floor reflection
+Composition/framing: landscape 16:10; complete car safely within frame; main car
+detail on the right 68 percent; left 32 percent dark low-detail negative space for
+live UI text and selection state; no crop through wheels or headlights
+Lighting/mood: controlled cinematic detailing-bay light, cool cyan rim highlights,
+deep navy shadows, premium but natural photography
+Constraints: image only; no people, UI, text, badges, icons, logos, brand marks,
+license plate characters, or watermark; distinctly a passenger sedan, not an SUV
+```
+
+### SUV vehicle
+
+```text
+Use case: photorealistic-natural
+Asset type: premium mobile booking vehicle-category card background
+Input images: Image 1 is the approved Suds & Shine automotive lighting, palette,
+realism, and mood reference only
+Primary request: a freshly detailed generic dark graphite full-size SUV in a dark
+professional wash studio, viewed from a low front three-quarter angle, with water
+beads, clean muscular proportions, higher ride height, and a wet-floor reflection
+Composition/framing: landscape 16:10; complete SUV safely within frame; main
+vehicle detail on the right 68 percent; left 32 percent dark low-detail negative
+space for live UI text and selection state; no crop through wheels or headlights
+Lighting/mood: controlled cinematic detailing-bay light, cool cyan rim highlights,
+deep navy shadows, premium natural automotive photography
+Constraints: image only; no people, UI, text, badges, icons, logos, brand marks,
+license plate characters, or watermark; unmistakably an SUV, not a sedan
+```
+
+### Booking navigation mark
+
+```text
+Use case: logo-brand
+Asset type: tiny 58 dp circular mobile navigation action bitmap
+Input images: Image 1 is the Suds & Shine car, foam, swoosh, cyan/navy
+brand-language reference
+Primary request: create a highly simplified, distinctive booking mark: a
+deep-navy front-view car silhouette combined with one cyan-to-white wash swoosh
+and two small foam sparkles; communicate car-care booking without a calendar glyph
+Style/medium: crisp flat vector-like pictogram with bold solid shapes and excellent
+legibility at 30 dp
+Composition/framing: square, symbol centered inside a circular safe area, generous
+padding, perfectly balanced
+Color palette: flat cyan background #54D8E8, deep navy #05232A and white #F7FBFD
+Constraints: no text, letters, calendar, clock, photo, shadow, border, or watermark
+```
+
+The built-in image-generation outputs were visually inspected, resized to
+1200 × 800 (vehicle cards) and 256 × 256 (navigation mark), and encoded as WebP.
+The navigation bitmap edge was normalized to `#54D8E8` before integration so its
+circular crop blends exactly with the Compose action surface.
 
 ### Appointment hero
 

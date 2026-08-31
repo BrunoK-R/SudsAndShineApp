@@ -8,11 +8,13 @@ import kotlin.test.assertNull
 
 class BookingFlowModelTest {
     @Test
-    fun mapsInputStepsToFourSegmentProgress() {
+    fun mapsInputStepsToFiveSegmentProgressWithExtrasSecond() {
         assertEquals(0, bookingProgressIndex(BookingStep.Service))
-        assertEquals(1, bookingProgressIndex(BookingStep.Vehicle))
-        assertEquals(2, bookingProgressIndex(BookingStep.DateTime))
-        assertEquals(3, bookingProgressIndex(BookingStep.Contact))
+        assertEquals(1, bookingProgressIndex(BookingStep.Extras))
+        assertEquals(2, bookingProgressIndex(BookingStep.Vehicle))
+        assertEquals(3, bookingProgressIndex(BookingStep.DateTime))
+        assertEquals(4, bookingProgressIndex(BookingStep.Contact))
+        assertEquals(5, BookingProgressStepCount)
         assertNull(bookingProgressIndex(BookingStep.Confirmation))
         assertNull(bookingProgressIndex(BookingStep.Success))
     }
@@ -21,7 +23,7 @@ class BookingFlowModelTest {
     fun resolvesForwardBackwardAndStationaryTransitions() {
         assertEquals(
             BookingStepDirection.Forward,
-            bookingStepDirection(BookingStep.Service, BookingStep.Vehicle),
+            bookingStepDirection(BookingStep.Service, BookingStep.Extras),
         )
         assertEquals(
             BookingStepDirection.Forward,
@@ -61,6 +63,8 @@ class BookingFlowModelTest {
 
         assertEquals(false, enabled(BookingStep.Service))
         assertEquals(true, enabled(BookingStep.Service, service = true))
+        assertEquals(false, enabled(BookingStep.Extras))
+        assertEquals(true, enabled(BookingStep.Extras, service = true))
         assertEquals(false, enabled(BookingStep.Vehicle))
         assertEquals(true, enabled(BookingStep.Vehicle, vehicleSelection = true))
         assertEquals(false, enabled(BookingStep.DateTime, date = true))

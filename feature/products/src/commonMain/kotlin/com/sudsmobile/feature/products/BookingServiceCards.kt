@@ -96,19 +96,7 @@ internal fun BookingServiceCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Surface(
-                        modifier = Modifier.size(42.dp),
-                        shape = CircleShape,
-                        color = SudsColors.navyElevated.copy(alpha = 0.92f),
-                        contentColor = SudsColors.onBrand,
-                        border = BorderStroke(SudsSpacing.hairline, SudsColors.cyan.copy(alpha = 0.7f)),
-                    ) {
-                        Icon(
-                            imageVector = service.icon,
-                            contentDescription = null,
-                            modifier = Modifier.padding(10.dp),
-                        )
-                    }
+                    if (service.popular) PopularBadge() else Spacer(Modifier.height(1.dp))
                     if (selected) SelectionMark()
                 }
 
@@ -130,7 +118,6 @@ internal fun BookingServiceCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (service.popular) PopularBadge()
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,

@@ -61,6 +61,15 @@ class BottomNavContractTest {
     }
 
     @Test
+    fun homeNavigationDoesNotRestoreTheDestinationItJustPopped() {
+        assertFalse(shouldRestoreMainDestinationState(Routes.Home))
+        assertTrue(shouldRestoreMainDestinationState(Routes.Cart))
+        assertTrue(shouldRestoreMainDestinationState(Routes.Products))
+        assertTrue(shouldRestoreMainDestinationState(Routes.Loyalty))
+        assertTrue(shouldRestoreMainDestinationState(Routes.Profile))
+    }
+
+    @Test
     fun selectedIndicatorCenterMatchesEveryVisualIconSlot() {
         val totalWidth = 377f
         val indicatorSize = 38f

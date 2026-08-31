@@ -141,7 +141,11 @@ fun MainNavigation(
                                 saveState = true
                             }
                             launchSingleTop = true
-                            restoreState = true
+                            // Home is already the graph's start destination. Restoring its
+                            // saved entry here can immediately resurrect the screen we just
+                            // popped (for example an in-progress booking), making the Home
+                            // tab appear unresponsive.
+                            restoreState = shouldRestoreMainDestinationState(route)
                         }
                     }
                 )
@@ -191,10 +195,11 @@ fun MainNavigation(
                     visualFixtureEnabled = visualFixtureEnabled,
                     onBookService = { navigateToBooking() },
                     onBookSelectedService = { serviceId -> navigateToBooking(serviceId) },
-                    onViewServices = { navController.navigate(Routes.Services) },
+                    onViewServices = { navigateToBooking() },
                     onViewBookings = { navController.navigate(Routes.Cart) },
                     onOpenRewards = { navController.navigate(Routes.Loyalty) },
                     onOpenNotifications = { navController.navigate(Routes.NotificationPreferences) },
+                    onOpenProfile = { navController.navigate(Routes.Profile) },
                     onRequestSignIn = onRequestSignIn,
                 )
             }
@@ -228,7 +233,7 @@ fun MainNavigation(
                                 saveState = true
                             }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState = false
                         }
                     },
                     onOpenPayment = { reservationId ->
@@ -265,7 +270,7 @@ fun MainNavigation(
                                 saveState = true
                             }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState = false
                         }
                     },
                 )
