@@ -38,6 +38,20 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun emailPasswordSignInPublishesAuthenticatedState() = runTest {
+        val authRepository = FakeProviderAuthRepository()
+        val viewModel = AuthViewModel(authRepository)
+
+        viewModel.signIn(" bruno@example.com ", "secret123")
+        runCurrent()
+
+        val authenticated = assertIs<AuthUiState.Authenticated>(viewModel.uiState.value)
+        assertEquals(" bruno@example.com ", authRepository.lastEmail)
+        assertEquals("secret123", authRepository.lastPassword)
+        assertEquals("bruno@gmail.com", authenticated.user.email)
+    }
+
+    @Test
     fun googleSignInPublishesAuthenticatedState() = runTest {
         val authRepository = FakeProviderAuthRepository()
         val viewModel = AuthViewModel(authRepository)
@@ -130,6 +144,7 @@ class AuthViewModelTest {
 
 private open class FakeProviderAuthRepository(
     initialState: AuthSessionState = AuthSessionState.Unauthenticated,
+    private val emailResult: AuthResult = AuthResult.Success(providerSession()),
     private val googleResult: AuthResult = AuthResult.Success(providerSession()),
 ) : AuthRepository {
     protected val mutableSessionState = MutableStateFlow(initialState)
@@ -138,13 +153,22 @@ private open class FakeProviderAuthRepository(
         protected set
     var lastGoogleIdToken: String? = null
         protected set
+    var lastEmail: String? = null
+        private set
+    var lastPassword: String? = null
+        private set
 
     override suspend fun currentSession(): AuthSession? {
         return (mutableSessionState.value as? AuthSessionState.Authenticated)?.session
     }
 
     override suspend fun signIn(email: String, password: String): AuthResult {
-        error("Email/password sign-in is not used by provider auth tests.")
+        lastEmail = email
+        lastPassword = password
+        if (emailResult is AuthResult.Success) {
+            mutableSessionState.value = AuthSessionState.Authenticated(emailResult.session)
+        }
+        return emailResult
     }
 
     override suspend fun signInWithGoogleIdToken(idToken: String): AuthResult {

@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "991110746767-7f4jsih7797buqfsoc2t52s2hdp0db8i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "org.sudsmobile.app",
+            "certificate_hash": "e4283639fe553b7fc7077191d4797dd936deb262"
+          }
+        },
+        {
           "client_id": "991110746767-h6p90791742kftkuc4t5rgo97d57gupv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

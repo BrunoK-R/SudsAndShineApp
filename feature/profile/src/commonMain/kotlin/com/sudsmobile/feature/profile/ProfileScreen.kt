@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,7 +60,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -226,7 +224,6 @@ fun ProfileScreen(
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
     val adminAccessViewModel: AdminAccessViewModel = koinViewModel()
-    val contactViewModel: ContactViewModel = koinViewModel()
     val notificationPreferencesViewModel: NotificationPreferencesViewModel = koinViewModel()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val adminAccessState by adminAccessViewModel.uiState.collectAsStateWithLifecycle()
@@ -236,7 +233,6 @@ fun ProfileScreen(
     val statsState by viewModel.statsState.collectAsStateWithLifecycle()
     val preferencesState by viewModel.preferencesState.collectAsStateWithLifecycle()
     val profilePhotoState by viewModel.profilePhotoState.collectAsStateWithLifecycle()
-    val businessInfoState by contactViewModel.businessInfoState.collectAsStateWithLifecycle()
     val notificationDeviceState by notificationPreferencesViewModel.deviceState.collectAsStateWithLifecycle()
 
     LaunchedEffect(sessionState, bookingRevision, vehicleRevision, profileRevision) {
@@ -248,10 +244,6 @@ fun ProfileScreen(
         notificationPreferencesViewModel.refreshDeviceForSession()
     }
 
-    LaunchedEffect(Unit) {
-        contactViewModel.loadBusinessInfo()
-    }
-
     ProfileScreenContent(
         contentPadding = contentPadding,
         sessionState = sessionState,
@@ -260,14 +252,12 @@ fun ProfileScreen(
         preferencesState = preferencesState,
         profilePhotoState = profilePhotoState,
         notificationDeviceState = notificationDeviceState,
-        businessInfoState = businessInfoState,
         onRequestSignIn = onRequestSignIn,
         onSignOut = viewModel::signOut,
         onRetryStats = viewModel::loadStats,
         onRetryPreferences = viewModel::loadPreferences,
         onRetryPreferenceSave = viewModel::retryPreferenceSave,
         onRetryAdminAccess = { adminAccessViewModel.refreshForSession(force = true) },
-        onRetryBusinessInfo = { contactViewModel.loadBusinessInfo(force = true) },
         onProfilePhotoChange = viewModel::updateProfilePhoto,
         onRemoveProfilePhoto = viewModel::removeProfilePhoto,
         onRetryProfilePhoto = viewModel::retryProfilePhotoMutation,
@@ -301,14 +291,12 @@ private fun ProfileScreenContent(
     preferencesState: ProfilePreferencesUiState,
     profilePhotoState: ProfilePhotoUiState,
     notificationDeviceState: NotificationDeviceUiState,
-    businessInfoState: ContactBusinessInfoUiState,
     onRequestSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onRetryStats: () -> Unit,
     onRetryPreferences: () -> Unit,
     onRetryPreferenceSave: () -> Unit,
     onRetryAdminAccess: () -> Unit,
-    onRetryBusinessInfo: () -> Unit,
     onProfilePhotoChange: (ByteArray, String) -> Unit,
     onRemoveProfilePhoto: () -> Unit,
     onRetryProfilePhoto: () -> Unit,
@@ -334,7 +322,6 @@ private fun ProfileScreenContent(
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
     val isRestoringSession = sessionState == AuthSessionState.Restoring
     val restoreFailedMessage = (sessionState as? AuthSessionState.RestoreFailed)?.error?.message
-    val uriHandler = LocalUriHandler.current
     var pendingCropImage by remember { mutableStateOf<PickedProfileImage?>(null) }
     var showProfilePhotoActions by remember { mutableStateOf(false) }
     var localProfilePhotoError by remember { mutableStateOf<String?>(null) }
@@ -372,13 +359,13 @@ private fun ProfileScreenContent(
                 )
                 if (authenticatedUser != null) {
                     ProfileHeader(
-                user = authenticatedUser,
-                statsState = statsState,
-                preferencesState = preferencesState,
-                profilePhotoState = profilePhotoState,
-                onRetryStats = onRetryStats,
-                onOpenRewards = onOpenRewards,
-                onEditPhoto = { showProfilePhotoActions = true },
+                        user = authenticatedUser,
+                        statsState = statsState,
+                        preferencesState = preferencesState,
+                        profilePhotoState = profilePhotoState,
+                        onRetryStats = onRetryStats,
+                        onOpenRewards = onOpenRewards,
+                        onEditPhoto = { showProfilePhotoActions = true },
                     )
                 } else if (isRestoringSession) {
                     RestoringProfileHeader()
@@ -393,56 +380,51 @@ private fun ProfileScreenContent(
                         .padding(top = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    NearestLocationCard(
-                businessInfoState = businessInfoState,
-                onRetryBusinessInfo = onRetryBusinessInfo,
-                onOpenMaps = { mapsUri -> uriHandler.openUri(mapsUri) },
-            )
-            if (authenticatedUser != null) {
-                NotificationDevicePromptCard(
-                    deviceState = notificationDeviceState,
-                    isAdmin = adminAccessState is AdminAccessUiState.Admin,
-                    onOpenNotificationPreferences = onOpenNotificationPreferences,
-                )
-                ProfileMenuCard(
-                    onOpenPersonalData = onOpenPersonalData,
-                    onOpenNotificationPreferences = onOpenNotificationPreferences,
-                    onManageVehicles = onManageVehicles,
-                    onOpenHistory = onOpenHistory,
-                    onOpenContact = onOpenContact,
-                    onOpenRewards = onOpenRewards,
-                )
-                AdminOperationsCard(
-                    adminAccessState = adminAccessState,
-                    onRetryAdminAccess = onRetryAdminAccess,
-                    onOpenAdminBookings = onOpenAdminBookings,
-                    onOpenAdminAvailability = onOpenAdminAvailability,
-                    onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
-                    onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
-                    onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
-                    onOpenAdminNotificationCampaignDrafts = onOpenAdminNotificationCampaignDrafts,
-                    onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
-                    onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
-                    onOpenAdminServiceExtras = onOpenAdminServiceExtras,
-                )
-                PreferencesCard(
-                    preferencesState = preferencesState,
-                    onAppointmentReminderOptInChange = onAppointmentReminderOptInChange,
-                    onMarketingOptInChange = onMarketingOptInChange,
-                    onRetryPreferences = onRetryPreferences,
-                    onRetryPreferenceSave = onRetryPreferenceSave,
-                )
-                LogoutButton(onClick = onSignOut)
-            } else if (isRestoringSession) {
-                RestoringSessionCard()
-            } else if (restoreFailedMessage != null) {
-                RestoreFailedSessionCard(
-                    message = restoreFailedMessage,
-                    onRequestSignIn = onRequestSignIn,
-                )
-            } else {
-                GuestProfileCard(onRequestSignIn = onRequestSignIn)
-            }
+                    if (authenticatedUser != null) {
+                        NotificationDevicePromptCard(
+                            deviceState = notificationDeviceState,
+                            isAdmin = adminAccessState is AdminAccessUiState.Admin,
+                            onOpenNotificationPreferences = onOpenNotificationPreferences,
+                        )
+                        ProfileMenuCard(
+                            onOpenPersonalData = onOpenPersonalData,
+                            onOpenNotificationPreferences = onOpenNotificationPreferences,
+                            onManageVehicles = onManageVehicles,
+                            onOpenHistory = onOpenHistory,
+                            onOpenContact = onOpenContact,
+                            onOpenRewards = onOpenRewards,
+                        )
+                        AdminOperationsCard(
+                            adminAccessState = adminAccessState,
+                            onRetryAdminAccess = onRetryAdminAccess,
+                            onOpenAdminBookings = onOpenAdminBookings,
+                            onOpenAdminAvailability = onOpenAdminAvailability,
+                            onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
+                            onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
+                            onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
+                            onOpenAdminNotificationCampaignDrafts = onOpenAdminNotificationCampaignDrafts,
+                            onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
+                            onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
+                            onOpenAdminServiceExtras = onOpenAdminServiceExtras,
+                        )
+                        PreferencesCard(
+                            preferencesState = preferencesState,
+                            onAppointmentReminderOptInChange = onAppointmentReminderOptInChange,
+                            onMarketingOptInChange = onMarketingOptInChange,
+                            onRetryPreferences = onRetryPreferences,
+                            onRetryPreferenceSave = onRetryPreferenceSave,
+                        )
+                        LogoutButton(onClick = onSignOut)
+                    } else if (isRestoringSession) {
+                        RestoringSessionCard()
+                    } else if (restoreFailedMessage != null) {
+                        RestoreFailedSessionCard(
+                            message = restoreFailedMessage,
+                            onRequestSignIn = onRequestSignIn,
+                        )
+                    } else {
+                        GuestProfileCard(onRequestSignIn = onRequestSignIn)
+                    }
                     AppVersionText()
                 }
             }
@@ -1294,192 +1276,6 @@ private fun AuthUser.initials(profileDisplayName: String = displayName): String 
         .take(2)
         .joinToString(separator = "") { it.first().uppercaseChar().toString() }
         .ifBlank { "SS" }
-}
-
-@Composable
-private fun NearestLocationCard(
-    businessInfoState: ContactBusinessInfoUiState,
-    onRetryBusinessInfo: () -> Unit,
-    onOpenMaps: (String) -> Unit,
-) {
-    val businessInfo = businessInfoState.infoOrDefault()
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = "Suds & Shine mais próximo:",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-            )
-
-            NearestLocationStatus(
-                state = businessInfoState,
-                onRetry = onRetryBusinessInfo,
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                ProfileIconContainer(icon = Icons.Filled.Place)
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = "Morada",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = businessInfo.fullAddressLabel(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Button(
-                        onClick = { onOpenMaps(businessInfo.mapsUri) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp)
-                            .height(42.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary,
-                            contentColor = MaterialTheme.colorScheme.onTertiary,
-                        ),
-                    ) {
-                        Text(
-                            text = "Navegar até",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(152.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.48f),
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Place,
-                            contentDescription = null,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.secondary,
-                        )
-                        Text(
-                            text = businessInfo.mapPreviewLabel(),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NearestLocationStatus(
-    state: ContactBusinessInfoUiState,
-    onRetry: () -> Unit,
-) {
-    when (state) {
-        ContactBusinessInfoUiState.Idle -> Unit
-        ContactBusinessInfoUiState.Loading -> Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    color = MaterialTheme.colorScheme.tertiary,
-                    strokeWidth = 2.dp,
-                )
-                Text(
-                    text = "A atualizar morada e navegação.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        is ContactBusinessInfoUiState.Loaded -> Unit
-        is ContactBusinessInfoUiState.Error -> Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.82f),
-            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = state.message,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                if (state.retryable) {
-                    TextButton(
-                        onClick = onRetry,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        ),
-                    ) {
-                        Text(
-                            text = "Tentar",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun ContactBusinessInfoUi.fullAddressLabel(): String {
-    return listOf(addressLine1, addressLine2)
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .joinToString(separator = "\n")
-}
-
-private fun ContactBusinessInfoUi.mapPreviewLabel(): String {
-    return addressLine2
-        .substringBefore(",")
-        .trim()
-        .ifBlank { addressLine1.substringAfterLast(",").trim() }
-        .ifBlank { "Leiria" }
 }
 
 @Composable

@@ -25,7 +25,7 @@ class AuthViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
-    private var providerSignInInProgress: Boolean = false
+    private var signInInProgress: Boolean = false
 
     init {
         viewModelScope.launch {
@@ -48,7 +48,7 @@ class AuthViewModel(
                         if (_uiState.value == AuthUiState.Loading ||
                             _uiState.value is AuthUiState.Authenticated
                         ) {
-                            if (!providerSignInInProgress) {
+                            if (!signInInProgress) {
                                 _uiState.value = AuthUiState.Idle
                             }
                         }
@@ -61,7 +61,7 @@ class AuthViewModel(
     fun signInWithGoogleIdToken(idToken: String) {
         if (_uiState.value is AuthUiState.Loading) return
 
-        providerSignInInProgress = true
+        signInInProgress = true
         _uiState.value = AuthUiState.Loading
         viewModelScope.launch {
             try {
@@ -70,7 +70,24 @@ class AuthViewModel(
                     is AuthResult.Failure -> result.error.toUiState()
                 }
             } finally {
-                providerSignInInProgress = false
+                signInInProgress = false
+            }
+        }
+    }
+
+    fun signIn(email: String, password: String) {
+        if (_uiState.value is AuthUiState.Loading) return
+
+        signInInProgress = true
+        _uiState.value = AuthUiState.Loading
+        viewModelScope.launch {
+            try {
+                _uiState.value = when (val result = authRepository.signIn(email, password)) {
+                    is AuthResult.Success -> AuthUiState.Authenticated(result.session.user)
+                    is AuthResult.Failure -> result.error.toUiState()
+                }
+            } finally {
+                signInInProgress = false
             }
         }
     }
