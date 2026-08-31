@@ -6,14 +6,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,8 +35,7 @@ import com.sudsmobile.shared.ui.SudsProgressSegments
 @Composable
 internal fun BookingServiceHeader(onBack: () -> Unit) {
     BookingStepHeader(
-        title = "Escolha o serviço",
-        eyebrow = "PASSO 1 DE 4",
+        title = "Escolher serviço",
         progressIndex = bookingProgressIndex(BookingStep.Service),
         onBack = onBack,
     )
@@ -47,7 +45,6 @@ internal fun BookingServiceHeader(onBack: () -> Unit) {
 internal fun BookingVehicleHeader(onBack: () -> Unit) {
     BookingStepHeader(
         title = "Tipo de veículo",
-        eyebrow = "PASSO 2 DE 4",
         progressIndex = bookingProgressIndex(BookingStep.Vehicle),
         onBack = onBack,
     )
@@ -57,7 +54,6 @@ internal fun BookingVehicleHeader(onBack: () -> Unit) {
 internal fun BookingDateTimeHeader(onBack: () -> Unit) {
     BookingStepHeader(
         title = "Data e hora",
-        eyebrow = "PASSO 3 DE 4",
         progressIndex = bookingProgressIndex(BookingStep.DateTime),
         onBack = onBack,
     )
@@ -67,7 +63,6 @@ internal fun BookingDateTimeHeader(onBack: () -> Unit) {
 internal fun BookingContactHeader(onBack: () -> Unit) {
     BookingStepHeader(
         title = "Dados de contacto",
-        eyebrow = "PASSO 4 DE 4",
         progressIndex = bookingProgressIndex(BookingStep.Contact),
         onBack = onBack,
     )
@@ -77,7 +72,6 @@ internal fun BookingContactHeader(onBack: () -> Unit) {
 internal fun BookingConfirmationHeader(onBack: () -> Unit) {
     BookingStepHeader(
         title = "Rever pedido",
-        eyebrow = "CONFIRMAÇÃO",
         progressIndex = null,
         onBack = onBack,
     )
@@ -86,77 +80,60 @@ internal fun BookingConfirmationHeader(onBack: () -> Unit) {
 @Composable
 private fun BookingStepHeader(
     title: String,
-    eyebrow: String,
     progressIndex: Int?,
     onBack: () -> Unit,
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .heightIn(min = if (progressIndex == null) 88.dp else 132.dp)
-            .padding(
-                horizontal = SudsSpacing.contentGutter,
-                vertical = SudsSpacing.sm,
-            ),
+            .height(56.dp)
+            .padding(horizontal = SudsSpacing.contentGutter),
+        horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            modifier = Modifier
+                .size(44.dp)
+                .clickable(role = Role.Button, onClick = onBack)
+                .semantics { contentDescription = "Voltar" },
+            shape = CircleShape,
+            color = SudsColors.glassStrong,
+            border = BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder),
         ) {
-            Surface(
-                modifier = Modifier
-                    .size(SudsSpacing.minimumTouchTarget)
-                    .clickable(role = Role.Button, onClick = onBack)
-                    .semantics { contentDescription = "Voltar" },
-                shape = CircleShape,
-                color = SudsColors.glassStrong,
-                border = BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder),
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                        modifier = Modifier.size(SudsSpacing.xl),
-                        tint = SudsColors.onBrand,
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
-            ) {
-                Text(
-                    text = eyebrow,
-                    color = SudsColors.cyanMuted,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = title,
-                    color = SudsColors.onBrand,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (progressIndex != null) {
-                Text(
-                    text = "${progressIndex + 1}/4",
-                    color = SudsColors.champagne,
-                    style = MaterialTheme.typography.labelLarge,
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    modifier = Modifier.size(SudsSpacing.xl),
+                    tint = SudsColors.onBrand,
                 )
             }
         }
-
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = SudsColors.onBrand,
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (progressIndex != null) {
-            Spacer(Modifier.height(SudsSpacing.md))
-            SudsProgressSegments(
-                currentStepIndex = progressIndex,
-                totalSteps = 4,
-            )
+            Column(
+                modifier = Modifier.width(120.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
+            ) {
+                Text(
+                    text = "${progressIndex + 1} de 4",
+                    color = SudsColors.onBrandMuted,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                SudsProgressSegments(
+                    currentStepIndex = progressIndex,
+                    totalSteps = 4,
+                )
+            }
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.sudsmobile.feature.products
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -125,4 +127,36 @@ class BookingFlowModelTest {
             ),
         )
     }
+
+    @Test
+    fun prefersPopularServiceAndFiltersTheReferenceCategories() {
+        val services = listOf(
+            service(id = "standard", name = "Lavagem Standard"),
+            service(id = "premium", name = "Lavagem Premium", popular = true),
+            service(id = "exterior", name = "Lavagem Exterior"),
+        )
+
+        assertEquals("premium", preferredBookingServiceId(services))
+        assertEquals(listOf("standard", "exterior"), services.filteredBy(BookingServiceFilter.Wash).map { it.id })
+        assertEquals(listOf("premium"), services.filteredBy(BookingServiceFilter.Detailing).map { it.id })
+        assertEquals(services, services.filteredBy(BookingServiceFilter.All))
+    }
+
+    private fun service(
+        id: String,
+        name: String,
+        popular: Boolean = false,
+    ) = ProductServiceUi(
+        id = id,
+        name = name,
+        description = name,
+        durationMinutes = 30,
+        durationLabel = "30 min",
+        passengerPriceCents = 2_500,
+        suvPriceCents = 3_000,
+        passengerPrice = "25,00€",
+        suvPrice = "30,00€",
+        icon = Icons.Filled.DirectionsCar,
+        popular = popular,
+    )
 }

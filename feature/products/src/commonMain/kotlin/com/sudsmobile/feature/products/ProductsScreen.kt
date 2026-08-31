@@ -1,6 +1,7 @@
 package com.sudsmobile.feature.products
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -104,6 +105,8 @@ import com.sudsmobile.data.booking.BookingWaitlistJoinRequest
 import com.sudsmobile.data.booking.toBookingPaymentStatus
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
+import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsSpacing
 import com.sudsmobile.shared.ui.SudsBrandBackground
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -466,6 +469,18 @@ private fun ProductsScreenContent(
         }
     }
 
+    LaunchedEffect(catalogState, initialServiceId, initialSelectionPreset) {
+        val loadedCatalog = catalogState as? ProductCatalogUiState.Loaded ?: return@LaunchedEffect
+        if (
+            selectedServiceId == null &&
+            initialServiceId.normalizedInitialServiceId() == null &&
+            initialSelectionPreset == null &&
+            currentStep == BookingStep.Service
+        ) {
+            selectedServiceId = preferredBookingServiceId(loadedCatalog.services)
+        }
+    }
+
     LaunchedEffect(initialServiceId, initialSelectionPreset, initialServiceRequestKey, catalogState) {
         val loadedCatalog = catalogState as? ProductCatalogUiState.Loaded ?: return@LaunchedEffect
         if (appliedInitialServiceRequestKey == initialServiceRequestKey) return@LaunchedEffect
@@ -558,7 +573,11 @@ private fun ProductsScreenContent(
 
     BookingTheme {
         SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(SudsColors.ink.copy(alpha = 0.38f)),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -586,8 +605,8 @@ private fun ProductsScreenContent(
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 24.dp)
-                                            .padding(top = 24.dp),
+                                            .padding(horizontal = SudsSpacing.contentGutter)
+                                            .padding(top = SudsSpacing.xs),
                                         verticalArrangement = Arrangement.spacedBy(12.dp),
                                     ) {
                                         BookingServiceStepContent(
@@ -904,7 +923,13 @@ private fun ProductsScreenContent(
                         } else {
                             selectedService?.name
                         },
-                        summaryDetail = if (currentStep == BookingStep.Confirmation) null else selectionPriceLabel,
+                        summaryDetail = when {
+                            currentStep == BookingStep.Confirmation -> null
+                            currentStep == BookingStep.Service && selectedService != null -> {
+                                "${selectedService.durationLabel} · ${selectedService.passengerPrice}"
+                            }
+                            else -> selectionPriceLabel
+                        },
                         contentPadding = contentPadding,
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )

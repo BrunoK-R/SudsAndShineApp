@@ -1,6 +1,8 @@
 package com.sudsmobile.feature.products
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,6 +29,8 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -37,8 +42,8 @@ import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsShapes
 import com.sudsmobile.shared.theme.SudsSpacing
 import com.sudsmobile.shared.ui.SudsGlassCard
-import com.sudsmobile.shared.ui.SudsServiceArtwork
-import com.sudsmobile.shared.ui.serviceArtworkStyleForKey
+import com.sudsmobile.shared.ui.SudsAutomotivePhoto
+import com.sudsmobile.shared.ui.automotivePhotoKindForKey
 
 @Composable
 internal fun BookingServiceCard(
@@ -46,106 +51,120 @@ internal fun BookingServiceCard(
     selected: Boolean,
     onSelected: () -> Unit,
 ) {
-    SudsGlassCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(SudsShapes.card)
-            .clickable(onClick = onSelected)
+            .height(if (selected) 195.dp else 181.dp)
             .semantics {
                 role = Role.RadioButton
                 stateDescription = if (selected) "Selecionado" else "Não selecionado"
             }
-            .border(
-                width = if (selected) 2.dp else SudsSpacing.hairline,
-                color = if (selected) SudsColors.cyan else SudsColors.glassBorder,
-                shape = SudsShapes.card,
-            ),
-        contentPadding = PaddingValues(SudsSpacing.md),
-        containerColor = if (selected) {
-            SudsColors.cyan.copy(alpha = 0.14f)
-        } else {
-            SudsColors.glass
-        },
+            .clickable(onClick = onSelected),
+        shape = SudsShapes.card,
+        color = SudsColors.glass,
+        border = BorderStroke(
+            width = if (selected) 2.dp else SudsSpacing.hairline,
+            color = if (selected) SudsColors.cyan else SudsColors.glassBorder,
+        ),
+        shadowElevation = if (selected) 12.dp else 0.dp,
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SudsServiceArtwork(
-                style = serviceArtworkStyleForKey("${service.id} ${service.name}"),
-                size = 104.dp,
+        Box(Modifier.fillMaxSize()) {
+            SudsAutomotivePhoto(
+                kind = automotivePhotoKindForKey("${service.id} ${service.name}"),
+                modifier = Modifier.fillMaxSize(),
+                contentDescription = null,
             )
-
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to SudsColors.ink.copy(alpha = 0.98f),
+                            0.54f to SudsColors.ink.copy(alpha = 0.74f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(SudsSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = service.name,
-                        modifier = Modifier.weight(1f),
-                        color = SudsColors.onBrand,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Surface(
+                        modifier = Modifier.size(42.dp),
+                        shape = CircleShape,
+                        color = SudsColors.navyElevated.copy(alpha = 0.92f),
+                        contentColor = SudsColors.onBrand,
+                        border = BorderStroke(SudsSpacing.hairline, SudsColors.cyan.copy(alpha = 0.7f)),
+                    ) {
+                        Icon(
+                            imageVector = service.icon,
+                            contentDescription = null,
+                            modifier = Modifier.padding(10.dp),
+                        )
+                    }
                     if (selected) SelectionMark()
                 }
 
-                if (service.popular) PopularBadge()
-
+                Spacer(Modifier.weight(1f))
                 Text(
-                    text = service.description,
-                    color = SudsColors.onBrandMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 3,
+                    text = service.name,
+                    color = SudsColors.onBrand,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-
+                if (service.description.isNotBlank()) {
+                    Text(
+                        text = service.description,
+                        color = SudsColors.onBrandMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (service.popular) PopularBadge()
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs)) {
-                        Text(
-                            text = "A PARTIR DE",
-                            color = SudsColors.cyanMuted,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Text(
-                            text = service.passengerPrice,
-                            color = SudsColors.champagne,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
+                        horizontalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AccessTime,
                             contentDescription = null,
                             tint = SudsColors.onBrandMuted,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(17.dp),
                         )
                         Text(
                             text = service.durationLabel,
                             color = SudsColors.onBrandMuted,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
+                    Text(
+                        text = service.passengerPrice.bookingCompactPrice(),
+                        color = SudsColors.cyan,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }
     }
 }
+
+internal fun String.bookingCompactPrice(): String = replace(",00€", "€")
 
 @Composable
 internal fun BookingExtrasSelectionSection(
@@ -294,11 +313,12 @@ private fun SelectionMark() {
 private fun PopularBadge() {
     Surface(
         shape = SudsShapes.capsule,
-        color = SudsColors.champagne,
-        contentColor = SudsColors.onAction,
+        color = SudsColors.champagne.copy(alpha = 0.16f),
+        contentColor = SudsColors.champagne,
+        border = BorderStroke(SudsSpacing.hairline, SudsColors.champagne.copy(alpha = 0.34f)),
     ) {
         Text(
-            text = "MAIS ESCOLHIDO",
+            text = "★  Mais escolhido",
             modifier = Modifier.padding(horizontal = SudsSpacing.sm, vertical = SudsSpacing.xxs),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,

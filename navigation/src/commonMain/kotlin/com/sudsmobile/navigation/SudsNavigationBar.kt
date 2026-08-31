@@ -269,11 +269,11 @@ private fun SudsBookingNavigationAction(
                     clip = false
                 },
             shape = CircleShape,
-            color = if (selected) SudsColors.champagne else SudsColors.cyan,
+            color = SudsColors.cyan,
             contentColor = SudsColors.onAction,
             border = BorderStroke(
                 width = 2.dp,
-                color = if (selected) SudsColors.cyan else SudsColors.onBrand,
+                color = if (selected) SudsColors.cyanMuted else SudsColors.onBrand,
             ),
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -286,7 +286,7 @@ private fun SudsBookingNavigationAction(
         }
         Text(
             text = bookingDestination.compactLabel,
-            color = if (selected) SudsColors.champagne else SudsColors.onBrand,
+            color = if (selected) SudsColors.cyan else SudsColors.onBrand,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = 9.sp,
                 lineHeight = 11.sp,

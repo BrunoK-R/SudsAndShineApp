@@ -15,6 +15,29 @@ internal enum class BookingStepDirection {
     None,
 }
 
+internal enum class BookingServiceFilter(val label: String) {
+    All("Todos"),
+    Wash("Lavagem"),
+    Detailing("Detailing"),
+}
+
+internal fun preferredBookingServiceId(services: List<ProductServiceUi>): String? {
+    return services.firstOrNull(ProductServiceUi::popular)?.id ?: services.firstOrNull()?.id
+}
+
+internal fun List<ProductServiceUi>.filteredBy(filter: BookingServiceFilter): List<ProductServiceUi> {
+    return when (filter) {
+        BookingServiceFilter.All -> this
+        BookingServiceFilter.Wash -> filterNot(ProductServiceUi::isDetailingService)
+        BookingServiceFilter.Detailing -> filter(ProductServiceUi::isDetailingService)
+    }
+}
+
+private fun ProductServiceUi.isDetailingService(): Boolean {
+    val searchable = "$id $name $description".lowercase()
+    return listOf("detail", "premium", "acabamento", "ceramic").any(searchable::contains)
+}
+
 internal fun bookingProgressIndex(step: BookingStep): Int? = when (step) {
     BookingStep.Service -> 0
     BookingStep.Vehicle -> 1

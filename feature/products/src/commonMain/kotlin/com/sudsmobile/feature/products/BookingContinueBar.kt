@@ -1,25 +1,39 @@
 package com.sudsmobile.feature.products
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsShapes
 import com.sudsmobile.shared.theme.SudsSpacing
-import com.sudsmobile.shared.ui.SudsPrimaryButton
+import com.sudsmobile.shared.ui.SudsAutomotivePhoto
+import com.sudsmobile.shared.ui.automotivePhotoKindForKey
 
 @Composable
 internal fun ContinueBar(
@@ -31,40 +45,40 @@ internal fun ContinueBar(
     summaryTitle: String? = null,
     summaryDetail: String? = null,
 ) {
-    Surface(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .imePadding(),
-        color = SudsColors.ink,
-        border = BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder),
-        tonalElevation = 0.dp,
-        shadowElevation = 12.dp,
+            .imePadding()
+            .padding(horizontal = SudsSpacing.sm)
+            .padding(bottom = contentPadding.calculateBottomPadding() + SudsSpacing.xs),
     ) {
-        Column(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SudsSpacing.contentGutter)
-                .padding(
-                    top = SudsSpacing.sm,
-                    bottom = contentPadding.calculateBottomPadding() + SudsSpacing.sm,
-                ),
-            verticalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
+                .height(if (summaryTitle == null) 76.dp else 90.dp),
+            shape = SudsShapes.card,
+            color = SudsColors.ink.copy(alpha = 0.98f),
+            border = BorderStroke(SudsSpacing.hairline, SudsColors.glassBorder),
+            tonalElevation = 0.dp,
+            shadowElevation = 16.dp,
         ) {
-            if (summaryTitle != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(
+            Row(
+                modifier = Modifier.padding(SudsSpacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (summaryTitle != null) {
+                    SudsAutomotivePhoto(
+                        kind = automotivePhotoKindForKey(summaryTitle),
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(SudsShapes.control),
+                        contentDescription = null,
+                    )
+                    androidx.compose.foundation.layout.Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(SudsSpacing.xxs),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text(
-                            text = "SELEÇÃO",
-                            color = SudsColors.cyanMuted,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
                         Text(
                             text = summaryTitle,
                             color = SudsColors.onBrand,
@@ -72,26 +86,53 @@ internal fun ContinueBar(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (summaryDetail != null) {
+                            Text(
+                                text = summaryDetail.bookingCompactPrice(),
+                                color = SudsColors.onBrandMuted,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
-                    if (summaryDetail != null) {
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .width(150.dp)
+                        .then(if (summaryTitle == null) Modifier.weight(1f) else Modifier)
+                        .height(64.dp)
+                        .semantics { role = Role.Button }
+                        .clickable(enabled = enabled, onClick = onClick),
+                    shape = SudsShapes.capsule,
+                    color = if (enabled) SudsColors.cyan else SudsColors.glassStrong,
+                    contentColor = if (enabled) SudsColors.onAction else SudsColors.onBrandMuted,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = SudsSpacing.lg),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = summaryDetail,
-                            color = SudsColors.champagne,
-                            style = MaterialTheme.typography.labelLarge,
+                            text = label,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        Spacer(Modifier.width(SudsSpacing.xs))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(SudsSpacing.xl),
+                        )
                     }
                 }
-                HorizontalDivider(color = SudsColors.glassBorder)
             }
-
-            SudsPrimaryButton(
-                label = label,
-                onClick = onClick,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-            )
         }
     }
 }
