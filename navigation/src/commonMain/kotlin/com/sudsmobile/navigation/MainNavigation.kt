@@ -73,6 +73,20 @@ fun MainNavigation(
     var initialBookingSelectionPreset by remember { mutableStateOf<BookingSelectionPreset?>(null) }
     var initialBookingRequestKey by rememberSaveable { mutableStateOf(0L) }
 
+    fun returnToHome() {
+        val returnedToExistingHome = navController.popBackStack(
+            route = Routes.Home,
+            inclusive = false,
+        )
+        if (!returnedToExistingHome) {
+            navController.navigate(Routes.Home) {
+                popUpTo(navController.graph.findStartDestination().id)
+                launchSingleTop = true
+                restoreState = false
+            }
+        }
+    }
+
     fun navigateToBooking(serviceId: String? = null) {
         initialBookingServiceId = serviceId
         initialBookingSelectionPreset = null
@@ -132,20 +146,21 @@ fun MainNavigation(
                 SudsNavigationBar(
                     currentRoute = currentRoute,
                     onDestinationClick = { route ->
-                        if (route == Routes.Products) {
-                            initialBookingServiceId = null
-                            initialBookingSelectionPreset = null
-                        }
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+                        when (mainDestinationNavigationAction(route)) {
+                            MainDestinationNavigationAction.ReturnToHomeRoot -> returnToHome()
+                            MainDestinationNavigationAction.NavigateAndRestore -> {
+                                if (route == Routes.Products) {
+                                    initialBookingServiceId = null
+                                    initialBookingSelectionPreset = null
+                                }
+                                navController.navigate(route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                            launchSingleTop = true
-                            // Home is already the graph's start destination. Restoring its
-                            // saved entry here can immediately resurrect the screen we just
-                            // popped (for example an in-progress booking), making the Home
-                            // tab appear unresponsive.
-                            restoreState = shouldRestoreMainDestinationState(route)
                         }
                     }
                 )
@@ -227,15 +242,7 @@ fun MainNavigation(
                             restoreState = true
                         }
                     },
-                    onHome = {
-                        navController.navigate(Routes.Home) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = false
-                        }
-                    },
+                    onHome = { returnToHome() },
                     onOpenPayment = { reservationId ->
                         navController.navigate(
                             reservationId
@@ -264,15 +271,7 @@ fun MainNavigation(
                     contentPadding = paddingValues,
                     onBack = { navController.popBackStack() },
                     onRequestSignIn = onRequestSignIn,
-                    onHome = {
-                        navController.navigate(Routes.Home) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = false
-                        }
-                    },
+                    onHome = { returnToHome() },
                 )
             }
             composable(Routes.Profile) {

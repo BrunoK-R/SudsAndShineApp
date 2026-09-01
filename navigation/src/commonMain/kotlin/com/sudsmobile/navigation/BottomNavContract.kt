@@ -44,6 +44,11 @@ enum class NavigationTransitionDirection {
     Forward,
 }
 
+enum class MainDestinationNavigationAction {
+    ReturnToHomeRoot,
+    NavigateAndRestore,
+}
+
 fun mainNavigationSelection(route: String?): MainNavigationSelection? = when (route) {
     Routes.Home -> MainNavigationSelection.Home
     Routes.Cart -> MainNavigationSelection.Bookings
@@ -55,7 +60,12 @@ fun mainNavigationSelection(route: String?): MainNavigationSelection? = when (ro
 
 fun isMainDestinationRoute(route: String?): Boolean = mainNavigationSelection(route) != null
 
-fun shouldRestoreMainDestinationState(route: String): Boolean = route != Routes.Home
+fun mainDestinationNavigationAction(route: String): MainDestinationNavigationAction =
+    if (route == Routes.Home) {
+        MainDestinationNavigationAction.ReturnToHomeRoot
+    } else {
+        MainDestinationNavigationAction.NavigateAndRestore
+    }
 
 internal fun navigationIndicatorOffset(
     totalWidth: Float,

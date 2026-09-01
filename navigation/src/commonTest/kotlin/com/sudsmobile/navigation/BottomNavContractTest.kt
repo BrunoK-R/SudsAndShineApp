@@ -61,12 +61,22 @@ class BottomNavContractTest {
     }
 
     @Test
-    fun homeNavigationDoesNotRestoreTheDestinationItJustPopped() {
-        assertFalse(shouldRestoreMainDestinationState(Routes.Home))
-        assertTrue(shouldRestoreMainDestinationState(Routes.Cart))
-        assertTrue(shouldRestoreMainDestinationState(Routes.Products))
-        assertTrue(shouldRestoreMainDestinationState(Routes.Loyalty))
-        assertTrue(shouldRestoreMainDestinationState(Routes.Profile))
+    fun homeNavigationReturnsToTheExistingRootInsteadOfRestoringSavedState() {
+        assertEquals(
+            MainDestinationNavigationAction.ReturnToHomeRoot,
+            mainDestinationNavigationAction(Routes.Home),
+        )
+        listOf(
+            Routes.Cart,
+            Routes.Products,
+            Routes.Loyalty,
+            Routes.Profile,
+        ).forEach { route ->
+            assertEquals(
+                MainDestinationNavigationAction.NavigateAndRestore,
+                mainDestinationNavigationAction(route),
+            )
+        }
     }
 
     @Test
