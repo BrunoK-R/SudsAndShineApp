@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
@@ -41,7 +40,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -60,6 +58,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -501,58 +501,45 @@ private fun ProfileHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Box(modifier = Modifier.size(96.dp)) {
-                Surface(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .align(Alignment.Center),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (photoModel != null) {
-                            AsyncImage(
-                                model = photoModel,
-                                contentDescription = "Foto de perfil",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop,
-                            )
+            Surface(
+                modifier = Modifier
+                    .size(80.dp)
+                    .semantics {
+                        contentDescription = if (photoSaving) {
+                            "A guardar foto de perfil"
                         } else {
-                            Text(
-                                text = user.initials(displayName),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
+                            "Alterar foto de perfil"
                         }
                     }
-                }
-                Surface(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .align(Alignment.BottomEnd),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    shadowElevation = 4.dp,
-                ) {
-                    IconButton(
-                        onClick = onEditPhoto,
+                    .clickable(
                         enabled = !photoSaving,
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        if (photoSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Edit,
-                                contentDescription = "Alterar foto de perfil",
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+                        onClick = onEditPhoto,
+                    ),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (photoModel != null) {
+                        AsyncImage(
+                            model = photoModel,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    } else {
+                        Text(
+                            text = user.initials(displayName),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    if (photoSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onTertiary,
+                        )
                     }
                 }
             }
