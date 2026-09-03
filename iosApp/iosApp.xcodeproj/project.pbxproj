@@ -183,25 +183,6 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		B9DA98132F00000100A4DA20 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 9.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		B9DA98122F00000100A4DA20 /* GoogleSignIn */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = B9DA98132F00000100A4DA20 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignIn;
-		};
-/* End XCSwiftPackageProductDependency section */
-
 /* Begin XCBuildConfiguration section */
 		B9DA97BD2DC1472D00A4DA20 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -418,6 +399,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B9DA98132F00000100A4DA20 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B9DA98122F00000100A4DA20 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B9DA98132F00000100A4DA20 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B9DA97A92DC1472C00A4DA20 /* Project object */;
 }
