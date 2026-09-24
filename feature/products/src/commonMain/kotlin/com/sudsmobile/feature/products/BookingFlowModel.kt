@@ -84,6 +84,14 @@ internal fun isBookingContinueEnabled(
     BookingStep.Success -> false
 }
 
+internal fun shouldShowBookingContinueBar(
+    step: BookingStep,
+    isKeyboardVisible: Boolean,
+): Boolean = step != BookingStep.Success && !(step == BookingStep.Contact && isKeyboardVisible)
+
+internal fun shouldResetBookingScrollToTop(step: BookingStep): Boolean =
+    step == BookingStep.Confirmation || step == BookingStep.Success
+
 internal fun bookingSelectionPriceLabel(
     passengerPriceLabel: String,
     passengerPriceCents: Int,

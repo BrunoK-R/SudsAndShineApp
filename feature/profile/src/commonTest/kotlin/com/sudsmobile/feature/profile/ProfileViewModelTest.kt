@@ -32,6 +32,9 @@ import com.sudsmobile.data.notification.NotificationTokenDeleteResult
 import com.sudsmobile.data.notification.NotificationTokenPlatform
 import com.sudsmobile.data.notification.NotificationTokenRegistrationRequest
 import com.sudsmobile.data.notification.NotificationTokenRegistrationResult
+import com.sudsmobile.data.profile.AccountDeletionRepository
+import com.sudsmobile.data.profile.AccountDeletionRequest
+import com.sudsmobile.data.profile.AccountDeletionResult
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileError
@@ -102,6 +105,95 @@ class ProfileViewModelTest {
         assertIs<ProfileStatsUiState.Unauthenticated>(viewModel.statsState.value)
         assertEquals(0, bookingRepository.historyCalls)
         assertEquals(0, vehicleRepository.listCalls)
+    }
+
+    @Test
+    fun successfulAccountDeletionSignsOutOnlyAfterServerConfirmation() = runTest {
+        val authRepository = ProfileStatsFakeAuthRepository(authenticated = true)
+        val deletionRepository = ProfileAccountDeletionFakeRepository(AccountDeletionResult.Success)
+        val viewModel = ProfileViewModel(
+            authRepository = authRepository,
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
+            accountDeletionRepository = deletionRepository,
+        )
+
+        viewModel.deleteAccount("Bruno Ribeiro")
+        assertIs<AccountDeletionUiState.Deleting>(viewModel.accountDeletionState.value)
+        runCurrent()
+
+        assertEquals("Bruno Ribeiro", deletionRepository.lastRequest?.confirmationName)
+        assertIs<AccountDeletionUiState.Deleted>(viewModel.accountDeletionState.value)
+        assertEquals(1, authRepository.signOutCalls)
+        assertIs<AuthSessionState.Unauthenticated>(authRepository.sessionState.value)
+    }
+
+    @Test
+    fun appleAccountDeletionReauthenticatesBeforeSigningOut() = runTest {
+        val authRepository = ProfileStatsFakeAuthRepository(authenticated = true)
+        val deletionRepository = ProfileAccountDeletionFakeRepository(
+            AccountDeletionResult.RequiresAppleReauthentication,
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = authRepository,
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
+            accountDeletionRepository = deletionRepository,
+        )
+
+        viewModel.deleteAccount("Bruno Ribeiro")
+        runCurrent()
+
+        val awaiting = assertIs<AccountDeletionUiState.AwaitingAppleReauthentication>(
+            viewModel.accountDeletionState.value,
+        )
+        assertEquals("Bruno Ribeiro", awaiting.confirmationName)
+        assertEquals(0, authRepository.signOutCalls)
+
+        deletionRepository.result = AccountDeletionResult.Success
+        viewModel.completeAppleAccountDeletionAuthorization("Bruno Ribeiro", "apple-code")
+        runCurrent()
+
+        assertEquals("apple-code", deletionRepository.lastRequest?.appleAuthorizationCode)
+        assertIs<AccountDeletionUiState.Deleted>(viewModel.accountDeletionState.value)
+        assertEquals(1, authRepository.signOutCalls)
+    }
+
+    @Test
+    fun failedAccountDeletionKeepsTheSessionAuthenticated() = runTest {
+        val authRepository = ProfileStatsFakeAuthRepository(authenticated = true)
+        val deletionRepository = ProfileAccountDeletionFakeRepository(
+            AccountDeletionResult.Failure(UserProfileError.Validation("O nome não corresponde.")),
+        )
+        val viewModel = ProfileViewModel(
+            authRepository = authRepository,
+            bookingRepository = ProfileStatsFakeBookingRepository(
+                BookingHistoryResult.Success(BookingHistory(emptyList())),
+            ),
+            userVehicleRepository = ProfileStatsFakeVehicleRepository(UserVehicleListResult.Success(emptyList())),
+            userProfileRepository = ProfileStatsFakeProfileRepository(
+                UserProfileResult.Success(profilePreferencesProfile()),
+            ),
+            accountDeletionRepository = deletionRepository,
+        )
+
+        viewModel.deleteAccount("Nome Errado")
+        runCurrent()
+
+        val error = assertIs<AccountDeletionUiState.Error>(viewModel.accountDeletionState.value)
+        assertEquals("O nome não corresponde.", error.message)
+        assertEquals(0, authRepository.signOutCalls)
+        assertIs<AuthSessionState.Authenticated>(authRepository.sessionState.value)
     }
 
     @Test
@@ -1123,6 +1215,18 @@ private class ProfilePhotoFakeRepository(
     override suspend fun removeMyProfilePhoto(): UserProfileMutationResult {
         removeCalls += 1
         return removeResult
+    }
+}
+
+private class ProfileAccountDeletionFakeRepository(
+    var result: AccountDeletionResult,
+) : AccountDeletionRepository {
+    var lastRequest: AccountDeletionRequest? = null
+        private set
+
+    override suspend fun deleteMyAccount(request: AccountDeletionRequest): AccountDeletionResult {
+        lastRequest = request
+        return result
     }
 }
 

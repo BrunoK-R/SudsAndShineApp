@@ -41,13 +41,8 @@ class HomeLayoutModelTest {
     }
 
     @Test
-    fun headerUsesCompactBookingLocationWhenAvailable() {
-        val state = loadedState(
-            nextBooking = booking().copy(location = "Suds e Shine - Leiria, Piso -1"),
-        )
-
-        assertEquals("Leiria", state.homeHeaderLocationLabel())
-        assertEquals("Bem-vindo de volta", emptyState().homeHeaderLocationLabel())
+    fun headerUsesGoogleMapsLocationActionCopy() {
+        assertEquals("Onde estamos", HomeLocationActionLabel)
     }
 
     @Test
@@ -68,8 +63,8 @@ class HomeLayoutModelTest {
     fun pixelReferenceFixtureKeepsAcceptanceCopyAndOrderDeterministic() {
         val fixture = homePixelReferenceState()
 
-        assertEquals("Olá, Bruno", fixture.identity.greeting)
-        assertEquals("Leiria", fixture.homeHeaderLocationLabel())
+        assertEquals("Olá, Bruno!", fixture.identity.greeting)
+        assertEquals("Bem-vindo à Suds e Shine!", fixture.identity.subtitle)
         assertEquals("Lavagem Premium", fixture.nextBooking?.service)
         assertEquals("Ter, 1 de setembro", fixture.nextBooking?.date)
         assertEquals("10:30", fixture.nextBooking?.time)

@@ -15,8 +15,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.data.business.DefaultBusinessInfo
 import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
 import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsSpacing
@@ -93,6 +95,7 @@ internal fun HomeScreenContent(
         }
     }
     val identity = uiState.identityOrDefault()
+    val uriHandler = LocalUriHandler.current
 
     SudsBrandBackground(Modifier.fillMaxSize()) {
         Box(
@@ -113,8 +116,10 @@ internal fun HomeScreenContent(
                         when (section) {
                             HomeSection.Header -> HomeExpandedHeader(
                                 identity = identity,
-                                locationLabel = uiState.homeHeaderLocationLabel(),
                                 collapseProgress = collapseProgress,
+                                onOpenLocation = {
+                                    uriHandler.openUri(DefaultBusinessInfo.mapsUri)
+                                },
                                 onOpenNotifications = onOpenNotifications,
                                 onOpenProfile = onOpenProfile,
                             )

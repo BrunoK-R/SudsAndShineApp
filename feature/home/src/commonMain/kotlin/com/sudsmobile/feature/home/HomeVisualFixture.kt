@@ -9,8 +9,8 @@ import com.sudsmobile.shared.loyalty.toLoyaltyProgress
 
 internal fun homePixelReferenceState(): HomeUiState.Loaded = HomeUiState.Loaded(
     identity = HomeIdentityUi(
-        greeting = "Olá, Bruno",
-        subtitle = "Leiria",
+        greeting = "Olá, Bruno!",
+        subtitle = "Bem-vindo à Suds e Shine!",
         initials = "BR",
     ),
     nextBooking = HomeBookingUi(

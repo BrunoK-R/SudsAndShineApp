@@ -34,6 +34,8 @@ import com.sudsmobile.data.notification.FirebaseNotificationRepository
 import com.sudsmobile.data.notification.KtorNotificationFunctionsApi
 import com.sudsmobile.data.notification.NotificationFunctionsApi
 import com.sudsmobile.data.notification.NotificationRepository
+import com.sudsmobile.data.profile.AccountDeletionFunctionsApi
+import com.sudsmobile.data.profile.AccountDeletionRepository
 import com.sudsmobile.data.profile.FirebaseUserProfileRepository
 import com.sudsmobile.data.profile.KtorProfileFunctionsApi
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
@@ -90,6 +92,7 @@ val dataModule = module {
     single { KtorProfileFunctionsApi(get(), get()) }
     single<ProfileFunctionsApi> { get<KtorProfileFunctionsApi>() }
     single<ProfilePhotoFunctionsApi> { get<KtorProfileFunctionsApi>() }
+    single<AccountDeletionFunctionsApi> { get<KtorProfileFunctionsApi>() }
     single { MutableUserProfileChangeNotifier() }
     single<UserProfileChangeNotifier> { get<MutableUserProfileChangeNotifier>() }
     single {
@@ -98,10 +101,12 @@ val dataModule = module {
             authRepository = get(),
             profileChangeNotifier = get(),
             photoApi = get(),
+            accountDeletionApi = get(),
         )
     }
     single<UserProfileRepository> { get<FirebaseUserProfileRepository>() }
     single<UserProfilePhotoRepository> { get<FirebaseUserProfileRepository>() }
+    single<AccountDeletionRepository> { get<FirebaseUserProfileRepository>() }
     single<NotificationFunctionsApi> { KtorNotificationFunctionsApi(get(), get()) }
     single<NotificationRepository> { FirebaseNotificationRepository(get(), get(), get()) }
     single<VehicleFunctionsApi> { KtorVehicleFunctionsApi(get(), get()) }

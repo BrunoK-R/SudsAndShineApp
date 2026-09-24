@@ -7,7 +7,8 @@ class FirebaseUserProfileRepository(
     private val authRepository: AuthRepository,
     private val profileChangeNotifier: MutableUserProfileChangeNotifier = MutableUserProfileChangeNotifier(),
     private val photoApi: ProfilePhotoFunctionsApi? = api as? ProfilePhotoFunctionsApi,
-) : UserProfileRepository, UserProfilePhotoRepository {
+    private val accountDeletionApi: AccountDeletionFunctionsApi? = api as? AccountDeletionFunctionsApi,
+) : UserProfileRepository, UserProfilePhotoRepository, AccountDeletionRepository {
     override suspend fun getMyProfile(): UserProfileResult {
         val idToken = currentIdTokenOrNull()
             ?: return UserProfileResult.Failure(unauthenticatedError())
@@ -64,6 +65,39 @@ class FirebaseUserProfileRepository(
             .notifyProfileChangedOnSuccess()
     }
 
+    override suspend fun deleteMyAccount(request: AccountDeletionRequest): AccountDeletionResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AccountDeletionResult.Failure(unauthenticatedError())
+        val confirmationName = request.confirmationName.trim().replace(Regex("\\s+"), " ")
+        if (confirmationName.isBlank()) {
+            return AccountDeletionResult.Failure(
+                UserProfileError.Validation("Indique o nome completo para eliminar a conta."),
+            )
+        }
+        if (confirmationName.length > MaxDisplayNameLength) {
+            return AccountDeletionResult.Failure(
+                UserProfileError.Validation("O nome de confirmação é demasiado longo."),
+            )
+        }
+        val appleAuthorizationCode = request.appleAuthorizationCode.trim()
+        if (appleAuthorizationCode.length > MaxAppleAuthorizationCodeLength) {
+            return AccountDeletionResult.Failure(
+                UserProfileError.Validation("A confirmação Apple recebida é inválida."),
+            )
+        }
+        val resolvedApi = accountDeletionApi
+            ?: return AccountDeletionResult.Failure(
+                UserProfileError.Unavailable("A eliminação da conta está temporariamente indisponível."),
+            )
+        return resolvedApi.deleteMyAccount(
+            request = request.copy(
+                confirmationName = confirmationName,
+                appleAuthorizationCode = appleAuthorizationCode,
+            ),
+            idToken = idToken,
+        )
+    }
+
     private suspend fun currentIdTokenOrNull(): String? = authRepository.currentSession()?.idToken
 
     private fun validate(request: UserProfileSaveRequest): UserProfileError.Validation? {
@@ -110,6 +144,7 @@ class FirebaseUserProfileRepository(
 }
 
 private const val MaxDisplayNameLength = 100
+private const val MaxAppleAuthorizationCodeLength = 4_096
 private const val MaxPhoneLength = 32
 private const val MaxProfilePhotoUrlLength = 2048
 private const val MaxProfilePhotoBytes = 1_000_000

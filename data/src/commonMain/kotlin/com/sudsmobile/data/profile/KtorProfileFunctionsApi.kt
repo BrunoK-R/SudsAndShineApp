@@ -16,7 +16,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 class KtorProfileFunctionsApi(
     private val httpClient: HttpClient,
     private val config: FirebaseFunctionsConfig,
-) : ProfileFunctionsApi, ProfilePhotoFunctionsApi {
+) : ProfileFunctionsApi, ProfilePhotoFunctionsApi, AccountDeletionFunctionsApi {
     override suspend fun getMyProfile(idToken: String): UserProfileResult {
         return try {
             val response = httpClient.post(config.getMyProfileUrl) {
@@ -89,6 +89,42 @@ class KtorProfileFunctionsApi(
         )
     }
 
+    override suspend fun deleteMyAccount(
+        request: AccountDeletionRequest,
+        idToken: String,
+    ): AccountDeletionResult {
+        return try {
+            val response = httpClient.post(config.deleteMyAccountUrl) {
+                callableHeaders(idToken)
+                setBody(
+                    CallableAccountDeletionRequest(
+                        data = AccountDeletionPayload(
+                            confirmationName = request.confirmationName,
+                            appleAuthorizationCode = request.appleAuthorizationCode,
+                        ),
+                    ),
+                )
+            }
+            val body = response.body<CallableAccountDeletionResponse>()
+            val error = body.error
+            when {
+                error?.requiresAppleReauthentication() == true ->
+                    AccountDeletionResult.RequiresAppleReauthentication
+                error != null -> AccountDeletionResult.Failure(error.toProfileError())
+                body.result?.ok == true -> AccountDeletionResult.Success
+                else -> AccountDeletionResult.Failure(
+                    UserProfileError.Backend("A eliminação da conta não foi confirmada pelo servidor."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AccountDeletionResult.Failure(
+                UserProfileError.Unavailable("Não foi possível eliminar a conta. Tente novamente."),
+            )
+        }
+    }
+
     private suspend fun mutateProfilePhoto(
         payload: ProfilePhotoPayload,
         idToken: String,
@@ -138,6 +174,17 @@ private data class CallableProfilePhotoRequest(
 )
 
 @Serializable
+private data class CallableAccountDeletionRequest(
+    val data: AccountDeletionPayload,
+)
+
+@Serializable
+private data class AccountDeletionPayload(
+    val confirmationName: String,
+    val appleAuthorizationCode: String = "",
+)
+
+@Serializable
 private data class ProfilePhotoPayload(
     val imageBase64: String? = null,
     val mimeType: String? = null,
@@ -167,6 +214,17 @@ private data class ProfileSavePayload(
 private data class CallableProfileResponse(
     val result: ProfileResult? = null,
     val error: CallableError? = null,
+)
+
+@Serializable
+private data class CallableAccountDeletionResponse(
+    val result: AccountDeletionResponsePayload? = null,
+    val error: CallableError? = null,
+)
+
+@Serializable
+private data class AccountDeletionResponsePayload(
+    val ok: Boolean = false,
 )
 
 @Serializable
@@ -201,6 +259,12 @@ private data class CallableError(
     val code: String? = null,
     val message: String? = null,
 ) {
+    fun requiresAppleReauthentication(): Boolean {
+        val normalizedCode = (status ?: code).orEmpty().lowercase()
+        return normalizedCode in setOf("failed_precondition", "failed-precondition") &&
+            message == AppleReauthenticationRequiredMessage
+    }
+
     fun toProfileError(): UserProfileError {
         val normalizedCode = (status ?: code).orEmpty().lowercase()
         val fallbackMessage = message ?: "Não foi possível gerir os dados pessoais."
@@ -214,3 +278,5 @@ private data class CallableError(
         }
     }
 }
+
+private const val AppleReauthenticationRequiredMessage = "APPLE_REAUTHENTICATION_REQUIRED"

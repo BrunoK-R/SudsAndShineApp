@@ -8,6 +8,13 @@ interface ProfileFunctionsApi {
     ): UserProfileMutationResult
 }
 
+interface AccountDeletionFunctionsApi {
+    suspend fun deleteMyAccount(
+        request: AccountDeletionRequest,
+        idToken: String,
+    ): AccountDeletionResult
+}
+
 interface ProfilePhotoFunctionsApi {
     suspend fun updateMyProfilePhoto(
         request: UserProfilePhotoSaveRequest,

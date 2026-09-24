@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
@@ -42,6 +43,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -233,6 +235,7 @@ fun ProfileScreen(
     val statsState by viewModel.statsState.collectAsStateWithLifecycle()
     val preferencesState by viewModel.preferencesState.collectAsStateWithLifecycle()
     val profilePhotoState by viewModel.profilePhotoState.collectAsStateWithLifecycle()
+    val accountDeletionState by viewModel.accountDeletionState.collectAsStateWithLifecycle()
     val notificationDeviceState by notificationPreferencesViewModel.deviceState.collectAsStateWithLifecycle()
 
     LaunchedEffect(sessionState, bookingRevision, vehicleRevision, profileRevision) {
@@ -244,6 +247,26 @@ fun ProfileScreen(
         notificationPreferencesViewModel.refreshDeviceForSession()
     }
 
+    LaunchedEffect(accountDeletionState) {
+        val pending = accountDeletionState as? AccountDeletionUiState.AwaitingAppleReauthentication
+            ?: return@LaunchedEffect
+        val started = requestAppleAccountDeletionAuthorization(
+            onAuthorizationCode = { authorizationCode ->
+                viewModel.completeAppleAccountDeletionAuthorization(
+                    confirmationName = pending.confirmationName,
+                    authorizationCode = authorizationCode,
+                )
+            },
+            onError = viewModel::failAppleAccountDeletionAuthorization,
+            onCancelled = viewModel::cancelAppleAccountDeletionAuthorization,
+        )
+        if (!started) {
+            viewModel.failAppleAccountDeletionAuthorization(
+                "Para eliminar uma conta Apple, confirme a sua identidade num iPhone.",
+            )
+        }
+    }
+
     ProfileScreenContent(
         contentPadding = contentPadding,
         sessionState = sessionState,
@@ -251,9 +274,12 @@ fun ProfileScreen(
         statsState = statsState,
         preferencesState = preferencesState,
         profilePhotoState = profilePhotoState,
+        accountDeletionState = accountDeletionState,
         notificationDeviceState = notificationDeviceState,
         onRequestSignIn = onRequestSignIn,
         onSignOut = viewModel::signOut,
+        onDeleteAccount = viewModel::deleteAccount,
+        onDismissAccountDeletionError = viewModel::dismissAccountDeletionError,
         onRetryStats = viewModel::loadStats,
         onRetryPreferences = viewModel::loadPreferences,
         onRetryPreferenceSave = viewModel::retryPreferenceSave,
@@ -290,9 +316,12 @@ private fun ProfileScreenContent(
     statsState: ProfileStatsUiState,
     preferencesState: ProfilePreferencesUiState,
     profilePhotoState: ProfilePhotoUiState,
+    accountDeletionState: AccountDeletionUiState,
     notificationDeviceState: NotificationDeviceUiState,
     onRequestSignIn: () -> Unit,
     onSignOut: () -> Unit,
+    onDeleteAccount: (String) -> Unit,
+    onDismissAccountDeletionError: () -> Unit,
     onRetryStats: () -> Unit,
     onRetryPreferences: () -> Unit,
     onRetryPreferenceSave: () -> Unit,
@@ -325,6 +354,7 @@ private fun ProfileScreenContent(
     var pendingCropImage by remember { mutableStateOf<PickedProfileImage?>(null) }
     var showProfilePhotoActions by remember { mutableStateOf(false) }
     var localProfilePhotoError by remember { mutableStateOf<String?>(null) }
+    var showAccountDeletionDialog by remember { mutableStateOf(false) }
     val profilePhotoSaving = profilePhotoState is ProfilePhotoUiState.Saving
     val profileImagePicker = rememberProfileImagePicker(
         onImagePicked = { pickedImage ->
@@ -415,6 +445,13 @@ private fun ProfileScreenContent(
                             onRetryPreferenceSave = onRetryPreferenceSave,
                         )
                         LogoutButton(onClick = onSignOut)
+                        DeleteAccountButton(
+                            enabled = accountDeletionState !is AccountDeletionUiState.Deleting,
+                            onClick = {
+                                onDismissAccountDeletionError()
+                                showAccountDeletionDialog = true
+                            },
+                        )
                     } else if (isRestoringSession) {
                         RestoringSessionCard()
                     } else if (restoreFailedMessage != null) {
@@ -422,8 +459,6 @@ private fun ProfileScreenContent(
                             message = restoreFailedMessage,
                             onRequestSignIn = onRequestSignIn,
                         )
-                    } else {
-                        GuestProfileCard(onRequestSignIn = onRequestSignIn)
                     }
                     AppVersionText()
                 }
@@ -440,6 +475,24 @@ private fun ProfileScreenContent(
                 onRemoveProfilePhoto()
             },
             onDismiss = { if (!profilePhotoSaving) showProfilePhotoActions = false },
+            )
+        }
+
+        if (showAccountDeletionDialog && authenticatedUser != null) {
+            AccountDeletionDialog(
+                expectedDisplayName = preferencesState.displayNameOrNull()
+                    ?: authenticatedUser.resolvedDisplayName,
+                state = accountDeletionState,
+                onConfirm = onDeleteAccount,
+                onClearError = onDismissAccountDeletionError,
+                onDismiss = {
+                    if (accountDeletionState !is AccountDeletionUiState.Deleting &&
+                        accountDeletionState !is AccountDeletionUiState.AwaitingAppleReauthentication
+                    ) {
+                        showAccountDeletionDialog = false
+                        onDismissAccountDeletionError()
+                    }
+                },
             )
         }
 
@@ -859,61 +912,6 @@ private fun NotificationDevicePromptCard(
                         fontWeight = FontWeight.Bold,
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GuestProfileCard(onRequestSignIn: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top,
-            ) {
-                ProfileIconContainer(icon = Icons.Filled.Security)
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = "Sessão necessária",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = "Os veículos, histórico e preferências ficam associados à sua conta.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            OutlinedButton(
-                onClick = onRequestSignIn,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.tertiary,
-                ),
-            ) {
-                Text(
-                    text = "Iniciar sessão",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
             }
         }
     }
@@ -1789,6 +1787,111 @@ private fun LogoutButton(onClick: () -> Unit) {
         )
     }
 }
+
+@Composable
+private fun DeleteAccountButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError,
+        ),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.DeleteForever,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Eliminar conta")
+    }
+}
+
+@Composable
+private fun AccountDeletionDialog(
+    expectedDisplayName: String,
+    state: AccountDeletionUiState,
+    onConfirm: (String) -> Unit,
+    onClearError: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var confirmationName by remember(expectedDisplayName) { mutableStateOf("") }
+    val deleting = state is AccountDeletionUiState.Deleting ||
+        state is AccountDeletionUiState.AwaitingAppleReauthentication
+    val namesMatch = confirmationName.normalizedConfirmationName() ==
+        expectedDisplayName.normalizedConfirmationName()
+    val errorMessage = (state as? AccountDeletionUiState.Error)?.message
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SudsColors.navyElevated,
+        title = { Text("Eliminar conta?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Esta ação é definitiva. A conta, os veículos, as marcações, " +
+                        "o histórico e os restantes dados pessoais serão eliminados.",
+                )
+                Text(
+                    "Escreva o seu nome completo, “$expectedDisplayName”, para confirmar.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                OutlinedTextField(
+                    value = confirmationName,
+                    onValueChange = {
+                        confirmationName = it
+                        if (state is AccountDeletionUiState.Error) onClearError()
+                    },
+                    enabled = !deleting,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Nome completo") },
+                    singleLine = true,
+                    isError = errorMessage != null,
+                    supportingText = errorMessage?.let { message ->
+                        { Text(message) }
+                    },
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(confirmationName) },
+                enabled = namesMatch && !deleting,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                if (deleting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onError,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(if (deleting) "A eliminar…" else "Eliminar definitivamente")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !deleting) {
+                Text("Cancelar")
+            }
+        },
+    )
+}
+
+private fun String.normalizedConfirmationName(): String =
+    trim().replace(Regex("\\s+"), " ").lowercase()
 
 @Composable
 private fun AppVersionText() {

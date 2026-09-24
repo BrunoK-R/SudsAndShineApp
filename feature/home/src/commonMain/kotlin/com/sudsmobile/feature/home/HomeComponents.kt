@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Shield
@@ -75,8 +74,8 @@ import com.sudsmobile.shared.ui.automotivePhotoKindForKey
 @Composable
 internal fun HomeExpandedHeader(
     identity: HomeIdentityUi,
-    locationLabel: String,
     collapseProgress: Float,
+    onOpenLocation: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenProfile: () -> Unit,
 ) {
@@ -84,7 +83,7 @@ internal fun HomeExpandedHeader(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .height(64.dp)
+            .heightIn(min = 88.dp)
             .padding(horizontal = SudsSpacing.contentGutter)
             .then(
                 if (collapseProgress >= 0.5f) Modifier.clearAndSetSemantics { }
@@ -115,7 +114,20 @@ internal fun HomeExpandedHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            Text(
+                text = identity.subtitle,
+                color = SudsColors.onBrandMuted,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Row(
+                modifier = Modifier
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "Abrir localização da Suds e Shine no Google Maps"
+                    }
+                    .clickable(onClick = onOpenLocation),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -126,14 +138,14 @@ internal fun HomeExpandedHeader(
                 )
                 Spacer(Modifier.width(SudsSpacing.xxs))
                 Text(
-                    text = locationLabel,
+                    text = HomeLocationActionLabel,
                     color = SudsColors.onBrandMuted,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    imageVector = Icons.Filled.ChevronRight,
                     contentDescription = null,
                     tint = SudsColors.onBrandMuted,
                     modifier = Modifier.size(15.dp),

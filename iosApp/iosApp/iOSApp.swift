@@ -12,6 +12,7 @@ struct iOSApp: App {
         ComposeApp.KoinInitializerKt.initializeIosApp(isDebugBuild: isDebugBuild)
         GoogleSignInCoordinator.shared.configureKotlinBridge()
         AppleSignInCoordinator.shared.configureKotlinBridge()
+        AppleAccountDeletionCoordinator.shared.configureKotlinBridge()
     }
 
     var body: some Scene {

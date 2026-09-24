@@ -130,9 +130,66 @@ class FirebaseUserProfileRepositoryTest {
         assertEquals(1, api.photoRemoveCalls)
         assertEquals(1L, profileChangeNotifier.revision.value)
     }
+
+    @Test
+    fun deletesAccountWithNormalizedConfirmationNameAndIdToken() = runTest {
+        val api = RecordingProfileFunctionsApi()
+        val repository = FirebaseUserProfileRepository(
+            api = api,
+            authRepository = FakeProfileAuthRepository(authenticated = true),
+        )
+
+        val result = repository.deleteMyAccount(
+            AccountDeletionRequest(
+                confirmationName = "  Bruno   Ribeiro  ",
+                appleAuthorizationCode = "  apple-code  ",
+            ),
+        )
+
+        assertIs<AccountDeletionResult.Success>(result)
+        assertEquals(1, api.accountDeletionCalls)
+        assertEquals("Bruno Ribeiro", api.lastAccountDeletionRequest?.confirmationName)
+        assertEquals("apple-code", api.lastAccountDeletionRequest?.appleAuthorizationCode)
+        assertEquals("id-token-1", api.lastAccountDeletionIdToken)
+    }
+
+    @Test
+    fun rejectsAccountDeletionWithoutAConfirmationNameBeforeCallingApi() = runTest {
+        val api = RecordingProfileFunctionsApi()
+        val repository = FirebaseUserProfileRepository(
+            api = api,
+            authRepository = FakeProfileAuthRepository(authenticated = true),
+        )
+
+        val result = repository.deleteMyAccount(AccountDeletionRequest("   "))
+
+        val failure = assertIs<AccountDeletionResult.Failure>(result)
+        assertIs<UserProfileError.Validation>(failure.error)
+        assertEquals(0, api.accountDeletionCalls)
+    }
+
+    @Test
+    fun rejectsOversizedAppleAuthorizationCodeBeforeCallingApi() = runTest {
+        val api = RecordingProfileFunctionsApi()
+        val repository = FirebaseUserProfileRepository(
+            api = api,
+            authRepository = FakeProfileAuthRepository(authenticated = true),
+        )
+
+        val result = repository.deleteMyAccount(
+            AccountDeletionRequest("Bruno Ribeiro", appleAuthorizationCode = "a".repeat(4097)),
+        )
+
+        val failure = assertIs<AccountDeletionResult.Failure>(result)
+        assertIs<UserProfileError.Validation>(failure.error)
+        assertEquals(0, api.accountDeletionCalls)
+    }
 }
 
-private class RecordingProfileFunctionsApi : ProfileFunctionsApi, ProfilePhotoFunctionsApi {
+private class RecordingProfileFunctionsApi :
+    ProfileFunctionsApi,
+    ProfilePhotoFunctionsApi,
+    AccountDeletionFunctionsApi {
     var loadCalls: Int = 0
         private set
     var updateCalls: Int = 0
@@ -148,6 +205,12 @@ private class RecordingProfileFunctionsApi : ProfileFunctionsApi, ProfilePhotoFu
     var lastPhotoRequest: UserProfilePhotoSaveRequest? = null
         private set
     var lastPhotoIdToken: String? = null
+        private set
+    var accountDeletionCalls: Int = 0
+        private set
+    var lastAccountDeletionRequest: AccountDeletionRequest? = null
+        private set
+    var lastAccountDeletionIdToken: String? = null
         private set
 
     override suspend fun getMyProfile(idToken: String): UserProfileResult {
@@ -187,6 +250,16 @@ private class RecordingProfileFunctionsApi : ProfileFunctionsApi, ProfilePhotoFu
         photoRemoveCalls += 1
         lastPhotoIdToken = idToken
         return UserProfileMutationResult.Success(profile(photoUrl = ""))
+    }
+
+    override suspend fun deleteMyAccount(
+        request: AccountDeletionRequest,
+        idToken: String,
+    ): AccountDeletionResult {
+        accountDeletionCalls += 1
+        lastAccountDeletionRequest = request
+        lastAccountDeletionIdToken = idToken
+        return AccountDeletionResult.Success
     }
 }
 

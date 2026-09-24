@@ -580,7 +580,7 @@ private fun AuthUser.toHomeIdentity(): HomeIdentityUi {
     val name = resolvedDisplayName
     return HomeIdentityUi(
         greeting = "Olá, ${name.firstNameOrFullName()}!",
-        subtitle = "Bem-vindo de volta",
+        subtitle = HomeWelcomeMessage,
         initials = name.initialsFromNameOrEmail(email),
     )
 }
@@ -748,17 +748,18 @@ private fun String.initialsFromNameOrEmail(email: String): String {
 
 private val GuestIdentity = HomeIdentityUi(
     greeting = "Olá!",
-    subtitle = "Entre para acompanhar marcações",
+    subtitle = HomeWelcomeMessage,
     initials = "SS",
 )
 
 private val LoadingIdentity = HomeIdentityUi(
     greeting = "Olá!",
-    subtitle = "A preparar a sua experiência",
+    subtitle = HomeWelcomeMessage,
     initials = "SS",
 )
 
 private const val MaxHomeStats = 3
+private const val HomeWelcomeMessage = "Bem-vindo à Suds e Shine!"
 private const val GuestSessionKey = "guest"
 private val DefaultStatIcons = listOf(
     Icons.Filled.DirectionsCar,

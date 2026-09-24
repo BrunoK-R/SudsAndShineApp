@@ -17,6 +17,9 @@ import com.sudsmobile.data.notification.NotificationDeviceRegistrar
 import com.sudsmobile.data.notification.NotificationRepository
 import com.sudsmobile.data.notification.NotificationTokenDeleteRequest
 import com.sudsmobile.data.notification.NotificationTokenDeleteResult
+import com.sudsmobile.data.profile.AccountDeletionRepository
+import com.sudsmobile.data.profile.AccountDeletionRequest
+import com.sudsmobile.data.profile.AccountDeletionResult
 import com.sudsmobile.data.profile.MutableUserProfileChangeNotifier
 import com.sudsmobile.data.profile.UserProfile
 import com.sudsmobile.data.profile.UserProfileChangeNotifier
@@ -103,6 +106,14 @@ internal sealed interface ProfilePhotoUiState {
     ) : ProfilePhotoUiState
 }
 
+internal sealed interface AccountDeletionUiState {
+    data object Idle : AccountDeletionUiState
+    data object Deleting : AccountDeletionUiState
+    data class AwaitingAppleReauthentication(val confirmationName: String) : AccountDeletionUiState
+    data object Deleted : AccountDeletionUiState
+    data class Error(val message: String, val retryable: Boolean) : AccountDeletionUiState
+}
+
 private sealed interface ProfilePhotoMutation {
     data class Upload(val imageBytes: ByteArray, val mimeType: String) : ProfilePhotoMutation
     data object Remove : ProfilePhotoMutation
@@ -119,6 +130,7 @@ internal class ProfileViewModel(
     private val notificationRepository: NotificationRepository? = null,
     private val notificationDeviceRegistrar: NotificationDeviceRegistrar? = null,
     private val userProfilePhotoRepository: UserProfilePhotoRepository = UnavailableUserProfilePhotoRepository,
+    private val accountDeletionRepository: AccountDeletionRepository = UnavailableAccountDeletionRepository,
 ) : ViewModel() {
     val sessionState: StateFlow<AuthSessionState> = authRepository.sessionState
     val bookingRevision: StateFlow<Long> = bookingChangeNotifier.revision
@@ -130,6 +142,8 @@ internal class ProfileViewModel(
     val preferencesState: StateFlow<ProfilePreferencesUiState> = _preferencesState.asStateFlow()
     private val _profilePhotoState = MutableStateFlow<ProfilePhotoUiState>(ProfilePhotoUiState.Idle)
     val profilePhotoState: StateFlow<ProfilePhotoUiState> = _profilePhotoState.asStateFlow()
+    private val _accountDeletionState = MutableStateFlow<AccountDeletionUiState>(AccountDeletionUiState.Idle)
+    val accountDeletionState: StateFlow<AccountDeletionUiState> = _accountDeletionState.asStateFlow()
     private var loadedUid: String? = null
     private var loadedBookingRevision: Long? = null
     private var loadedVehicleRevision: Long? = null
@@ -568,6 +582,83 @@ internal class ProfileViewModel(
         }
     }
 
+    fun deleteAccount(confirmationName: String) {
+        if (_accountDeletionState.value is AccountDeletionUiState.Deleting ||
+            _accountDeletionState.value is AccountDeletionUiState.AwaitingAppleReauthentication
+        ) {
+            return
+        }
+        if (sessionState.value !is AuthSessionState.Authenticated) {
+            _accountDeletionState.value = AccountDeletionUiState.Error(
+                message = "Inicie sessão para eliminar a conta.",
+                retryable = false,
+            )
+            return
+        }
+
+        submitAccountDeletion(AccountDeletionRequest(confirmationName))
+    }
+
+    fun completeAppleAccountDeletionAuthorization(
+        confirmationName: String,
+        authorizationCode: String,
+    ) {
+        if (_accountDeletionState.value !is AccountDeletionUiState.AwaitingAppleReauthentication) return
+        submitAccountDeletion(
+            AccountDeletionRequest(
+                confirmationName = confirmationName,
+                appleAuthorizationCode = authorizationCode,
+            ),
+        )
+    }
+
+    fun cancelAppleAccountDeletionAuthorization() {
+        if (_accountDeletionState.value is AccountDeletionUiState.AwaitingAppleReauthentication) {
+            _accountDeletionState.value = AccountDeletionUiState.Idle
+        }
+    }
+
+    fun failAppleAccountDeletionAuthorization(message: String) {
+        if (_accountDeletionState.value is AccountDeletionUiState.AwaitingAppleReauthentication) {
+            _accountDeletionState.value = AccountDeletionUiState.Error(message, retryable = true)
+        }
+    }
+
+    private fun submitAccountDeletion(request: AccountDeletionRequest) {
+        _accountDeletionState.value = AccountDeletionUiState.Deleting
+        viewModelScope.launch {
+            when (val result = accountDeletionRepository.deleteMyAccount(request)) {
+                AccountDeletionResult.Success -> {
+                    clearLoadedStats()
+                    clearLoadedPreferences()
+                    clearProfilePhotoMutationState()
+                    _statsState.value = ProfileStatsUiState.Unauthenticated
+                    _preferencesState.value = ProfilePreferencesUiState.Unauthenticated
+                    _accountDeletionState.value = AccountDeletionUiState.Deleted
+                    authRepository.signOut()
+                }
+                AccountDeletionResult.RequiresAppleReauthentication -> {
+                    _accountDeletionState.value = AccountDeletionUiState.AwaitingAppleReauthentication(
+                        confirmationName = request.confirmationName,
+                    )
+                }
+                is AccountDeletionResult.Failure -> {
+                    _accountDeletionState.value = AccountDeletionUiState.Error(
+                        message = result.error.message,
+                        retryable = result.error is UserProfileError.Unavailable ||
+                            result.error is UserProfileError.Backend,
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissAccountDeletionError() {
+        if (_accountDeletionState.value is AccountDeletionUiState.Error) {
+            _accountDeletionState.value = AccountDeletionUiState.Idle
+        }
+    }
+
     private suspend fun revokeNotificationTokenForSignOut(uid: String) {
         val notificationRepository = notificationRepository ?: return
         val notificationDeviceRegistrar = notificationDeviceRegistrar ?: return
@@ -797,6 +888,13 @@ private object UnavailableUserProfilePhotoRepository : UserProfilePhotoRepositor
     override suspend fun removeMyProfilePhoto(): UserProfileMutationResult =
         UserProfileMutationResult.Failure(
             UserProfileError.Unavailable("A atualização da foto de perfil está indisponível."),
+        )
+}
+
+private object UnavailableAccountDeletionRepository : AccountDeletionRepository {
+    override suspend fun deleteMyAccount(request: AccountDeletionRequest): AccountDeletionResult =
+        AccountDeletionResult.Failure(
+            UserProfileError.Unavailable("A eliminação da conta está temporariamente indisponível."),
         )
 }
 

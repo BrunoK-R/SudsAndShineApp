@@ -158,6 +158,79 @@ class KtorProfileFunctionsApiTest {
         assertEquals(true, data.getValue("remove").jsonPrimitive.boolean)
         assertEquals(false, data.containsKey("imageBase64"))
     }
+
+    @Test
+    fun sendsAuthenticatedAccountDeletionConfirmation() = runTest {
+        var requestedPath: String? = null
+        var authorizationHeader: String? = null
+        var requestBody = ""
+        val api = KtorProfileFunctionsApi(
+            httpClient = mockClient("""{"result":{"ok":true}}""") { request ->
+                requestedPath = request.url.fullPath
+                authorizationHeader = request.headers[HttpHeaders.Authorization]
+                requestBody = request.bodyText()
+            },
+            config = testConfig(),
+        )
+
+        val result = api.deleteMyAccount(
+            request = AccountDeletionRequest(
+                confirmationName = "Bruno Ribeiro",
+                appleAuthorizationCode = "apple-code",
+            ),
+            idToken = "id-token-1",
+        )
+
+        assertIs<AccountDeletionResult.Success>(result)
+        val data = Json.parseToJsonElement(requestBody).jsonObject.getValue("data").jsonObject
+        assertEquals("/test-project/europe-west1/deleteMyAccount", requestedPath)
+        assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("Bruno Ribeiro", data.getValue("confirmationName").jsonPrimitive.content)
+        assertEquals("apple-code", data.getValue("appleAuthorizationCode").jsonPrimitive.content)
+    }
+
+    @Test
+    fun mapsAccountDeletionNameMismatchToValidationError() = runTest {
+        val api = KtorProfileFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "INVALID_ARGUMENT",
+                    "message": "O nome completo não corresponde ao nome guardado no perfil."
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.deleteMyAccount(AccountDeletionRequest("Outro Nome"), "id-token-1")
+
+        val failure = assertIs<AccountDeletionResult.Failure>(result)
+        assertIs<UserProfileError.Validation>(failure.error)
+    }
+
+    @Test
+    fun mapsAppleReauthenticationRequirement() = runTest {
+        val api = KtorProfileFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "error": {
+                    "status": "FAILED_PRECONDITION",
+                    "message": "APPLE_REAUTHENTICATION_REQUIRED"
+                  }
+                }
+                """.trimIndent(),
+            ),
+            config = testConfig(),
+        )
+
+        val result = api.deleteMyAccount(AccountDeletionRequest("Bruno Ribeiro"), "id-token-1")
+
+        assertIs<AccountDeletionResult.RequiresAppleReauthentication>(result)
+    }
 }
 
 private fun HttpRequestData.bodyText(): String {

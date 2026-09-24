@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +12,12 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -78,6 +82,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -296,6 +302,7 @@ private fun ProductsScreenContent(
     var appliedInitialServiceRequestKey by rememberSaveable { mutableStateOf<Long?>(null) }
     var unavailableInitialServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingPresetVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
+    val bookingScrollState = rememberScrollState()
     val currentStep = BookingStep.valueOf(currentStepName)
     val contactFormValid = contactName.isNotBlank() &&
         contactPhone.trim().length >= 6 &&
@@ -311,7 +318,10 @@ private fun ProductsScreenContent(
     val selectedVehicle = vehicleOptions.firstOrNull { it.id == selectedVehicleId }
     val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
     val hapticFeedback = LocalHapticFeedback.current
-    val stepDistancePx = with(LocalDensity.current) { 24.dp.roundToPx() }
+    val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val stepDistancePx = with(density) { 24.dp.roundToPx() }
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
     val selectionPriceLabel = selectedService?.let { service ->
         bookingSelectionPriceLabel(
             passengerPriceLabel = service.passengerPrice,
@@ -435,6 +445,9 @@ private fun ProductsScreenContent(
     }
 
     LaunchedEffect(currentStep) {
+        if (shouldResetBookingScrollToTop(currentStep)) {
+            bookingScrollState.scrollTo(0)
+        }
         if (
             currentStep == BookingStep.DateTime ||
             currentStep == BookingStep.Confirmation ||
@@ -585,12 +598,18 @@ private fun ProductsScreenContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(SudsColors.ink.copy(alpha = 0.38f)),
+                    .background(SudsColors.ink.copy(alpha = 0.38f))
+                    .pointerInput(currentStep) {
+                        detectTapGestures {
+                            if (currentStep == BookingStep.Contact) focusManager.clearFocus()
+                        }
+                    },
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                        .then(if (currentStep == BookingStep.Contact) Modifier.imePadding() else Modifier)
+                        .verticalScroll(bookingScrollState)
                         .padding(bottom = contentPadding.calculateBottomPadding() + 176.dp),
                 ) {
                     AnimatedContent(
@@ -889,7 +908,7 @@ private fun ProductsScreenContent(
                     }
                 }
 
-                if (currentStep != BookingStep.Success) {
+                if (shouldShowBookingContinueBar(currentStep, isKeyboardVisible)) {
                     ContinueBar(
                         enabled = isBookingContinueEnabled(
                             step = currentStep,

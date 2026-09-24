@@ -99,6 +99,21 @@ class BookingFlowModelTest {
     }
 
     @Test
+    fun hidesContactContinueBarWhileKeyboardIsVisible() {
+        assertEquals(false, shouldShowBookingContinueBar(BookingStep.Contact, isKeyboardVisible = true))
+        assertEquals(true, shouldShowBookingContinueBar(BookingStep.Contact, isKeyboardVisible = false))
+        assertEquals(true, shouldShowBookingContinueBar(BookingStep.Confirmation, isKeyboardVisible = true))
+        assertEquals(false, shouldShowBookingContinueBar(BookingStep.Success, isKeyboardVisible = false))
+    }
+
+    @Test
+    fun resetsScrollForReviewAndSuccessScreens() {
+        assertEquals(true, shouldResetBookingScrollToTop(BookingStep.Confirmation))
+        assertEquals(true, shouldResetBookingScrollToTop(BookingStep.Success))
+        assertEquals(false, shouldResetBookingScrollToTop(BookingStep.Contact))
+    }
+
+    @Test
     fun keepsStartingPriceUntilVehicleIsKnownThenIncludesExtras() {
         assertEquals(
             "A partir de 25,00€",

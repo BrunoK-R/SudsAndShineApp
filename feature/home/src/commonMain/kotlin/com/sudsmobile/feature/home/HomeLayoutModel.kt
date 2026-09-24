@@ -19,6 +19,8 @@ internal enum class HomeBookingPresentation {
     Upcoming,
 }
 
+internal const val HomeLocationActionLabel = "Onde estamos"
+
 internal fun homeSections(uiState: HomeUiState): List<HomeSection> = when (uiState) {
     HomeUiState.Idle,
     HomeUiState.Loading,
@@ -39,22 +41,6 @@ internal fun homeBookingPresentation(uiState: HomeUiState): HomeBookingPresentat
     } else {
         HomeBookingPresentation.Upcoming
     }
-}
-
-internal fun HomeUiState.homeHeaderLocationLabel(): String {
-    val bookingLocation = (this as? HomeUiState.Loaded)
-        ?.nextBooking
-        ?.location
-        ?.substringBefore(",")
-        ?.trim()
-        ?.takeIf(String::isNotBlank)
-        ?: return identityOrDefault().subtitle
-
-    return bookingLocation
-        .substringAfter("Suds e Shine – ", bookingLocation)
-        .substringAfter("Suds e Shine - ", bookingLocation)
-        .trim()
-        .ifBlank { identityOrDefault().subtitle }
 }
 
 internal fun calculateHomeCollapseProgress(
