@@ -76,7 +76,7 @@ export default function BookingSuccessScreen() {
                 <MapPin className="w-5 h-5 text-[#D4AF37] flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold text-[#0A1929]">
-                    Suds & Shine Solutions
+                    Suds e Shine Solutions
                   </p>
                   <p className="text-sm">
                     Shopping Norte Sul, Piso -1, Leiria

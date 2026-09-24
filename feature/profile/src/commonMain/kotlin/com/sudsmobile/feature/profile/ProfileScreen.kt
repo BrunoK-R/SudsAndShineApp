@@ -1793,7 +1793,7 @@ private fun LogoutButton(onClick: () -> Unit) {
 @Composable
 private fun AppVersionText() {
     Text(
-        text = "Versão 1.0.0 • Suds & Shine Solutions",
+        text = "Versão 1.0.0 • Suds e Shine Solutions",
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),

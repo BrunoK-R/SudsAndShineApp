@@ -71,6 +71,44 @@ class FirebaseAuthRepository(
         return result.applyAuthenticatedSession()
     }
 
+    override suspend fun signInWithAppleIdToken(
+        idToken: String,
+        rawNonce: String,
+        displayName: String?,
+    ): AuthResult {
+        if (idToken.isBlank() || rawNonce.isBlank()) {
+            return AuthResult.Failure(
+                AuthError.Validation("Não foi possível obter a sessão Apple. Tente novamente."),
+            )
+        }
+
+        // The nonce must reach Firebase unchanged: Firebase hashes it to validate Apple's token.
+        val result = api.signInWithAppleIdToken(idToken.trim(), rawNonce)
+        if (result !is AuthResult.Success) return result
+
+        val firstSignInName = displayName?.trim().orEmpty()
+        if (result.session.user.displayName.isNotBlank() || firstSignInName.isBlank()) {
+            return result.applyAuthenticatedSession()
+        }
+
+        // Apple only supplies the name on the initial authorization. Keep it locally even if
+        // the optional Firebase profile update fails; never turn a valid login into a failure.
+        val namedSession = result.session.copy(
+            user = result.session.user.copy(displayName = firstSignInName),
+        )
+        val profileResult = api.updateProfile(namedSession, firstSignInName)
+        val session = when (profileResult) {
+            is AuthResult.Failure -> namedSession
+            is AuthResult.Success -> namedSession.copy(
+                idToken = profileResult.session.idToken.ifBlank { namedSession.idToken },
+                refreshToken = profileResult.session.refreshToken.ifBlank { namedSession.refreshToken },
+                expiresInSeconds = profileResult.session.expiresInSeconds.takeIf { it > 0 }
+                    ?: namedSession.expiresInSeconds,
+            )
+        }
+        return AuthResult.Success(session).applyAuthenticatedSession()
+    }
+
     override suspend fun register(
         displayName: String,
         email: String,

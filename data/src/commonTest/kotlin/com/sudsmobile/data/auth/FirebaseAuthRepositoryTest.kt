@@ -13,6 +13,91 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalCoroutinesApi::class)
 class FirebaseAuthRepositoryTest {
     @Test
+    fun appleSignInSavesFirstNameAndOnlyFirebaseTokens() = runTest {
+        val api = RecordingAuthApi(signInSession = { email -> testSession(email = email, displayName = "") })
+        val store = RecordingAuthSessionStore()
+        val repository = FirebaseAuthRepository(api, store, { 1_000L }, restoreOnStart = false)
+
+        val result = assertIs<AuthResult.Success>(
+            repository.signInWithAppleIdToken(" apple-token ", " raw-nonce ", "  Ana Silva  "),
+        )
+
+        assertEquals("apple-token", api.lastAppleIdToken)
+        assertEquals(" raw-nonce ", api.lastAppleNonce)
+        assertEquals("Ana Silva", api.lastDisplayName)
+        assertEquals("Ana Silva", result.session.user.displayName)
+        assertEquals("relay@privaterelay.appleid.com", result.session.user.email)
+        assertEquals("updated-id-token", store.savedSession?.idToken)
+        assertEquals("refresh-token", store.savedSession?.refreshToken)
+        assertEquals(1_000L, store.savedSession?.issuedAtEpochSeconds)
+        assertEquals(result.session, assertIs<AuthSessionState.Authenticated>(repository.sessionState.value).session)
+    }
+
+    @Test
+    fun appleSignInDoesNotOverwriteExistingProfileOrRequireNameOnReturn() = runTest {
+        for (appleName in listOf(null, "Different Apple Name")) {
+            val api = RecordingAuthApi()
+            val repository = FirebaseAuthRepository(api, restoreOnStart = false)
+            val result = assertIs<AuthResult.Success>(
+                repository.signInWithAppleIdToken("apple-token", "nonce", appleName),
+            )
+            assertEquals("Bruno Ribeiro", result.session.user.displayName)
+            assertNull(api.lastDisplayName)
+        }
+    }
+
+    @Test
+    fun appleLoginSurvivesProfileUpdateFailureAndRestoresCapturedName() = runTest {
+        val api = RecordingAuthApi(
+            signInSession = { email -> testSession(email = email, displayName = "") },
+            profileFailure = AuthError.Unavailable("Offline"),
+        )
+        val store = RecordingAuthSessionStore()
+        val repository = FirebaseAuthRepository(api, store, restoreOnStart = false)
+
+        val result = assertIs<AuthResult.Success>(repository.signInWithAppleIdToken("token", "nonce", "Ana Silva"))
+        assertEquals("Ana Silva", result.session.user.displayName)
+        assertEquals("id-token", store.savedSession?.idToken)
+
+        val restored = FirebaseAuthRepository(api, store, repositoryScope = this)
+        advanceUntilIdle()
+        val session = assertIs<AuthSessionState.Authenticated>(restored.sessionState.value).session
+        assertEquals("Ana Silva", session.user.displayName)
+        assertEquals("relay@privaterelay.appleid.com", session.user.email)
+        assertEquals("refreshed-id-token", session.idToken)
+    }
+
+    @Test
+    fun rejectsIncompleteAppleCredentialWithoutCallingFirebase() = runTest {
+        val api = RecordingAuthApi()
+        val repository = FirebaseAuthRepository(api, restoreOnStart = false)
+        for ((token, nonce) in listOf("" to "nonce", "token" to "  ")) {
+            val result = assertIs<AuthResult.Failure>(repository.signInWithAppleIdToken(token, nonce, null))
+            assertIs<AuthError.Validation>(result.error)
+        }
+        assertNull(api.lastAppleIdToken)
+        assertEquals(AuthSessionState.Unauthenticated, repository.sessionState.value)
+    }
+
+    @Test
+    fun appleFailureDoesNotPersistSession() = runTest {
+        val api = RecordingAuthApi(appleFailure = AuthError.EmailInUse("Existing account"))
+        val store = RecordingAuthSessionStore()
+        val repository = FirebaseAuthRepository(api, store, restoreOnStart = false)
+        assertIs<AuthResult.Failure>(repository.signInWithAppleIdToken("token", "nonce", "Ana"))
+        assertNull(store.savedSession)
+        assertNull(api.lastDisplayName)
+        assertEquals(AuthSessionState.Unauthenticated, repository.sessionState.value)
+    }
+
+    @Test
+    fun unnamedAppleUserDoesNotDisplayPrivateRelayAliasAsName() {
+        val user = AuthUser("uid", "random-alias@privaterelay.appleid.com", "", "")
+        assertEquals("Cliente", user.resolvedDisplayName)
+        assertEquals("Ana", user.copy(displayName = "Ana").resolvedDisplayName)
+    }
+
+    @Test
     fun rejectsInvalidLoginBeforeCallingApi() = runTest {
         val api = RecordingAuthApi()
         val repository = FirebaseAuthRepository(api)
@@ -312,7 +397,13 @@ private class RecordingAuthApi(
     private val signInSession: (String) -> AuthSession = { email ->
         testSession(email = email, displayName = "Bruno Ribeiro")
     },
+    private val profileFailure: AuthError? = null,
+    private val appleFailure: AuthError? = null,
 ) : AuthApi {
+    var lastAppleIdToken: String? = null
+        private set
+    var lastAppleNonce: String? = null
+        private set
     var signInCalls: Int = 0
         private set
     var signUpCalls: Int = 0
@@ -337,6 +428,13 @@ private class RecordingAuthApi(
         return AuthResult.Success(signInSession("bruno@gmail.com"))
     }
 
+    override suspend fun signInWithAppleIdToken(idToken: String, rawNonce: String): AuthResult {
+        lastAppleIdToken = idToken
+        lastAppleNonce = rawNonce
+        return appleFailure?.let { AuthResult.Failure(it) }
+            ?: AuthResult.Success(signInSession("relay@privaterelay.appleid.com"))
+    }
+
     override suspend fun signUp(email: String, password: String): AuthResult {
         signUpCalls += 1
         lastSignUpEmail = email
@@ -345,6 +443,7 @@ private class RecordingAuthApi(
 
     override suspend fun updateProfile(session: AuthSession, displayName: String): AuthResult {
         lastDisplayName = displayName
+        if (profileFailure != null) return AuthResult.Failure(profileFailure)
         return AuthResult.Success(
             session.copy(
                 user = session.user.copy(displayName = displayName),

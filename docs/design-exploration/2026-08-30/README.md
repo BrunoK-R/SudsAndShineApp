@@ -1,4 +1,4 @@
-# Suds & Shine mobile design exploration
+# Suds e Shine mobile design exploration
 
 Captured from the current Compose Multiplatform Android build on an API 35 emulator after the splash update in commit `8157ddc`. The concepts are directional UI references, not production-ready image assets.
 
@@ -67,17 +67,17 @@ Mode: built-in image generation, reference-guided UI mockups using the captured 
 ### Modern home prompt
 
 ```text
-High-fidelity portrait mobile UI redesign for Suds & Shine, a Portuguese premium car wash and detailing service. Preserve the deep ink navy, electric cyan, and existing car-and-foam brand mark; use champagne only as a small premium accent. Create a signed-in home with a compact greeting and location, next-appointment hero, Marcar lavagem CTA, horizontal service collection, bubble-based loyalty progress, and a floating capsule navigation with four destinations and a raised central booking action. Make it distinctive, accessible, Compose-ready, and avoid generic fintech gradients or repetitive white cards.
+High-fidelity portrait mobile UI redesign for Suds e Shine, a Portuguese premium car wash and detailing service. Preserve the deep ink navy, electric cyan, and existing car-and-foam brand mark; use champagne only as a small premium accent. Create a signed-in home with a compact greeting and location, next-appointment hero, Marcar lavagem CTA, horizontal service collection, bubble-based loyalty progress, and a floating capsule navigation with four destinations and a raised central booking action. Make it distinctive, accessible, Compose-ready, and avoid generic fintech gradients or repetitive white cards.
 ```
 
 ### Modern booking prompt
 
 ```text
-High-fidelity portrait mobile booking UI for Suds & Shine. Create service selection step 1 of 4 with a compact sticky header, segmented progress, category chips, cinematic service cards for Lavagem Standard, Lavagem Premium, and Lavagem Exterior, a clearly selected Premium state, a sticky selection summary with Continuar, and the same floating capsule navigation. Use the navy/cyan automotive-detailing system, accurate Portuguese copy, accessible contrast, and buildable Compose proportions.
+High-fidelity portrait mobile booking UI for Suds e Shine. Create service selection step 1 of 4 with a compact sticky header, segmented progress, category chips, cinematic service cards for Lavagem Standard, Lavagem Premium, and Lavagem Exterior, a clearly selected Premium state, a sticky selection summary with Continuar, and the same floating capsule navigation. Use the navy/cyan automotive-detailing system, accurate Portuguese copy, accessible contrast, and buildable Compose proportions.
 ```
 
 ### Motion storyboard prompt
 
 ```text
-Wide 16:9 product-design motion storyboard for Suds & Shine showing three portrait frames: Home at the top, Home after scroll with gentle hero parallax and a collapsed sticky header, and booking after pressing the raised central action. Show the navigation morph, shared-axis transition, selected service feedback, curved cyan motion arrows, and concise callouts for Parallax suave, Cabeçalho compacto, Navegação que se transforma, Transição 280 ms, and Feedback tátil. Keep it premium, restrained, and Compose Multiplatform-ready.
+Wide 16:9 product-design motion storyboard for Suds e Shine showing three portrait frames: Home at the top, Home after scroll with gentle hero parallax and a collapsed sticky header, and booking after pressing the raised central action. Show the navigation morph, shared-axis transition, selected service feedback, curved cyan motion arrows, and concise callouts for Parallax suave, Cabeçalho compacto, Navegação que se transforma, Transição 280 ms, and Feedback tátil. Keep it premium, restrained, and Compose Multiplatform-ready.
 ```

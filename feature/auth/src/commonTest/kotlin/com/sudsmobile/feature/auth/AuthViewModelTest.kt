@@ -38,6 +38,69 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun appleSignInLocksAllLoginOptionsUntilCredentialCompletes() = runTest {
+        val repository = FakeProviderAuthRepository()
+        val viewModel = AuthViewModel(repository)
+
+        assertEquals(true, viewModel.beginAppleSignIn())
+        assertEquals(false, viewModel.beginAppleSignIn())
+        viewModel.signInWithGoogleIdToken("ignored")
+        viewModel.signIn("ignored@example.com", "password")
+        runCurrent()
+        assertIs<AuthUiState.Loading>(viewModel.uiState.value)
+        assertEquals(0, repository.googleSignInCalls)
+        assertEquals(null, repository.lastEmail)
+
+        viewModel.signInWithAppleIdToken("apple-token", "nonce", "Ana")
+        viewModel.signInWithAppleIdToken("duplicate", "nonce", "Ana")
+        runCurrent()
+
+        assertIs<AuthUiState.Authenticated>(viewModel.uiState.value)
+        assertEquals(1, repository.appleSignInCalls)
+        assertEquals(Triple("apple-token", "nonce", "Ana"), repository.lastAppleCredential)
+    }
+
+    @Test
+    fun cancellingAppleSheetReturnsToIdleWithoutAnErrorOrFirebaseCall() = runTest {
+        val repository = FakeProviderAuthRepository()
+        val viewModel = AuthViewModel(repository)
+        viewModel.beginAppleSignIn()
+        viewModel.cancelAppleSignIn()
+        viewModel.signInWithAppleIdToken("late-token", "nonce", null)
+        runCurrent()
+
+        assertIs<AuthUiState.Idle>(viewModel.uiState.value)
+        assertEquals(0, repository.appleSignInCalls)
+        assertEquals(true, viewModel.beginAppleSignIn())
+    }
+
+    @Test
+    fun applePlatformFailureReleasesLoadingStateAndAllowsRetry() = runTest {
+        val viewModel = AuthViewModel(FakeProviderAuthRepository())
+        viewModel.beginAppleSignIn()
+        viewModel.showAppleSignInError("Apple indisponível")
+        val error = assertIs<AuthUiState.Error>(viewModel.uiState.value)
+        assertEquals("Apple indisponível", error.message)
+        assertEquals(true, error.retryable)
+        assertEquals(true, viewModel.beginAppleSignIn())
+    }
+
+    @Test
+    fun appleFirebaseFailureShowsErrorAndAllowsRetry() = runTest {
+        val viewModel = AuthViewModel(FakeProviderAuthRepository(
+            appleResult = AuthResult.Failure(AuthError.EmailInUse("Utilize o método anterior")),
+        ))
+        viewModel.beginAppleSignIn()
+        viewModel.signInWithAppleIdToken("token", "nonce", null)
+        runCurrent()
+
+        val error = assertIs<AuthUiState.Error>(viewModel.uiState.value)
+        assertEquals("Utilize o método anterior", error.message)
+        assertEquals(false, error.retryable)
+        assertEquals(true, viewModel.beginAppleSignIn())
+    }
+
+    @Test
     fun emailPasswordSignInPublishesAuthenticatedState() = runTest {
         val authRepository = FakeProviderAuthRepository()
         val viewModel = AuthViewModel(authRepository)
@@ -146,7 +209,12 @@ private open class FakeProviderAuthRepository(
     initialState: AuthSessionState = AuthSessionState.Unauthenticated,
     private val emailResult: AuthResult = AuthResult.Success(providerSession()),
     private val googleResult: AuthResult = AuthResult.Success(providerSession()),
+    private val appleResult: AuthResult = AuthResult.Success(providerSession()),
 ) : AuthRepository {
+    var appleSignInCalls: Int = 0
+        private set
+    var lastAppleCredential: Triple<String, String, String?>? = null
+        private set
     protected val mutableSessionState = MutableStateFlow(initialState)
     override val sessionState: StateFlow<AuthSessionState> = mutableSessionState
     var googleSignInCalls: Int = 0
@@ -178,6 +246,15 @@ private open class FakeProviderAuthRepository(
             mutableSessionState.value = AuthSessionState.Authenticated(googleResult.session)
         }
         return googleResult
+    }
+
+    override suspend fun signInWithAppleIdToken(idToken: String, rawNonce: String, displayName: String?): AuthResult {
+        appleSignInCalls += 1
+        lastAppleCredential = Triple(idToken, rawNonce, displayName)
+        if (appleResult is AuthResult.Success) {
+            mutableSessionState.value = AuthSessionState.Authenticated(appleResult.session)
+        }
+        return appleResult
     }
 
     override suspend fun register(

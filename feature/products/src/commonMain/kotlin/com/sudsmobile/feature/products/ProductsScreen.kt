@@ -1336,7 +1336,7 @@ private fun BookingLocationStatusRow(
 private fun BookingLocationDetails(info: BookingBusinessInfoUi) {
     ConfirmationIconRow(
         icon = Icons.Filled.LocationOn,
-        title = "Suds & Shine Solutions",
+        title = "Suds e Shine Solutions",
         body = listOf(info.addressLine1, info.addressLine2)
             .filter { it.isNotBlank() }
             .joinToString(separator = "\n"),
@@ -2467,7 +2467,7 @@ private fun SuccessSummaryCard(
             )
             ConfirmationIconRow(
                 icon = Icons.Filled.LocationOn,
-                title = "Suds & Shine Solutions",
+                title = "Suds e Shine Solutions",
                 body = businessInfo.singleLineAddress(),
             )
             ConfirmationIconRow(

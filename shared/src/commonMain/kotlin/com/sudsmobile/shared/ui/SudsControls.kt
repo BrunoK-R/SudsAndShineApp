@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sudsmobile.shared.theme.LocalSudsMotionPreferences
@@ -37,6 +38,7 @@ fun SudsPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
+    labelTextStyle: TextStyle? = null,
     leadingContent: (@Composable () -> Unit)? = null,
 ) {
     val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
@@ -77,7 +79,7 @@ fun SudsPrimaryButton(
                 }
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = labelTextStyle ?: MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

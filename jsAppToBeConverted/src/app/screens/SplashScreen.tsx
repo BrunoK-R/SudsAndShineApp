@@ -43,7 +43,7 @@ export default function SplashScreen() {
           className="mt-8 text-center"
         >
           <h1 className="text-3xl font-bold text-white mb-2">
-            Suds & Shine
+            Suds e Shine
           </h1>
           <p className="text-[#D4AF37] text-lg">Solutions</p>
         </motion.div>

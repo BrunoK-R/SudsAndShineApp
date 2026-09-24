@@ -51,8 +51,8 @@ internal fun HomeUiState.homeHeaderLocationLabel(): String {
         ?: return identityOrDefault().subtitle
 
     return bookingLocation
-        .substringAfter("Suds & Shine – ", bookingLocation)
-        .substringAfter("Suds & Shine - ", bookingLocation)
+        .substringAfter("Suds e Shine – ", bookingLocation)
+        .substringAfter("Suds e Shine - ", bookingLocation)
         .trim()
         .ifBlank { identityOrDefault().subtitle }
 }

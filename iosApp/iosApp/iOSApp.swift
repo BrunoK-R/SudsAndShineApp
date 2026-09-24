@@ -11,6 +11,7 @@ struct iOSApp: App {
         #endif
         ComposeApp.KoinInitializerKt.initializeIosApp(isDebugBuild: isDebugBuild)
         GoogleSignInCoordinator.shared.configureKotlinBridge()
+        AppleSignInCoordinator.shared.configureKotlinBridge()
     }
 
     var body: some Scene {

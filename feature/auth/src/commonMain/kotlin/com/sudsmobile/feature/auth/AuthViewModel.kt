@@ -26,6 +26,7 @@ class AuthViewModel(
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
     private var signInInProgress: Boolean = false
+    private var awaitingAppleCredential: Boolean = false
 
     init {
         viewModelScope.launch {
@@ -73,6 +74,47 @@ class AuthViewModel(
                 signInInProgress = false
             }
         }
+    }
+
+    fun beginAppleSignIn(): Boolean {
+        if (_uiState.value is AuthUiState.Loading) return false
+        awaitingAppleCredential = true
+        signInInProgress = true
+        _uiState.value = AuthUiState.Loading
+        return true
+    }
+
+    fun signInWithAppleIdToken(idToken: String, rawNonce: String, displayName: String?) {
+        if (!awaitingAppleCredential) return
+        awaitingAppleCredential = false
+        viewModelScope.launch {
+            try {
+                _uiState.value = when (val result = authRepository.signInWithAppleIdToken(
+                    idToken = idToken,
+                    rawNonce = rawNonce,
+                    displayName = displayName,
+                )) {
+                    is AuthResult.Success -> AuthUiState.Authenticated(result.session.user)
+                    is AuthResult.Failure -> result.error.toUiState()
+                }
+            } finally {
+                signInInProgress = false
+            }
+        }
+    }
+
+    fun cancelAppleSignIn() {
+        if (!awaitingAppleCredential) return
+        awaitingAppleCredential = false
+        signInInProgress = false
+        _uiState.value = AuthUiState.Idle
+    }
+
+    fun showAppleSignInError(message: String) {
+        if (!awaitingAppleCredential) return
+        awaitingAppleCredential = false
+        signInInProgress = false
+        _uiState.value = AuthUiState.Error(message, retryable = true)
     }
 
     fun signIn(email: String, password: String) {

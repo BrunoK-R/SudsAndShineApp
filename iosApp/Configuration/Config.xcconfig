@@ -1,13 +1,18 @@
-TEAM_ID=
+TEAM_ID=7MR6LD3GZC
 
 PRODUCT_NAME=SudsAndShine
-PRODUCT_BUNDLE_IDENTIFIER=org.sudsandshine.app$(TEAM_ID)
+PRODUCT_BUNDLE_IDENTIFIER=com.sudseshine.app
+
+// This switch controls both the native Apple button and the Sign in with Apple entitlement.
+APPLE_SIGN_IN_ENABLED=YES
+APPLE_SIGN_IN_ENTITLEMENTS_NO=iosApp/iosApp.entitlements
+APPLE_SIGN_IN_ENTITLEMENTS_YES=iosApp/iosApp.apple-sign-in.entitlements
 
 // iOS Google Sign-In. Fill GOOGLE_IOS_* from the Firebase iOS app's
 // GoogleService-Info.plist: CLIENT_ID and REVERSED_CLIENT_ID.
 GOOGLE_WEB_CLIENT_ID=991110746767-udbahto3vgq0g16tovhbqft9pduafmce.apps.googleusercontent.com
-GOOGLE_IOS_CLIENT_ID=991110746767-m8gijrad25a78al93cqcfqnbabg95rb2.apps.googleusercontent.com
-GOOGLE_IOS_REVERSED_CLIENT_ID=com.googleusercontent.apps.991110746767-m8gijrad25a78al93cqcfqnbabg95rb2
+GOOGLE_IOS_CLIENT_ID=991110746767-soa5udh984rsi2lic1bru3ugrkv32fr4.apps.googleusercontent.com
+GOOGLE_IOS_REVERSED_CLIENT_ID=com.googleusercontent.apps.991110746767-soa5udh984rsi2lic1bru3ugrkv32fr4
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0.0

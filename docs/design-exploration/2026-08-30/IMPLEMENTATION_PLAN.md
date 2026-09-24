@@ -2,7 +2,7 @@
 
 ## Goal
 
-Modernize the customer-facing Suds & Shine experience without changing booking, authentication, loyalty, notification, or admin business rules. The generated concepts define the visual direction; existing ViewModels, repositories, routes, and backend contracts remain authoritative.
+Modernize the customer-facing Suds e Shine experience without changing booking, authentication, loyalty, notification, or admin business rules. The generated concepts define the visual direction; existing ViewModels, repositories, routes, and backend contracts remain authoritative.
 
 ## Decisions made before implementation
 

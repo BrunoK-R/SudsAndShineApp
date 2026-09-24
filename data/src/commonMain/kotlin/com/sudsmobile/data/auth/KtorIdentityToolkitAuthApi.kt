@@ -58,6 +58,23 @@ class KtorIdentityToolkitAuthApi(
         }
     }
 
+    override suspend fun signInWithAppleIdToken(idToken: String, rawNonce: String): AuthResult {
+        return authRequest("accounts:signInWithIdp") {
+            setBody(
+                IdpAuthPayload(
+                    postBody = listOf(
+                        "id_token" to idToken,
+                        "providerId" to "apple.com",
+                        "nonce" to rawNonce,
+                    ).formUrlEncode(),
+                    requestUri = IdentityProviderRequestUri,
+                    returnIdpCredential = false,
+                    returnSecureToken = true,
+                ),
+            )
+        }
+    }
+
     override suspend fun updateProfile(session: AuthSession, displayName: String): AuthResult {
         return authRequest("accounts:update") {
             setBody(
@@ -147,6 +164,7 @@ class KtorIdentityToolkitAuthApi(
             val error = body.error
             when {
                 error != null -> AuthResult.Failure(error.toAuthError())
+                body.needConfirmation == true -> AuthResult.Failure(identityAlreadyInUse())
                 body.localId != null && body.idToken != null && body.refreshToken != null -> {
                     AuthResult.Success(body.toSession())
                 }
@@ -201,6 +219,7 @@ private data class IdentityToolkitResponse(
     val refreshToken: String? = null,
     val expiresIn: String? = null,
     val error: IdentityToolkitError? = null,
+    val needConfirmation: Boolean? = null,
 ) {
     fun toSession(): AuthSession = AuthSession(
         user = AuthUser(
@@ -259,6 +278,14 @@ private data class IdentityToolkitError(
 
             "USER_DISABLED" -> AuthError.Permission("Esta conta está desativada.")
             "EMAIL_EXISTS" -> AuthError.EmailInUse("Já existe uma conta com este email.")
+            "ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL",
+            "FEDERATED_USER_ID_ALREADY_LINKED",
+            "CREDENTIAL_ALREADY_IN_USE" -> identityAlreadyInUse()
+            "MISSING_OR_INVALID_NONCE",
+            "INVALID_IDP_RESPONSE",
+            "INVALID_CREDENTIAL" -> AuthError.InvalidCredentials(
+                "Não foi possível validar o início de sessão. Tente novamente.",
+            )
             "INVALID_EMAIL" -> AuthError.Validation("Indique um email válido.")
             "WEAK_PASSWORD" -> AuthError.Validation("A palavra-passe deve ter pelo menos 6 caracteres.")
             "MISSING_PASSWORD" -> AuthError.Validation("Indique a palavra-passe.")
@@ -271,6 +298,10 @@ private data class IdentityToolkitError(
         }
     }
 }
+
+private fun identityAlreadyInUse(): AuthError = AuthError.EmailInUse(
+    "Já existe uma conta com este email. Inicie sessão com o método que utilizou anteriormente.",
+)
 
 private const val GoogleProviderId = "google.com"
 private const val IdentityProviderRequestUri = "http://localhost"

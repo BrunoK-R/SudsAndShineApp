@@ -17,7 +17,13 @@ data class AuthUser(
     val phoneNumber: String,
 ) {
     val resolvedDisplayName: String
-        get() = displayName.ifBlank { email.substringBefore("@").replaceFirstChar { it.titlecase() } }
+        get() = displayName.ifBlank {
+            if (email.isBlank() || email.endsWith("@privaterelay.appleid.com", ignoreCase = true)) {
+                "Cliente"
+            } else {
+                email.substringBefore("@").replaceFirstChar { it.titlecase() }
+            }
+        }
 }
 
 sealed interface AuthSessionState {
@@ -60,6 +66,13 @@ interface AuthRepository {
 
     suspend fun signIn(email: String, password: String): AuthResult
     suspend fun signInWithGoogleIdToken(idToken: String): AuthResult = AuthResult.Failure(
+        AuthError.Permission("Este método de autenticação não está ativo neste dispositivo."),
+    )
+    suspend fun signInWithAppleIdToken(
+        idToken: String,
+        rawNonce: String,
+        displayName: String?,
+    ): AuthResult = AuthResult.Failure(
         AuthError.Permission("Este método de autenticação não está ativo neste dispositivo."),
     )
     suspend fun register(

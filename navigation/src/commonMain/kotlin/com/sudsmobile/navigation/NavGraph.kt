@@ -53,6 +53,7 @@ fun SetupNavGraph(
             AuthScreen(
                 onLoginSuccess = { navController.popBackStack() },
                 onLoginCancelled = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
             )
         }
 

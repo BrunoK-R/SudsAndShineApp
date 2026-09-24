@@ -71,7 +71,7 @@ fun SplashScreen(
             Spacer(Modifier.height(26.dp))
 
             Text(
-                text = "Suds & Shine",
+                text = "Suds e Shine",
                 color = SplashWhite,
                 fontSize = 34.sp,
                 fontWeight = FontWeight.ExtraBold,

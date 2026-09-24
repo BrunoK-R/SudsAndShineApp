@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Suds &amp; Shine</string>
-    <string name="notification_channel_name">Notificações Suds &amp; Shine</string>
+    <string name="app_name">Suds e Shine</string>
+    <string name="notification_channel_name">Notificações Suds e Shine</string>
     <string name="notification_channel_description">Atualizações de marcações, lembretes, recompensas e conta.</string>
 </resources>

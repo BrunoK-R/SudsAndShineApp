@@ -11,6 +11,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.content.TextContent
 import io.ktor.http.headersOf
+import io.ktor.http.parseQueryString
 import io.ktor.serialization.kotlinx.json.json
 import kotlin.test.assertContains
 import kotlin.test.Test
@@ -24,6 +25,67 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 class KtorIdentityToolkitAuthApiTest {
+    @Test
+    fun exchangesAppleTokenAndOriginalNonceForFirebaseSession() = runTest {
+        var requestBody = ""
+        var requestUrl = ""
+        val api = KtorIdentityToolkitAuthApi(
+            httpClient = mockClient(
+                """{"localId":"apple-user","email":"relay@privaterelay.appleid.com",
+                    "idToken":"firebase-token","refreshToken":"firebase-refresh","expiresIn":"3600"}""",
+                onRequest = { requestBody = it.bodyText(); requestUrl = it.url.toString() },
+            ),
+            config = testConfig(),
+        )
+
+        val result = assertIs<AuthResult.Success>(api.signInWithAppleIdToken("apple+token/=?", " raw+nonce&= "))
+
+        assertContains(requestUrl, "/accounts:signInWithIdp?")
+        val payload = Json.parseToJsonElement(requestBody).jsonObject
+        val form = parseQueryString(payload.getValue("postBody").jsonPrimitive.content)
+        assertEquals("apple.com", form["providerId"])
+        assertEquals("apple+token/=?", form["id_token"])
+        assertEquals(" raw+nonce&= ", form["nonce"])
+        assertEquals(setOf("providerId", "id_token", "nonce"), form.names())
+        assertEquals("http://localhost", payload.getValue("requestUri").jsonPrimitive.content)
+        assertEquals(true, payload.getValue("returnSecureToken").jsonPrimitive.boolean)
+        assertEquals(false, payload.getValue("returnIdpCredential").jsonPrimitive.boolean)
+        assertEquals("relay@privaterelay.appleid.com", result.session.user.email)
+        assertEquals("", result.session.user.displayName)
+        assertEquals("firebase-token", result.session.idToken)
+        assertEquals("firebase-refresh", result.session.refreshToken)
+    }
+
+    @Test
+    fun mapsAppleNonceProviderAndAccountErrors() = runTest {
+        for ((code, expected) in listOf(
+            "MISSING_OR_INVALID_NONCE" to AuthError.InvalidCredentials::class,
+            "INVALID_IDP_RESPONSE" to AuthError.InvalidCredentials::class,
+            "OPERATION_NOT_ALLOWED" to AuthError.Permission::class,
+            "EMAIL_EXISTS" to AuthError.EmailInUse::class,
+            "FEDERATED_USER_ID_ALREADY_LINKED" to AuthError.EmailInUse::class,
+        )) {
+            val api = KtorIdentityToolkitAuthApi(
+                mockClient("""{"error":{"code":400,"message":"$code"}}""", HttpStatusCode.BadRequest),
+                testConfig(),
+            )
+            val result = assertIs<AuthResult.Failure>(api.signInWithAppleIdToken("token", "nonce"))
+            assertEquals(expected, result.error::class, code)
+        }
+    }
+
+    @Test
+    fun accountConfirmationResponseNeverBecomesAnAuthenticatedSession() = runTest {
+        val api = KtorIdentityToolkitAuthApi(
+            mockClient("""{"needConfirmation":true,"email":"existing@example.com"}"""),
+            testConfig(),
+        )
+
+        val result = assertIs<AuthResult.Failure>(api.signInWithAppleIdToken("token", "nonce"))
+        assertIs<AuthError.EmailInUse>(result.error)
+        assertContains(result.error.message, "método que utilizou anteriormente")
+    }
+
     @Test
     fun mapsSignInResponseToAuthSession() = runTest {
         val api = KtorIdentityToolkitAuthApi(

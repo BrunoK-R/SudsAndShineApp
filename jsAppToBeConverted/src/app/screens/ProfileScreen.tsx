@@ -93,7 +93,7 @@ export default function ProfileScreen() {
         {/* Dados de Contacto */}
         <Card className="p-6 border-none shadow-lg">
           <h3 className="font-semibold text-[#0A1929] mb-4">
-            Suds & Shine mais próximo:
+            Suds e Shine mais próximo:
           </h3>
           <div className="space-y-3">
             <div className="flex items-start gap-3">
@@ -197,7 +197,7 @@ export default function ProfileScreen() {
         </Button>
 
         <p className="text-center text-xs text-gray-500 py-4">
-          Versão 1.0.0 • Suds & Shine Solutions
+          Versão 1.0.0 • Suds e Shine Solutions
         </p>
       </div>
 

@@ -15,10 +15,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 @Composable
 internal expect fun PlatformGoogleSignInButton(
@@ -66,9 +64,7 @@ internal fun GoogleAuthButton(
                 text = "Continuar com Google",
                 modifier = Modifier.weight(1f),
                 color = Color.Unspecified,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                fontWeight = FontWeight.Medium,
+                style = signInButtonLabelStyle(),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )

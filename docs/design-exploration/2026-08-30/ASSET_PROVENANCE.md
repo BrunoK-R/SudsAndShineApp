@@ -8,7 +8,7 @@ The pixel-parity pass uses eight text-free raster assets generated with the buil
 | `shared/.../drawable/suds_service_standard.jpg` | Standard/complete service |
 | `shared/.../drawable/suds_service_premium.jpg` | Premium/detailing service |
 | `shared/.../drawable/suds_service_exterior.jpg` | Exterior wash service |
-| `shared/.../drawable/suds_brand_mark.png` | Existing approved Suds & Shine mark, resized for shared UI use |
+| `shared/.../drawable/suds_brand_mark.png` | Existing approved Suds e Shine mark, resized for shared UI use |
 | `feature/onboarding/.../drawable/suds_splash_mark.png` | User-selected car-wash mark, prepared on the shared splash navy |
 | `shared/.../drawable/suds_vehicle_passenger.webp` | Passenger vehicle selection card |
 | `shared/.../drawable/suds_vehicle_suv.webp` | SUV vehicle selection card |
@@ -21,7 +21,7 @@ The splash uses the mark explicitly selected by the user from
 That source contained a checkerboard baked into an RGB image rather than a real alpha channel. A faithful image-generation edit was therefore made to preserve the white car, cyan foam, circular swooshes, and sparkles while replacing only the checkerboard with the app's `#142539` splash background. The resulting production copy was resized to 768 × 768 and its outer edge was blended to exactly `#142539`, preventing a visible bitmap boundary during the native-to-Compose splash handoff.
 
 ```text
-Prepare the supplied Suds & Shine car-wash mark as a production splash-screen
+Prepare the supplied Suds e Shine car-wash mark as a production splash-screen
 bitmap. Preserve the supplied logo composition faithfully: the same white sports
 car silhouette, deep navy linework, cyan foam bubbles, twin cyan/navy circular
 swooshes, sparkle details, proportions, orientation, and centered scale. Replace
@@ -40,7 +40,7 @@ cropped strokes.
 ```text
 Use case: photorealistic-natural
 Asset type: premium mobile booking vehicle-category card background
-Input images: Image 1 is the approved Suds & Shine automotive lighting, palette,
+Input images: Image 1 is the approved Suds e Shine automotive lighting, palette,
 realism, and mood reference only
 Primary request: a freshly detailed generic pearl-white compact passenger sedan
 in a dark professional wash studio, viewed from a low front three-quarter angle,
@@ -59,7 +59,7 @@ license plate characters, or watermark; distinctly a passenger sedan, not an SUV
 ```text
 Use case: photorealistic-natural
 Asset type: premium mobile booking vehicle-category card background
-Input images: Image 1 is the approved Suds & Shine automotive lighting, palette,
+Input images: Image 1 is the approved Suds e Shine automotive lighting, palette,
 realism, and mood reference only
 Primary request: a freshly detailed generic dark graphite full-size SUV in a dark
 professional wash studio, viewed from a low front three-quarter angle, with water
@@ -78,7 +78,7 @@ license plate characters, or watermark; unmistakably an SUV, not a sedan
 ```text
 Use case: logo-brand
 Asset type: tiny 58 dp circular mobile navigation action bitmap
-Input images: Image 1 is the Suds & Shine car, foam, swoosh, cyan/navy
+Input images: Image 1 is the Suds e Shine car, foam, swoosh, cyan/navy
 brand-language reference
 Primary request: create a highly simplified, distinctive booking mark: a
 deep-navy front-view car silhouette combined with one cyan-to-white wash swoosh

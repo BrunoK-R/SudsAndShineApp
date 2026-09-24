@@ -3,8 +3,11 @@ import UIKit
 import GoogleSignIn
 import ComposeApp
 
+@MainActor
 final class GoogleSignInCoordinator {
     static let shared = GoogleSignInCoordinator()
+
+    private var pendingRequest: PendingRequest?
 
     private init() {}
 
@@ -40,50 +43,58 @@ final class GoogleSignInCoordinator {
         onIdToken: @escaping (String) -> Void,
         onError: @escaping (String) -> Void
     ) {
-        guard let presentingViewController = topViewController() else {
+        guard pendingRequest == nil else { return }
+        guard let window = activeWindow(), let presentingViewController = window.rootViewController else {
             onError("Não foi possível apresentar o início de sessão Google.")
             return
         }
 
+        // GIDSignIn keeps only a weak reference to the presenter while it prepares
+        // the OAuth request. Retain the window until the flow completes and present
+        // from its stable root controller, rather than from a transient system auth
+        // controller that may already be dismissing.
+        pendingRequest = PendingRequest(
+            window: window,
+            onIdToken: onIdToken,
+            onError: onError
+        )
         GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController) { result, error in
-            if error != nil {
-                onError("Não foi possível iniciar sessão com Google. Tente novamente.")
+            guard let request = self.takePendingRequest() else { return }
+
+            if let error {
+                #if DEBUG
+                let nsError = error as NSError
+                print(
+                    "Google Sign-In failed: domain=\(nsError.domain) " +
+                        "code=\(nsError.code) description=\(nsError.localizedDescription) " +
+                        "userInfo=\(nsError.userInfo)"
+                )
+                #endif
+                request.onError("Não foi possível iniciar sessão com Google. Tente novamente.")
                 return
             }
 
             guard let idToken = result?.user.idToken?.tokenString, !idToken.isEmpty else {
-                onError("Não foi possível obter a sessão Google. Tente novamente.")
+                request.onError("Não foi possível obter a sessão Google. Tente novamente.")
                 return
             }
 
-            onIdToken(idToken)
+            request.onIdToken(idToken)
         }
     }
 
-    private func topViewController() -> UIViewController? {
-        let rootViewController = UIApplication.shared.connectedScenes
+    private func activeWindow() -> UIWindow? {
+        UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
             .flatMap(\.windows)
-            .first { $0.isKeyWindow }?
-            .rootViewController
-
-        return topViewController(from: rootViewController)
+            .first { $0.isKeyWindow }
     }
 
-    private func topViewController(from rootViewController: UIViewController?) -> UIViewController? {
-        if let navigationController = rootViewController as? UINavigationController {
-            return topViewController(from: navigationController.visibleViewController)
-        }
-
-        if let tabBarController = rootViewController as? UITabBarController {
-            return topViewController(from: tabBarController.selectedViewController)
-        }
-
-        if let presentedViewController = rootViewController?.presentedViewController {
-            return topViewController(from: presentedViewController)
-        }
-
-        return rootViewController
+    private func takePendingRequest() -> PendingRequest? {
+        let request = pendingRequest
+        pendingRequest = nil
+        return request
     }
 
     private func logMissingConfiguration(_ issues: [String]) {
@@ -91,6 +102,13 @@ final class GoogleSignInCoordinator {
         let details = issues.isEmpty ? "Unknown configuration error." : issues.joined(separator: " ")
         print("Google Sign-In disabled on iOS: \(details)")
         #endif
+    }
+
+    private struct PendingRequest {
+        // The window is deliberately retained for the lifetime of the OAuth flow.
+        let window: UIWindow
+        let onIdToken: (String) -> Void
+        let onError: (String) -> Void
     }
 }
 

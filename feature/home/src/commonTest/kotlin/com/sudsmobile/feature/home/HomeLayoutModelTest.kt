@@ -43,7 +43,7 @@ class HomeLayoutModelTest {
     @Test
     fun headerUsesCompactBookingLocationWhenAvailable() {
         val state = loadedState(
-            nextBooking = booking().copy(location = "Suds & Shine - Leiria, Piso -1"),
+            nextBooking = booking().copy(location = "Suds e Shine - Leiria, Piso -1"),
         )
 
         assertEquals("Leiria", state.homeHeaderLocationLabel())
@@ -130,7 +130,7 @@ class HomeLayoutModelTest {
         service = "Lavagem Premium",
         date = "30 de agosto, 2026",
         time = "10:00",
-        location = "Suds & Shine",
+        location = "Suds e Shine",
         vehicle = "BMW 320d",
         price = "32,00€",
         statusLabel = "Confirmado",
