@@ -903,6 +903,9 @@ private fun AdminBookingRequestCard(
 
             AdminField(label = "Cliente", value = request.customerContactLabel())
             AdminField(label = "Serviço", value = request.service)
+            if (request.durationLabels.isNotEmpty()) {
+                AdminField(label = "Tempos", value = request.durationLabels.joinToString(separator = "\n"))
+            }
             AdminField(label = "Veículo", value = request.vehicle)
             AdminField(label = "Preço", value = request.price)
             AdminField(label = "Pagamento", value = request.paymentStatus)

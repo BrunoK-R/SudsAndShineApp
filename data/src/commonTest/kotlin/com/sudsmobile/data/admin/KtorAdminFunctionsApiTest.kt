@@ -69,6 +69,9 @@ class KtorAdminFunctionsApiTest {
                         "serviceName": "Lavagem Premium",
                         "slotStart": "2026-05-30T09:30:00.000Z",
                         "slotEnd": "2026-05-30T10:15:00.000Z",
+                        "workDurationMinutes": 45,
+                        "dryingDurationMinutes": 120,
+                        "estimatedReadyAt": "2026-05-30T12:15:00.000Z",
                         "status": "pending",
                         "paymentStatus": "pending",
                         "vehicleType": "suv",
@@ -78,7 +81,9 @@ class KtorAdminFunctionsApiTest {
                           {
                             "id": "wax",
                             "name": "Enceramento",
-                            "priceCents": 1500
+                            "priceCents": 1500,
+                            "additionalDurationMinutes": 15,
+                            "dryingDurationMinutes": 60
                           }
                         ],
                         "notes": "Portão lateral",
@@ -105,7 +110,12 @@ class KtorAdminFunctionsApiTest {
         assertEquals("Bruno Ribeiro", request.customerName)
         assertEquals("BMW 320d", request.vehicleLabel)
         assertEquals(4900, request.priceCents)
+        assertEquals(45, request.workDurationMinutes)
+        assertEquals(120, request.dryingDurationMinutes)
+        assertEquals("2026-05-30T12:15:00.000Z", request.estimatedReadyAtIso)
         assertEquals("wax", request.extras.single().id)
+        assertEquals(15, request.extras.single().additionalDurationMinutes)
+        assertEquals(60, request.extras.single().dryingDurationMinutes)
         assertEquals("2026-05-30T09:00:00.000Z", request.pendingExpiresAtIso)
         assertEquals(true, request.loyaltyRewardApplied)
     }
@@ -1372,6 +1382,7 @@ class KtorAdminFunctionsApiTest {
                         "name": "Lavagem Premium",
                         "description": "Detalhe completo",
                         "durationMinutes": 45,
+                        "dryingDurationMinutes": 120,
                         "passengerPriceCents": 3200,
                         "suvPriceCents": 3400,
                         "iconKey": "sparkles",
@@ -1405,6 +1416,7 @@ class KtorAdminFunctionsApiTest {
         assertEquals("premium", service.id)
         assertEquals("Lavagem Premium", service.name)
         assertEquals(45, service.durationMinutes)
+        assertEquals(120, service.dryingDurationMinutes)
         assertEquals(3200, service.passengerPriceCents)
         assertEquals(false, service.active)
         assertEquals(20, service.sortOrder)
@@ -1431,6 +1443,8 @@ class KtorAdminFunctionsApiTest {
                         "name": "Enceramento",
                         "description": "Proteção extra",
                         "priceCents": 1500,
+                        "additionalDurationMinutes": 15,
+                        "dryingDurationMinutes": 60,
                         "iconKey": "shield",
                         "eligibleServiceIds": ["premium", "standard"],
                         "active": false,
@@ -1462,6 +1476,8 @@ class KtorAdminFunctionsApiTest {
         assertEquals("wax", extra.id)
         assertEquals("Enceramento", extra.name)
         assertEquals(1500, extra.priceCents)
+        assertEquals(15, extra.additionalDurationMinutes)
+        assertEquals(60, extra.dryingDurationMinutes)
         assertEquals(listOf("premium", "standard"), extra.eligibleServiceIds)
         assertEquals(false, extra.active)
         assertEquals(30, extra.sortOrder)

@@ -23,6 +23,7 @@ internal data class AdminServiceCatalogServiceUi(
     val name: String,
     val description: String,
     val durationLabel: String,
+    val dryingDurationMinutes: Int,
     val passengerPriceLabel: String,
     val suvPriceLabel: String,
     val iconKey: String,
@@ -38,6 +39,7 @@ internal data class AdminServiceCatalogForm(
     val name: String = "",
     val description: String = "",
     val durationMinutes: String = "30",
+    val dryingDurationMinutes: String = "0",
     val passengerPrice: String = "",
     val suvPrice: String = "",
     val iconKey: String = "car",
@@ -338,6 +340,7 @@ private fun AdminServiceCatalogItem.toUi(): AdminServiceCatalogServiceUi = Admin
     name = name.ifBlank { "Serviço sem nome" },
     description = description,
     durationLabel = "$durationMinutes min",
+    dryingDurationMinutes = dryingDurationMinutes,
     passengerPriceLabel = passengerPriceCents.toEuroLabel(),
     suvPriceLabel = suvPriceCents.toEuroLabel(),
     iconKey = iconKey.ifBlank { "car" },
@@ -357,6 +360,7 @@ private fun AdminServiceCatalogServiceUi.toForm(): AdminServiceCatalogForm = Adm
     name = name,
     description = description,
     durationMinutes = durationLabel.substringBefore(" ").trim(),
+    dryingDurationMinutes = dryingDurationMinutes.toString(),
     passengerPrice = passengerPriceLabel.removeSuffix(" €").replace(",", "."),
     suvPrice = suvPriceLabel.removeSuffix(" €").replace(",", "."),
     iconKey = iconKey,
@@ -368,6 +372,8 @@ private fun AdminServiceCatalogServiceUi.toForm(): AdminServiceCatalogForm = Adm
 private fun AdminServiceCatalogForm.toMutationRequest(): ParsedServiceCatalogRequest {
     val duration = durationMinutes.trim().toIntOrNull()
         ?: return ParsedServiceCatalogRequest.Invalid("Indique uma duração válida.")
+    val dryingDuration = dryingDurationMinutes.trim().toIntOrNull()
+        ?: return ParsedServiceCatalogRequest.Invalid("Indique um tempo de secagem válido.")
     val passengerPriceCents = passengerPrice.toPriceCentsOrNull()
         ?: return ParsedServiceCatalogRequest.Invalid("Indique o preço para ligeiros.")
     val suvPriceCents = suvPrice.toPriceCentsOrNull()
@@ -381,6 +387,7 @@ private fun AdminServiceCatalogForm.toMutationRequest(): ParsedServiceCatalogReq
             name = name,
             description = description,
             durationMinutes = duration,
+            dryingDurationMinutes = dryingDuration,
             passengerPriceCents = passengerPriceCents,
             suvPriceCents = suvPriceCents,
             iconKey = iconKey,

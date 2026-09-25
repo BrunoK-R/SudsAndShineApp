@@ -369,6 +369,13 @@ private fun HistoryBookingDetails(item: ProfileHistoryItemUi) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         HistoryDetailRow(label = "Referência", value = item.reference)
         HistoryDetailRow(label = "Hora", value = item.time)
+        item.durationLabels.forEach { label ->
+            val parts = label.split(": ", limit = 2)
+            HistoryDetailRow(
+                label = parts.first(),
+                value = parts.getOrElse(1) { "" },
+            )
+        }
         HistoryDetailRow(label = "Pagamento", value = item.paymentStatus)
 
         if (item.extras.isNotEmpty()) {

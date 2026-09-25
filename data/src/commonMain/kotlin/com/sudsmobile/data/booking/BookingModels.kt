@@ -30,6 +30,9 @@ data class BookingReceipt(
     val priceCents: Int? = null,
     val discountCents: Int? = null,
     val extras: List<BookingReservationExtra> = emptyList(),
+    val workDurationMinutes: Int = 0,
+    val dryingDurationMinutes: Int = 0,
+    val estimatedReadyAtIso: String? = null,
     val paymentStatus: String = "",
 )
 
@@ -38,6 +41,8 @@ data class BookingReservationExtra(
     val name: String,
     val priceCents: Int,
     val quantity: Int = 1,
+    val additionalDurationMinutes: Int = 0,
+    val dryingDurationMinutes: Int = 0,
 )
 
 data class BookingHistory(
@@ -120,6 +125,9 @@ data class BookingHistoryReservation(
     val loyaltyRewardCode: String = "",
     val loyaltyRewardDescription: String = "",
     val loyaltyStampGranted: Boolean? = null,
+    val workDurationMinutes: Int = 0,
+    val dryingDurationMinutes: Int = 0,
+    val estimatedReadyAtIso: String? = null,
 )
 
 enum class BookingReservationStatus {

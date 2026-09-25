@@ -26,6 +26,7 @@ internal data class AdminServiceExtraUi(
     val passengerPriceLabel: String,
     val suvPriceLabel: String,
     val additionalDurationMinutes: Int,
+    val dryingDurationMinutes: Int,
     val quantityEnabled: Boolean,
     val maxQuantity: Int,
     val iconKey: String,
@@ -43,6 +44,7 @@ internal data class AdminServiceExtraForm(
     val passengerPrice: String = "",
     val suvPrice: String = "",
     val additionalDurationMinutes: String = "0",
+    val dryingDurationMinutes: String = "0",
     val quantityEnabled: Boolean = false,
     val maxQuantity: String = "1",
     val iconKey: String = "auto_awesome",
@@ -350,6 +352,7 @@ private fun AdminServiceExtraItem.toUi(): AdminServiceExtraUi = AdminServiceExtr
     passengerPriceLabel = passengerPriceCents.toExtraEuroLabel(),
     suvPriceLabel = suvPriceCents.toExtraEuroLabel(),
     additionalDurationMinutes = additionalDurationMinutes,
+    dryingDurationMinutes = dryingDurationMinutes,
     quantityEnabled = quantityEnabled,
     maxQuantity = maxQuantity,
     iconKey = iconKey.ifBlank { "auto_awesome" },
@@ -371,6 +374,7 @@ private fun AdminServiceExtraUi.toForm(): AdminServiceExtraForm = AdminServiceEx
     passengerPrice = passengerPriceLabel.removeSuffix(" €").replace(",", "."),
     suvPrice = suvPriceLabel.removeSuffix(" €").replace(",", "."),
     additionalDurationMinutes = additionalDurationMinutes.toString(),
+    dryingDurationMinutes = dryingDurationMinutes.toString(),
     quantityEnabled = quantityEnabled,
     maxQuantity = maxQuantity.toString(),
     iconKey = iconKey,
@@ -387,6 +391,9 @@ private fun AdminServiceExtraForm.toMutationRequest(): ParsedServiceExtraRequest
     val additionalDuration = additionalDurationMinutes.trim().toIntOrNull()
         ?.takeIf { it in 0..480 }
         ?: return ParsedServiceExtraRequest.Invalid("Indique uma duração adicional entre 0 e 480 minutos.")
+    val dryingDuration = dryingDurationMinutes.trim().toIntOrNull()
+        ?.takeIf { it in 0..10_080 }
+        ?: return ParsedServiceExtraRequest.Invalid("Indique um tempo de secagem entre 0 e 10080 minutos.")
     val maxQuantityValue = maxQuantity.trim().toIntOrNull()
         ?.takeIf { !quantityEnabled || it in 1..20 }
         ?: return ParsedServiceExtraRequest.Invalid("Indique uma quantidade máxima entre 1 e 20.")
@@ -404,6 +411,7 @@ private fun AdminServiceExtraForm.toMutationRequest(): ParsedServiceExtraRequest
             passengerPriceCents = passengerPriceCents,
             suvPriceCents = suvPriceCents,
             additionalDurationMinutes = additionalDuration,
+            dryingDurationMinutes = dryingDuration,
             quantityEnabled = quantityEnabled,
             maxQuantity = if (quantityEnabled) maxQuantityValue else 1,
             iconKey = iconKey,

@@ -487,9 +487,19 @@ private fun AdminServiceCatalogServiceCard(
             ) {
                 AdminServiceCatalogMetric(
                     value = service.durationLabel,
-                    label = "Duração",
+                    label = "Trabalho",
                     modifier = Modifier.weight(1f),
                 )
+                AdminServiceCatalogMetric(
+                    value = "${service.dryingDurationMinutes} min",
+                    label = "Secagem",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 AdminServiceCatalogMetric(
                     value = service.passengerPriceLabel,
                     label = "Ligeiro",
@@ -624,18 +634,24 @@ private fun AdminServiceCatalogFormCard(
                 AdminServiceTextField(
                     value = form.durationMinutes,
                     onValueChange = { onFormChange(form.copy(durationMinutes = it.take(3))) },
-                    label = "Minutos",
+                    label = "Trabalho (min)",
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
                 AdminServiceTextField(
-                    value = form.sortOrder,
-                    onValueChange = { onFormChange(form.copy(sortOrder = it.take(4))) },
-                    label = "Ordem",
+                    value = form.dryingDurationMinutes,
+                    onValueChange = { onFormChange(form.copy(dryingDurationMinutes = it.take(5))) },
+                    label = "Secagem (min)",
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
             }
+            AdminServiceTextField(
+                value = form.sortOrder,
+                onValueChange = { onFormChange(form.copy(sortOrder = it.take(4))) },
+                label = "Ordem",
+                singleLine = true,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AdminServiceTextField(
                     value = form.passengerPrice,

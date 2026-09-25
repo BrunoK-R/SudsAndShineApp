@@ -14,6 +14,7 @@ data class ServiceCatalogService(
     val suvPriceCents: Int,
     val iconKey: String,
     val popular: Boolean,
+    val dryingDurationMinutes: Int = 0,
 )
 
 data class ServiceCatalogExtra(
@@ -28,6 +29,7 @@ data class ServiceCatalogExtra(
     val maxQuantity: Int = 1,
     val iconKey: String,
     val eligibleServiceIds: List<String> = emptyList(),
+    val dryingDurationMinutes: Int = 0,
 )
 
 sealed interface ServiceCatalogResult {

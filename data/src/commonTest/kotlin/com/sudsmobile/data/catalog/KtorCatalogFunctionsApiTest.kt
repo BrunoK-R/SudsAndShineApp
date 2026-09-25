@@ -30,6 +30,7 @@ class KtorCatalogFunctionsApiTest {
                         "name": "Lavagem Premium",
                         "description": "Lavagem detalhada",
                         "durationMinutes": 45,
+                        "dryingDurationMinutes": 120,
                         "passengerPriceCents": 3200,
                         "suvPriceCents": 3400,
                         "iconKey": "sparkles",
@@ -45,6 +46,7 @@ class KtorCatalogFunctionsApiTest {
                         "passengerPriceCents": 1500,
                         "suvPriceCents": 1850,
                         "additionalDurationMinutes": 15,
+                        "dryingDurationMinutes": 60,
                         "quantityEnabled": true,
                         "maxQuantity": 6,
                         "iconKey": "shield",
@@ -65,6 +67,7 @@ class KtorCatalogFunctionsApiTest {
         assertEquals("premium", service.id)
         assertEquals("Lavagem Premium", service.name)
         assertEquals(45, service.durationMinutes)
+        assertEquals(120, service.dryingDurationMinutes)
         assertEquals(3200, service.passengerPriceCents)
         assertEquals(3400, service.suvPriceCents)
         assertEquals("sparkles", service.iconKey)
@@ -77,6 +80,7 @@ class KtorCatalogFunctionsApiTest {
         assertEquals(1500, extra.passengerPriceCents)
         assertEquals(1850, extra.suvPriceCents)
         assertEquals(15, extra.additionalDurationMinutes)
+        assertEquals(60, extra.dryingDurationMinutes)
         assertEquals(true, extra.quantityEnabled)
         assertEquals(6, extra.maxQuantity)
         assertEquals("shield", extra.iconKey)

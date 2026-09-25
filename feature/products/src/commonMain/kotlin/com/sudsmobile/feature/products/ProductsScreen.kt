@@ -321,10 +321,11 @@ private fun ProductsScreenContent(
     val extrasPriceCents = selectedExtras.sumOf { extra ->
         extra.priceCentsForVehicle(selectedVehicle?.type) * (selectedExtraQuantities[extra.id] ?: 1)
     }
-    val extrasDurationMinutes = selectedExtras.sumOf { extra ->
-        extra.additionalDurationMinutes * (selectedExtraQuantities[extra.id] ?: 1)
-    }
-    val bookingDurationMinutes = (selectedService?.durationMinutes ?: 0) + extrasDurationMinutes
+    val bookingDurationMinutes = bookingWorkDurationMinutes(
+        service = selectedService,
+        selectedExtras = selectedExtras,
+        selectedExtraQuantities = selectedExtraQuantities,
+    )
     val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
     val hapticFeedback = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -1040,6 +1041,8 @@ private fun BookingConfirmationContent(
     submitState: BookingSubmitUiState,
     onSubmitErrorAction: (BookingSubmitResolution) -> Unit,
 ) {
+    val workDurationMinutes = bookingWorkDurationMinutes(service, selectedExtras, selectedExtraQuantities)
+    val dryingDurationMinutes = bookingDryingDurationMinutes(service, selectedExtras, selectedExtraQuantities)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1086,6 +1089,18 @@ private fun BookingConfirmationContent(
                 icon = Icons.Filled.AccessTime,
                 text = time ?: "Hora por selecionar",
             )
+            if (workDurationMinutes > 0) {
+                ConfirmationLine(
+                    icon = Icons.Filled.AccessTime,
+                    text = "Trabalho: $workDurationMinutes min",
+                )
+            }
+            if (dryingDurationMinutes > 0) {
+                ConfirmationLine(
+                    icon = Icons.Filled.AccessTime,
+                    text = "Secagem: $dryingDurationMinutes min",
+                )
+            }
         }
 
         ConfirmationCard(
@@ -3852,9 +3867,7 @@ private fun buildBookingDraft(
         serviceName = service.name,
         dateId = date.id,
         time = time,
-        serviceDurationMinutes = service.durationMinutes + selectedExtras.sumOf { extra ->
-            extra.additionalDurationMinutes * (selectedExtraQuantities[extra.id] ?: 1)
-        },
+        serviceDurationMinutes = bookingWorkDurationMinutes(service, selectedExtras, selectedExtraQuantities),
         vehicleType = vehicle.type,
         userVehicleId = vehicle.userVehicleId,
         vehicleLabel = vehicle.vehicleLabel,
@@ -3866,6 +3879,22 @@ private fun buildBookingDraft(
             .filter { it.quantityEnabled }
             .associate { it.id to (selectedExtraQuantities[it.id] ?: 1) },
     )
+}
+
+internal fun bookingWorkDurationMinutes(
+    service: ProductServiceUi?,
+    selectedExtras: List<ProductExtraUi>,
+    selectedExtraQuantities: Map<String, Int>,
+): Int = (service?.durationMinutes ?: 0) + selectedExtras.sumOf { extra ->
+    extra.additionalDurationMinutes * (selectedExtraQuantities[extra.id] ?: 1)
+}
+
+internal fun bookingDryingDurationMinutes(
+    service: ProductServiceUi?,
+    selectedExtras: List<ProductExtraUi>,
+    selectedExtraQuantities: Map<String, Int>,
+): Int = (service?.dryingDurationMinutes ?: 0) + selectedExtras.sumOf { extra ->
+    extra.dryingDurationMinutes * (selectedExtraQuantities[extra.id] ?: 1)
 }
 
 internal fun resolveInitialServiceId(

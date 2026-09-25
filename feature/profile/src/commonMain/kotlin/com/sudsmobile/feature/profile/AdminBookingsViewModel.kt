@@ -38,6 +38,7 @@ internal data class AdminBookingRequestUi(
     val service: String,
     val date: String,
     val time: String,
+    val durationLabels: List<String>,
     val vehicle: String,
     val price: String,
     val paymentStatus: String,
@@ -537,6 +538,13 @@ private fun AdminBookingRequest.toUi(businessDateKey: String): AdminBookingReque
     service = serviceName.ifBlank { "Serviço" },
     date = slotStartIso.toDateLabel(),
     time = "${slotStartIso.toTimeLabel()} - ${slotEndIso.toTimeLabel()}",
+    durationLabels = buildList {
+        if (workDurationMinutes > 0) add("Trabalho: $workDurationMinutes min")
+        if (dryingDurationMinutes > 0) add("Secagem: $dryingDurationMinutes min")
+        if (dryingDurationMinutes > 0) {
+            estimatedReadyAtIso?.toDateTimeLabel()?.let { add("Levantamento previsto: $it") }
+        }
+    },
     vehicle = vehicleLabel.ifBlank { vehicleType.toVehicleLabel() },
     price = priceCents?.toEuroLabel() ?: "A confirmar",
     paymentStatus = paymentStatus.toPaymentLabel(),

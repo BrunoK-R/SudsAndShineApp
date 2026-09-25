@@ -34,6 +34,7 @@ data class ProductServiceUi(
     val suvPrice: String,
     val icon: ImageVector,
     val popular: Boolean,
+    val dryingDurationMinutes: Int = 0,
 )
 
 data class ProductExtraUi(
@@ -49,6 +50,7 @@ data class ProductExtraUi(
     val maxQuantity: Int = 1,
     val icon: ImageVector,
     val eligibleServiceIds: List<String> = emptyList(),
+    val dryingDurationMinutes: Int = 0,
 )
 
 sealed interface ProductCatalogUiState {
@@ -105,7 +107,8 @@ private fun ServiceCatalogService.toUiModelOrNull(): ProductServiceUi? {
         name = name,
         description = description,
         durationMinutes = durationMinutes,
-        durationLabel = "$durationMinutes min",
+        dryingDurationMinutes = dryingDurationMinutes.coerceIn(0, 10_080),
+        durationLabel = "$durationMinutes min trabalho",
         passengerPriceCents = passengerPriceCents,
         suvPriceCents = suvPriceCents,
         passengerPrice = passengerPriceCents.toEuroLabel(),
@@ -127,6 +130,7 @@ private fun ServiceCatalogExtra.toUiModelOrNull(): ProductExtraUi? {
         passengerPriceCents = passengerPriceCents.coerceAtLeast(0),
         suvPriceCents = suvPriceCents.coerceAtLeast(0),
         additionalDurationMinutes = additionalDurationMinutes.coerceIn(0, 480),
+        dryingDurationMinutes = dryingDurationMinutes.coerceIn(0, 10_080),
         quantityEnabled = quantityEnabled,
         maxQuantity = if (quantityEnabled) maxQuantity.coerceIn(1, 20) else 1,
         icon = iconKey.toServiceIcon(),

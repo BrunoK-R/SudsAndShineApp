@@ -136,7 +136,14 @@ internal fun BookingServiceCard(
                             modifier = Modifier.size(17.dp),
                         )
                         Text(
-                            text = service.durationLabel,
+                            text = buildString {
+                                append(service.durationLabel)
+                                if (service.dryingDurationMinutes > 0) {
+                                    append(" · ")
+                                    append(service.dryingDurationMinutes)
+                                    append(" min secagem")
+                                }
+                            },
                             color = SudsColors.onBrandMuted,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -271,6 +278,20 @@ private fun BookingExtraCard(
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (extra.additionalDurationMinutes > 0 || extra.dryingDurationMinutes > 0) {
+                    Text(
+                        text = buildList {
+                            if (extra.additionalDurationMinutes > 0) {
+                                add("+${extra.additionalDurationMinutes} min trabalho")
+                            }
+                            if (extra.dryingDurationMinutes > 0) {
+                                add("${extra.dryingDurationMinutes} min secagem")
+                            }
+                        }.joinToString(" · "),
+                        color = SudsColors.onBrandMuted,
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
                 Text(

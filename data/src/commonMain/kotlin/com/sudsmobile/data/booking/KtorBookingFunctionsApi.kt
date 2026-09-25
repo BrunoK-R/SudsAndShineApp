@@ -61,6 +61,9 @@ class KtorBookingFunctionsApi(
                         priceCents = body.result.priceCents,
                         discountCents = body.result.discountCents,
                         extras = body.result.extras.map { it.toReservationExtra() },
+                        workDurationMinutes = body.result.workDurationMinutes.coerceAtLeast(0),
+                        dryingDurationMinutes = body.result.dryingDurationMinutes.coerceAtLeast(0),
+                        estimatedReadyAtIso = body.result.estimatedReadyAt,
                         paymentStatus = body.result.paymentStatus,
                     ),
                 )
@@ -845,6 +848,9 @@ private data class CreateReservationResult(
     val priceCents: Int? = null,
     val discountCents: Int? = null,
     val extras: List<ReservationExtraPayload> = emptyList(),
+    val workDurationMinutes: Int = 0,
+    val dryingDurationMinutes: Int = 0,
+    val estimatedReadyAt: String? = null,
     val paymentStatus: String = "",
 )
 
@@ -854,12 +860,16 @@ private data class ReservationExtraPayload(
     val name: String,
     val priceCents: Int,
     val quantity: Int = 1,
+    val additionalDurationMinutes: Int = 0,
+    val dryingDurationMinutes: Int = 0,
 ) {
     fun toReservationExtra(): BookingReservationExtra = BookingReservationExtra(
         id = id,
         name = name,
         priceCents = priceCents.coerceAtLeast(0),
         quantity = quantity.coerceIn(1, 20),
+        additionalDurationMinutes = additionalDurationMinutes.coerceIn(0, 480),
+        dryingDurationMinutes = dryingDurationMinutes.coerceIn(0, 10_080),
     )
 }
 
@@ -1058,6 +1068,9 @@ private data class MyReservationItem(
     val serviceName: String = "",
     val slotStart: String,
     val slotEnd: String,
+    val workDurationMinutes: Int = 0,
+    val dryingDurationMinutes: Int = 0,
+    val estimatedReadyAt: String? = null,
     val status: String = "pending",
     val paymentStatus: String = "",
     val vehicleType: String = "passageiros",
@@ -1096,6 +1109,9 @@ private data class MyReservationItem(
         serviceName = serviceName,
         slotStartIso = slotStart,
         slotEndIso = slotEnd,
+        workDurationMinutes = workDurationMinutes.coerceAtLeast(0),
+        dryingDurationMinutes = dryingDurationMinutes.coerceAtLeast(0),
+        estimatedReadyAtIso = estimatedReadyAt,
         status = status,
         paymentStatus = paymentStatus,
         vehicleType = vehicleType,

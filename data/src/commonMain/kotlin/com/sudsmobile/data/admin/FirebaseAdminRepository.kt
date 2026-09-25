@@ -468,6 +468,8 @@ class FirebaseAdminRepository(
                 AdminError.Validation("A descrição do serviço deve ter no máximo 1000 caracteres.")
             request.durationMinutes !in MinServiceDurationMinutes..MaxServiceDurationMinutes ->
                 AdminError.Validation("A duração deve estar entre 5 e 480 minutos.")
+            request.dryingDurationMinutes !in 0..10_080 ->
+                AdminError.Validation("A secagem deve estar entre 0 e 10080 minutos.")
             request.passengerPriceCents !in MinServicePriceCents..MaxServicePriceCents ||
                 request.suvPriceCents !in MinServicePriceCents..MaxServicePriceCents ->
                 AdminError.Validation("Os preços devem estar entre 0,00 € e 1000,00 €.")
@@ -502,6 +504,8 @@ class FirebaseAdminRepository(
                 AdminError.Validation("Os preços devem estar entre 0,00 € e 1000,00 €.")
             request.additionalDurationMinutes !in 0..480 ->
                 AdminError.Validation("A duração adicional deve estar entre 0 e 480 minutos.")
+            request.dryingDurationMinutes !in 0..10_080 ->
+                AdminError.Validation("A secagem deve estar entre 0 e 10080 minutos.")
             request.quantityEnabled && request.maxQuantity !in 1..20 ->
                 AdminError.Validation("A quantidade máxima deve estar entre 1 e 20.")
             request.iconKey.length > MaxServiceIconKeyLength ->

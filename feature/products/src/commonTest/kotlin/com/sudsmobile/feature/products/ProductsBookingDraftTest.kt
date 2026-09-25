@@ -1,11 +1,45 @@
 package com.sudsmobile.feature.products
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.DirectionsCar
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class ProductsBookingDraftTest {
+    @Test
+    fun dryingTimeDoesNotIncreaseTheBookedWorkWindow() {
+        val service = ProductServiceUi(
+            id = "upholstery",
+            name = "Lavagem de estofos",
+            description = "",
+            durationMinutes = 90,
+            dryingDurationMinutes = 240,
+            durationLabel = "90 min trabalho",
+            passengerPriceCents = 7000,
+            suvPriceCents = 8000,
+            passengerPrice = "70,00€",
+            suvPrice = "80,00€",
+            icon = Icons.Filled.DirectionsCar,
+            popular = false,
+        )
+        val extra = ProductExtraUi(
+            id = "trunk",
+            name = "Bagageira",
+            description = "",
+            priceCents = 2250,
+            price = "22,50€",
+            additionalDurationMinutes = 15,
+            dryingDurationMinutes = 60,
+            icon = Icons.Filled.AutoAwesome,
+        )
+
+        assertEquals(105, bookingWorkDurationMinutes(service, listOf(extra), mapOf("trunk" to 1)))
+        assertEquals(300, bookingDryingDurationMinutes(service, listOf(extra), mapOf("trunk" to 1)))
+    }
+
     @Test
     fun mapsPassengerDraftToBackendRequestWindow() {
         val request = validDraft().toCreateRequest()

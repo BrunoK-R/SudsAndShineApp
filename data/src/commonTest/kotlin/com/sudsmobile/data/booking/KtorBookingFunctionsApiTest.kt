@@ -99,12 +99,17 @@ class KtorBookingFunctionsApiTest {
                     "loyaltyRewardCode": "SS-FREE-UID1-0001",
                     "priceCents": 0,
                     "discountCents": 3200,
+                    "workDurationMinutes": 45,
+                    "dryingDurationMinutes": 120,
+                    "estimatedReadyAt": "2026-05-20T12:15:00.000Z",
                     "paymentStatus": "covered_by_loyalty",
                     "extras": [
                       {
                         "id": "wax",
                         "name": "Enceramento",
-                        "priceCents": 1500
+                        "priceCents": 1500,
+                        "additionalDurationMinutes": 15,
+                        "dryingDurationMinutes": 60
                       }
                     ]
                   }
@@ -125,10 +130,15 @@ class KtorBookingFunctionsApiTest {
         assertEquals("SS-FREE-UID1-0001", success.receipt.loyaltyRewardCode)
         assertEquals(0, success.receipt.priceCents)
         assertEquals(3200, success.receipt.discountCents)
+        assertEquals(45, success.receipt.workDurationMinutes)
+        assertEquals(120, success.receipt.dryingDurationMinutes)
+        assertEquals("2026-05-20T12:15:00.000Z", success.receipt.estimatedReadyAtIso)
         assertEquals("covered_by_loyalty", success.receipt.paymentStatus)
         assertEquals("wax", success.receipt.extras.single().id)
         assertEquals("Enceramento", success.receipt.extras.single().name)
         assertEquals(1500, success.receipt.extras.single().priceCents)
+        assertEquals(15, success.receipt.extras.single().additionalDurationMinutes)
+        assertEquals(60, success.receipt.extras.single().dryingDurationMinutes)
     }
 
     @Test
@@ -233,6 +243,9 @@ class KtorBookingFunctionsApiTest {
                         "serviceName": "Lavagem Premium",
                         "slotStart": "2026-05-20T09:30:00.000Z",
                         "slotEnd": "2026-05-20T10:15:00.000Z",
+                        "workDurationMinutes": 45,
+                        "dryingDurationMinutes": 120,
+                        "estimatedReadyAt": "2026-05-20T12:15:00.000Z",
                         "status": "pending",
                         "paymentStatus": "pending",
                         "vehicleType": "suv",
@@ -243,7 +256,9 @@ class KtorBookingFunctionsApiTest {
                           {
                             "id": "wax",
                             "name": "Enceramento",
-                            "priceCents": 1500
+                            "priceCents": 1500,
+                            "additionalDurationMinutes": 15,
+                            "dryingDurationMinutes": 60
                           }
                         ],
                         "upcoming": true,
@@ -281,8 +296,13 @@ class KtorBookingFunctionsApiTest {
         assertEquals("BMW 320d", success.history.reservations.first().vehicleLabel)
         assertEquals(3400, success.history.reservations.first().priceCents)
         assertEquals("pending", success.history.reservations.first().paymentStatus)
+        assertEquals(45, success.history.reservations.first().workDurationMinutes)
+        assertEquals(120, success.history.reservations.first().dryingDurationMinutes)
+        assertEquals("2026-05-20T12:15:00.000Z", success.history.reservations.first().estimatedReadyAtIso)
         assertEquals("wax", success.history.reservations.first().extras.single().id)
         assertEquals("Enceramento", success.history.reservations.first().extras.single().name)
+        assertEquals(15, success.history.reservations.first().extras.single().additionalDurationMinutes)
+        assertEquals(60, success.history.reservations.first().extras.single().dryingDurationMinutes)
         assertEquals(true, success.history.reservations.first().upcoming)
         assertEquals(true, success.history.reservations.first().reviewed)
         assertEquals(5, success.history.reservations.first().reviewRating)

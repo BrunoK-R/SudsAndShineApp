@@ -507,7 +507,12 @@ private fun AdminServiceExtraCard(
             ) {
                 AdminServiceExtraMetric(
                     value = "+${extra.additionalDurationMinutes} min",
-                    label = "Duração",
+                    label = "Trabalho",
+                    modifier = Modifier.weight(1f),
+                )
+                AdminServiceExtraMetric(
+                    value = "${extra.dryingDurationMinutes} min",
+                    label = "Secagem",
                     modifier = Modifier.weight(1f),
                 )
                 AdminServiceExtraMetric(
@@ -655,18 +660,24 @@ private fun AdminServiceExtraFormCard(
                 AdminServiceExtraTextField(
                     value = form.additionalDurationMinutes,
                     onValueChange = { onFormChange(form.copy(additionalDurationMinutes = it.take(3))) },
-                    label = "Duração adicional (min)",
+                    label = "Trabalho adicional (min)",
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
                 AdminServiceExtraTextField(
-                    value = form.sortOrder,
-                    onValueChange = { onFormChange(form.copy(sortOrder = it.take(4))) },
-                    label = "Ordem",
+                    value = form.dryingDurationMinutes,
+                    onValueChange = { onFormChange(form.copy(dryingDurationMinutes = it.take(5))) },
+                    label = "Secagem (min)",
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
             }
+            AdminServiceExtraTextField(
+                value = form.sortOrder,
+                onValueChange = { onFormChange(form.copy(sortOrder = it.take(4))) },
+                label = "Ordem",
+                singleLine = true,
+            )
             AdminServiceExtraTextField(
                 value = form.iconKey,
                 onValueChange = { onFormChange(form.copy(iconKey = it.take(40))) },

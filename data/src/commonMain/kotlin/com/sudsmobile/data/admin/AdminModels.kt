@@ -45,6 +45,9 @@ data class AdminBookingRequest(
     val paidAtIso: String? = null,
     val paidByUid: String = "",
     val rejectionReason: String = "",
+    val workDurationMinutes: Int = 0,
+    val dryingDurationMinutes: Int = 0,
+    val estimatedReadyAtIso: String? = null,
 )
 
 data class AdminBookingDecisionRequest(
@@ -69,6 +72,7 @@ data class AdminServiceCatalogMutationRequest(
     val popular: Boolean = false,
     val active: Boolean = true,
     val sortOrder: Int = 999,
+    val dryingDurationMinutes: Int = 0,
 )
 
 data class AdminServiceCatalogItem(
@@ -88,6 +92,7 @@ data class AdminServiceCatalogItem(
     val createdByUid: String = "",
     val updatedByUid: String = "",
     val archivedByUid: String = "",
+    val dryingDurationMinutes: Int = 0,
 )
 
 data class AdminServiceCatalogConfig(
@@ -108,6 +113,7 @@ data class AdminServiceExtraMutationRequest(
     val eligibleServiceIds: List<String> = emptyList(),
     val active: Boolean = true,
     val sortOrder: Int = 999,
+    val dryingDurationMinutes: Int = 0,
 )
 
 data class AdminServiceExtraItem(
@@ -130,6 +136,7 @@ data class AdminServiceExtraItem(
     val createdByUid: String = "",
     val updatedByUid: String = "",
     val archivedByUid: String = "",
+    val dryingDurationMinutes: Int = 0,
 )
 
 data class AdminServiceExtrasConfig(

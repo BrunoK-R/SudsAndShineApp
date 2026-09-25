@@ -12,14 +12,14 @@ Este documento contém apenas o que continua por decidir, preparar ou validar. A
 
 ### Serviços ainda incompletos
 
-- Definir a duração da **Aspiração** (11,50 € para passageiros e 14 € para SUV).
-- Definir a duração final da **Lavagem de Bagageira**, atualmente indicada como “1h+” (22,50 € para passageiros e 25,50 € para SUV).
-- Confirmar a duração da **Lavagem de Estofos em Tecido** (75 € para passageiros e 85 € para SUV).
+- Definir separadamente o tempo de trabalho e o tempo de secagem da **Aspiração** (11,50 € para passageiros e 14 € para SUV).
+- Definir separadamente o tempo de trabalho e o tempo de secagem da **Lavagem de Bagageira**, atualmente indicada como “1h+” (22,50 € para passageiros e 25,50 € para SUV).
+- Definir separadamente o tempo de trabalho e o tempo de secagem da **Lavagem de Estofos em Tecido** (75 € para passageiros e 85 € para SUV).
 - Confirmar se a Lavagem de Estofos em Tecido só pode ser marcada às 10h.
-- Definir o tempo adicional de secagem da lavagem de estofos por unidade.
-- Definir o tempo de secagem da lavagem de bagageira quando é escolhida como extra.
+- Definir separadamente o tempo de trabalho e o tempo de secagem da lavagem de estofos por unidade.
+- Confirmar se as 4 horas da **Lavagem de Estofos em Pele** são apenas trabalho ou se incluem secagem e, nesse caso, indicar a divisão exata.
 
-Estes serviços e tempos não devem ser publicados até os respetivos valores estarem confirmados.
+Os tempos de secagem ainda não confirmados permanecem a zero. Não devem ser usados valores estimados.
 
 ### Polimento de faróis
 
