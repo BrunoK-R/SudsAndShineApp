@@ -3,6 +3,8 @@ package com.sudsmobile.data.admin
 interface AdminFunctionsApi {
     suspend fun syncMyRole(idToken: String): AdminRoleResult
     suspend fun getPendingBookingRequests(idToken: String): AdminBookingRequestsResult
+    suspend fun getAllBookingRequests(idToken: String): AdminBookingRequestsResult =
+        AdminBookingRequestsResult.Failure(AdminError.Backend("All reservations are not implemented."))
     suspend fun getAcceptedBookingRequests(idToken: String): AdminBookingRequestsResult =
         AdminBookingRequestsResult.Failure(AdminError.Backend("Accepted reservations are not implemented."))
     suspend fun getCompletableBookingRequests(idToken: String): AdminBookingRequestsResult =
@@ -28,6 +30,12 @@ interface AdminFunctionsApi {
         idToken: String,
     ): AdminBookingDecisionResult =
         AdminBookingDecisionResult.Failure(AdminError.Backend("Reservation completion is not implemented."))
+
+    suspend fun markBookingRequestPaid(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult =
+        AdminBookingDecisionResult.Failure(AdminError.Backend("Reservation payment is not implemented."))
 
     suspend fun getBusinessInfoConfiguration(idToken: String): AdminBusinessInfoResult
 

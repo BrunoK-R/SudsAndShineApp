@@ -67,6 +67,7 @@ data class ProductsBookingDraft(
     val vehicleLabel: String? = null,
     val loyaltyRewardCode: String? = null,
     val extraIds: List<String> = emptyList(),
+    val extraQuantities: Map<String, Int> = emptyMap(),
 )
 
 data class BookingVehicleUi(
@@ -1340,6 +1341,7 @@ internal fun ProductsBookingDraft.toCreateRequest(): BookingCreateRequest? {
         vehicleLabel = vehicleLabel,
         loyaltyRewardCode = loyaltyRewardCode,
         extraIds = extraIds,
+        extraQuantities = extraQuantities,
         gdprConsent = gdprConsent,
         notes = notes,
     )

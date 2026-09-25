@@ -41,6 +41,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +56,8 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -881,13 +886,11 @@ private fun AdminDateExceptionEditor(
             title = "Exceções por data",
             body = "Capacidade especial por dia.",
         )
-        AdminAvailabilityTextField(
+        AdminDatePickerField(
             value = form.overrideDate,
-            onValueChange = { onFormChange(form.copy(overrideDate = it)) },
-            label = "Data da exceção (AAAA-MM-DD)",
+            onDateSelected = { onFormChange(form.copy(overrideDate = it)) },
+            label = "Data da exceção",
             enabled = !saving,
-            singleLine = true,
-            keyboardType = KeyboardType.Number,
         )
         if (configuredDates.isNotEmpty()) {
             AdminDateShortcutChips(
@@ -970,13 +973,11 @@ private fun AdminBlockedSlotEditor(
             title = "Bloqueios de horário",
             body = "Janelas indisponíveis para marcação.",
         )
-        AdminAvailabilityTextField(
+        AdminDatePickerField(
             value = form.blockedDate,
-            onValueChange = { onFormChange(form.copy(blockedDate = it)) },
-            label = "Data do bloqueio (AAAA-MM-DD)",
+            onDateSelected = { onFormChange(form.copy(blockedDate = it)) },
+            label = "Data do bloqueio",
             enabled = !saving,
-            singleLine = true,
-            keyboardType = KeyboardType.Number,
         )
         if (configuredDates.isNotEmpty()) {
             AdminDateShortcutChips(
@@ -1059,6 +1060,94 @@ private fun AdminDateShortcutChips(
                 selected = selectedDate == date,
                 enabled = enabled,
                 onClick = { onDateSelected(date) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AdminDatePickerField(
+    value: String,
+    onDateSelected: (String) -> Unit,
+    label: String,
+    enabled: Boolean,
+) {
+    var pickerVisible by rememberSaveable { mutableStateOf(false) }
+
+    Surface(
+        onClick = { pickerVisible = true },
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = value.toAdminDateDisplayLabel() ?: "Selecionar data",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (value.isBlank()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                )
+            }
+            Icon(
+                imageVector = Icons.Filled.CalendarMonth,
+                contentDescription = "Abrir calendário",
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
+                },
+            )
+        }
+    }
+
+    if (pickerVisible) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = value.toAdminDatePickerUtcMillisOrNull(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { pickerVisible = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis
+                            ?.toAdminDateId()
+                            ?.let(onDateSelected)
+                        pickerVisible = false
+                    },
+                    enabled = pickerState.selectedDateMillis != null,
+                ) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickerVisible = false }) {
+                    Text("Cancelar")
+                }
+            },
+        ) {
+            DatePicker(
+                state = pickerState,
+                showModeToggle = false,
             )
         }
     }

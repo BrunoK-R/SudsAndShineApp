@@ -501,6 +501,21 @@ private fun AdminServiceExtraCard(
                     modifier = Modifier.weight(1f),
                 )
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AdminServiceExtraMetric(
+                    value = "+${extra.additionalDurationMinutes} min",
+                    label = "Duração",
+                    modifier = Modifier.weight(1f),
+                )
+                AdminServiceExtraMetric(
+                    value = if (extra.quantityEnabled) "1–${extra.maxQuantity}" else "1",
+                    label = "Quantidade",
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
             if (extra.auditLabels.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -622,9 +637,25 @@ private fun AdminServiceExtraFormCard(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AdminServiceExtraTextField(
-                    value = form.price,
-                    onValueChange = { onFormChange(form.copy(price = it.take(12))) },
-                    label = "Preço (€)",
+                    value = form.passengerPrice,
+                    onValueChange = { onFormChange(form.copy(passengerPrice = it.take(12))) },
+                    label = "Preço passageiros (€)",
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                AdminServiceExtraTextField(
+                    value = form.suvPrice,
+                    onValueChange = { onFormChange(form.copy(suvPrice = it.take(12))) },
+                    label = "Preço SUV (€)",
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AdminServiceExtraTextField(
+                    value = form.additionalDurationMinutes,
+                    onValueChange = { onFormChange(form.copy(additionalDurationMinutes = it.take(3))) },
+                    label = "Duração adicional (min)",
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
@@ -649,6 +680,19 @@ private fun AdminServiceExtraFormCard(
                 minLines = 1,
                 maxLines = 3,
             )
+            AdminServiceExtraSwitchRow(
+                label = "Permitir quantidade",
+                checked = form.quantityEnabled,
+                onCheckedChange = { onFormChange(form.copy(quantityEnabled = it)) },
+            )
+            if (form.quantityEnabled) {
+                AdminServiceExtraTextField(
+                    value = form.maxQuantity,
+                    onValueChange = { onFormChange(form.copy(maxQuantity = it.take(2))) },
+                    label = "Quantidade máxima",
+                    singleLine = true,
+                )
+            }
             AdminServiceExtraSwitchRow(
                 label = "Disponível para clientes",
                 checked = form.active,

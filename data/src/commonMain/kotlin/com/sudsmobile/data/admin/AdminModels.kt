@@ -33,6 +33,7 @@ data class AdminBookingRequest(
     val loyaltyRewardApplied: Boolean,
     val canStart: Boolean = false,
     val canComplete: Boolean = false,
+    val canMarkPaid: Boolean = false,
     val acceptedAtIso: String? = null,
     val acceptedByUid: String = "",
     val startedAtIso: String? = null,
@@ -41,6 +42,9 @@ data class AdminBookingRequest(
     val rejectedByUid: String = "",
     val completedAtIso: String? = null,
     val completedByUid: String = "",
+    val paidAtIso: String? = null,
+    val paidByUid: String = "",
+    val rejectionReason: String = "",
 )
 
 data class AdminBookingDecisionRequest(
@@ -95,6 +99,11 @@ data class AdminServiceExtraMutationRequest(
     val name: String,
     val description: String = "",
     val priceCents: Int,
+    val passengerPriceCents: Int = priceCents,
+    val suvPriceCents: Int = passengerPriceCents,
+    val additionalDurationMinutes: Int = 0,
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: Int = 1,
     val iconKey: String = "auto_awesome",
     val eligibleServiceIds: List<String> = emptyList(),
     val active: Boolean = true,
@@ -106,6 +115,11 @@ data class AdminServiceExtraItem(
     val name: String,
     val description: String,
     val priceCents: Int,
+    val passengerPriceCents: Int = priceCents,
+    val suvPriceCents: Int = passengerPriceCents,
+    val additionalDurationMinutes: Int = 0,
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: Int = 1,
     val iconKey: String,
     val eligibleServiceIds: List<String>,
     val active: Boolean,
@@ -579,6 +593,8 @@ sealed interface AdminError {
 interface AdminRepository {
     suspend fun syncMyRole(): AdminRoleResult
     suspend fun getPendingBookingRequests(): AdminBookingRequestsResult
+    suspend fun getAllBookingRequests(): AdminBookingRequestsResult =
+        AdminBookingRequestsResult.Failure(AdminError.Backend("All reservations are not implemented."))
     suspend fun getAcceptedBookingRequests(): AdminBookingRequestsResult =
         AdminBookingRequestsResult.Failure(AdminError.Backend("Accepted reservations are not implemented."))
     suspend fun getCompletableBookingRequests(): AdminBookingRequestsResult =
@@ -676,6 +692,8 @@ interface AdminRepository {
     suspend fun rejectBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult
     suspend fun completeBookingRequest(request: AdminBookingDecisionRequest): AdminBookingDecisionResult =
         AdminBookingDecisionResult.Failure(AdminError.Backend("Reservation completion is not implemented."))
+    suspend fun markBookingRequestPaid(request: AdminBookingDecisionRequest): AdminBookingDecisionResult =
+        AdminBookingDecisionResult.Failure(AdminError.Backend("Reservation payment is not implemented."))
     suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
     ): AdminServiceCatalogMutationResult

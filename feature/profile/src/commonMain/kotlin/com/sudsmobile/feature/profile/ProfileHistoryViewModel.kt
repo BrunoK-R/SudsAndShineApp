@@ -267,7 +267,7 @@ private fun List<BookingReservationExtra>.toHistoryExtraUi(): List<ProfileHistor
         val name = extra.name.trim()
         if (name.isBlank()) return@mapNotNull null
         ProfileHistoryExtraUi(
-            name = name,
+            name = name + if (extra.quantity > 1) " × ${extra.quantity}" else "",
             price = if (extra.priceCents > 0) extra.priceCents.toEuroLabel() else "Incluído",
         )
     }.take(8)

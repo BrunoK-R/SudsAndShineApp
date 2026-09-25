@@ -238,6 +238,11 @@ class FirebaseBookingRepository(
                 BookingCreateError.Validation("Escolha no máximo 12 extras para esta marcação.")
             request.extraIds.any { it.isBlank() || it.contains("/") || it.length > 120 } ->
                 BookingCreateError.Validation("Escolha extras válidos para esta marcação.")
+            request.extraQuantities.any { (id, quantity) ->
+                id.isBlank() || id.contains("/") || id.length > 120 || quantity !in 1..20
+            } -> BookingCreateError.Validation("Indique quantidades válidas para os extras.")
+            request.extraQuantities.keys.any { it !in request.extraIds } ->
+                BookingCreateError.Validation("Indique quantidades apenas para os extras selecionados.")
             !request.gdprConsent -> BookingCreateError.Validation("Aceite a política de privacidade para continuar.")
             else -> null
         }
@@ -333,6 +338,10 @@ class FirebaseBookingRepository(
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinctBy { it.lowercase() },
+        extraQuantities = extraQuantities
+            .mapKeys { (id, _) -> id.trim() }
+            .filterKeys { it.isNotBlank() }
+            .filterValues { it > 0 },
     )
 
     private fun BookingReviewRequest.normalized(): BookingReviewRequest = copy(

@@ -42,6 +42,11 @@ data class ProductExtraUi(
     val description: String,
     val priceCents: Int,
     val price: String,
+    val passengerPriceCents: Int = priceCents,
+    val suvPriceCents: Int = passengerPriceCents,
+    val additionalDurationMinutes: Int = 0,
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: Int = 1,
     val icon: ImageVector,
     val eligibleServiceIds: List<String> = emptyList(),
 )
@@ -119,6 +124,11 @@ private fun ServiceCatalogExtra.toUiModelOrNull(): ProductExtraUi? {
         description = description,
         priceCents = priceCents.coerceAtLeast(0),
         price = priceCents.coerceAtLeast(0).toEuroLabel(),
+        passengerPriceCents = passengerPriceCents.coerceAtLeast(0),
+        suvPriceCents = suvPriceCents.coerceAtLeast(0),
+        additionalDurationMinutes = additionalDurationMinutes.coerceIn(0, 480),
+        quantityEnabled = quantityEnabled,
+        maxQuantity = if (quantityEnabled) maxQuantity.coerceIn(1, 20) else 1,
         icon = iconKey.toServiceIcon(),
         eligibleServiceIds = eligibleServiceIds,
     )

@@ -48,7 +48,7 @@ internal enum class BookingStatusUi(val label: String) {
     Pending("A aguardar validação"),
     Confirmed("Confirmado"),
     InProgress("A decorrer"),
-    Completed("Concluído"),
+    Completed("Trabalho realizado"),
     Cancelled("Cancelado"),
     Rejected("Rejeitado"),
     Expired("Expirado"),
@@ -624,7 +624,7 @@ private fun BookingHistoryReservation.toUiModelOrNull(): BookingSummaryUi? {
         vehicle = vehicleLabel?.takeIf { it.isNotBlank() } ?: vehicleType.toVehicleLabel(),
         price = priceCents?.toEuroLabel() ?: "A confirmar",
         status = status.toStatusUi(),
-        statusDescription = status.toStatusDescription(),
+        statusDescription = toStatusDescription(),
         icon = serviceIcon(),
         showLocation = upcoming,
         reviewed = reviewed,
@@ -837,8 +837,8 @@ private fun BookingHistoryReservation.bookingTimeline(): List<BookingTimelineSte
         )
 
         BookingReservationStatus.Completed -> BookingTimelineStepUi(
-            title = "Lavagem concluída",
-            detail = "O serviço foi terminado e guardado no histórico.",
+            title = "Trabalho realizado",
+            detail = "O carro está pronto para levantamento.",
             timestamp = completedAtIso.toTimelineTimestamp(),
             state = BookingTimelineStepStateUi.Completed,
         )
@@ -855,7 +855,7 @@ private fun BookingHistoryReservation.bookingTimeline(): List<BookingTimelineSte
         timeline += BookingTimelineStepUi(
             title = "Progresso de fidelização atualizado",
             detail = "Esta lavagem conta para a próxima recompensa.",
-            timestamp = completedAtIso.toTimelineTimestamp(),
+            timestamp = paymentConfirmedAtIso.toTimelineTimestamp(),
             state = BookingTimelineStepStateUi.Completed,
         )
     }
@@ -920,12 +920,12 @@ private fun BookingHistoryReservation.paymentTimelineStep(
 
         BookingPaymentStatus.Pending -> BookingTimelineStepUi(
             title = if (reservationStatus == BookingReservationStatus.Completed) {
-                "Pagamento por confirmar"
+                "Aguarda pagamento"
             } else {
                 "Pagamento no final"
             },
             detail = if (reservationStatus == BookingReservationStatus.Completed) {
-                "A equipa ainda está a confirmar o pagamento desta lavagem."
+                "O pagamento ainda não está marcado como pago."
             } else {
                 "O valor de ${priceCents?.toEuroLabel() ?: "serviço"} será confirmado no fim da lavagem."
             },
@@ -1028,8 +1028,8 @@ private fun String.toStatusUi(): BookingStatusUi {
     }
 }
 
-private fun String.toStatusDescription(): String {
-    return when (toBookingReservationStatus()) {
+private fun BookingHistoryReservation.toStatusDescription(): String {
+    return when (status.toBookingReservationStatus()) {
         BookingReservationStatus.Pending ->
             "Não precisa de fazer nada. A equipa vai validar o pedido e enviaremos uma atualização."
         BookingReservationStatus.Confirmed ->
@@ -1037,7 +1037,12 @@ private fun String.toStatusDescription(): String {
         BookingReservationStatus.InProgress ->
             "A lavagem está em curso. Avisaremos quando o veículo estiver pronto."
         BookingReservationStatus.Completed ->
-            "A lavagem terminou. Pode avaliar o serviço abaixo."
+            when (bookingPaymentStatus()) {
+                BookingPaymentStatus.Pending -> "O carro está pronto para levantamento. Aguarda pagamento."
+                BookingPaymentStatus.Paid -> "O carro está pronto para levantamento. Pagamento confirmado."
+                BookingPaymentStatus.CoveredByLoyalty -> "O carro está pronto para levantamento. Recompensa aplicada."
+                else -> "O carro está pronto para levantamento."
+            }
         BookingReservationStatus.Cancelled ->
             "Esta marcação terminou. Faça um novo pedido quando quiser."
         BookingReservationStatus.Rejected ->

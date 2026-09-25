@@ -38,16 +38,31 @@ function normalizeLoyalty(data = {}, settings = {}) {
 function reservationEarnsLoyaltyStamp(reservation = {}) {
   if (reservation.loyaltyRewardApplied === true) return false;
   const paymentStatus = normalizePaymentStatus(reservation.paymentStatus);
+  return ["paid", "pago", "succeeded", "complete", "completed"].includes(paymentStatus);
+}
+
+function reservationCanBeMarkedPaid(reservation = {}) {
+  const status = String(reservation.status || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, "_");
+  if (!["completed", "complete", "done", "concluido", "concluida", "finalizado", "finalizada"].includes(status)) {
+    return false;
+  }
+  if (reservation.loyaltyRewardApplied === true) return false;
+  const paymentStatus = normalizePaymentStatus(reservation.paymentStatus);
   return ![
+    "paid",
+    "pago",
+    "succeeded",
+    "complete",
+    "completed",
     "covered_by_loyalty",
     "loyalty",
     "reward",
     "recompensa",
-    "failed",
-    "declined",
-    "falhou",
-    "refused",
-    "recusado",
     "refunded",
     "refund",
     "reembolsado",
@@ -66,7 +81,9 @@ function adminReservationExpectedStatuses(action) {
     case "start":
       return ["confirmed"];
     case "complete":
-      return ["in_progress"];
+      return ["confirmed", "in_progress"];
+    case "mark_paid":
+      return ["completed"];
     default:
       return [];
   }
@@ -137,6 +154,8 @@ module.exports = {
   buildDaySlots,
   capacityForDate,
   normalizeLoyalty,
+  normalizePaymentStatus,
+  reservationCanBeMarkedPaid,
   reservationEarnsLoyaltyStamp,
   slotOverlapsBlockedRange,
 };

@@ -23,6 +23,11 @@ internal data class AdminServiceExtraUi(
     val name: String,
     val description: String,
     val priceLabel: String,
+    val passengerPriceLabel: String,
+    val suvPriceLabel: String,
+    val additionalDurationMinutes: Int,
+    val quantityEnabled: Boolean,
+    val maxQuantity: Int,
     val iconKey: String,
     val eligibleServiceIdsLabel: String,
     val active: Boolean,
@@ -35,7 +40,11 @@ internal data class AdminServiceExtraForm(
     val extraId: String = "",
     val name: String = "",
     val description: String = "",
-    val price: String = "",
+    val passengerPrice: String = "",
+    val suvPrice: String = "",
+    val additionalDurationMinutes: String = "0",
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: String = "1",
     val iconKey: String = "auto_awesome",
     val eligibleServiceIds: String = "",
     val active: Boolean = true,
@@ -333,7 +342,16 @@ private fun AdminServiceExtraItem.toUi(): AdminServiceExtraUi = AdminServiceExtr
     id = id,
     name = name.ifBlank { "Extra sem nome" },
     description = description,
-    priceLabel = priceCents.toExtraEuroLabel(),
+    priceLabel = if (passengerPriceCents == suvPriceCents) {
+        passengerPriceCents.toExtraEuroLabel()
+    } else {
+        "${passengerPriceCents.toExtraEuroLabel()} / ${suvPriceCents.toExtraEuroLabel()} SUV"
+    },
+    passengerPriceLabel = passengerPriceCents.toExtraEuroLabel(),
+    suvPriceLabel = suvPriceCents.toExtraEuroLabel(),
+    additionalDurationMinutes = additionalDurationMinutes,
+    quantityEnabled = quantityEnabled,
+    maxQuantity = maxQuantity,
     iconKey = iconKey.ifBlank { "auto_awesome" },
     eligibleServiceIdsLabel = eligibleServiceIds.joinToString(", "),
     active = active,
@@ -350,7 +368,11 @@ private fun AdminServiceExtraUi.toForm(): AdminServiceExtraForm = AdminServiceEx
     extraId = id,
     name = name,
     description = description,
-    price = priceLabel.removeSuffix(" €").replace(",", "."),
+    passengerPrice = passengerPriceLabel.removeSuffix(" €").replace(",", "."),
+    suvPrice = suvPriceLabel.removeSuffix(" €").replace(",", "."),
+    additionalDurationMinutes = additionalDurationMinutes.toString(),
+    quantityEnabled = quantityEnabled,
+    maxQuantity = maxQuantity.toString(),
     iconKey = iconKey,
     eligibleServiceIds = eligibleServiceIdsLabel,
     active = active,
@@ -358,8 +380,16 @@ private fun AdminServiceExtraUi.toForm(): AdminServiceExtraForm = AdminServiceEx
 )
 
 private fun AdminServiceExtraForm.toMutationRequest(): ParsedServiceExtraRequest {
-    val priceCents = price.toExtraPriceCentsOrNull()
-        ?: return ParsedServiceExtraRequest.Invalid("Indique o preço do extra.")
+    val passengerPriceCents = passengerPrice.toExtraPriceCentsOrNull()
+        ?: return ParsedServiceExtraRequest.Invalid("Indique o preço para passageiros.")
+    val suvPriceCents = suvPrice.toExtraPriceCentsOrNull()
+        ?: return ParsedServiceExtraRequest.Invalid("Indique o preço para SUV.")
+    val additionalDuration = additionalDurationMinutes.trim().toIntOrNull()
+        ?.takeIf { it in 0..480 }
+        ?: return ParsedServiceExtraRequest.Invalid("Indique uma duração adicional entre 0 e 480 minutos.")
+    val maxQuantityValue = maxQuantity.trim().toIntOrNull()
+        ?.takeIf { !quantityEnabled || it in 1..20 }
+        ?: return ParsedServiceExtraRequest.Invalid("Indique uma quantidade máxima entre 1 e 20.")
     val sortOrderValue = sortOrder.trim().toIntOrNull()
         ?: return ParsedServiceExtraRequest.Invalid("Indique uma ordenação válida.")
     val eligibleIds = eligibleServiceIds.toEligibleServiceIdsOrNull()
@@ -370,7 +400,12 @@ private fun AdminServiceExtraForm.toMutationRequest(): ParsedServiceExtraRequest
             extraId = originalExtraId.ifBlank { extraId.trim() },
             name = name,
             description = description,
-            priceCents = priceCents,
+            priceCents = passengerPriceCents,
+            passengerPriceCents = passengerPriceCents,
+            suvPriceCents = suvPriceCents,
+            additionalDurationMinutes = additionalDuration,
+            quantityEnabled = quantityEnabled,
+            maxQuantity = if (quantityEnabled) maxQuantityValue else 1,
             iconKey = iconKey,
             eligibleServiceIds = eligibleIds,
             active = active,

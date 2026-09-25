@@ -80,7 +80,8 @@ test("template rendering produces app routing data", () => {
   assert.equal(message.data.templateKey, "booking_completed");
   assert.equal(message.data.reservationId, "reservation-1");
   assert.equal(message.data.reservationCode, "SS-001");
-  assert.match(message.notification.title, /Lavagem/);
+  assert.equal(message.notification.title, "Serviço concluído");
+  assert.match(message.notification.body, /levantar o carro/);
 });
 
 test("global switches gate relevant notification groups", () => {

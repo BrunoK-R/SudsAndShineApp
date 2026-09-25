@@ -26,6 +26,7 @@ import com.sudsmobile.data.booking.BookingRepository
 import com.sudsmobile.data.booking.toLoyaltyProgress as toBackendLoyaltyProgress
 import com.sudsmobile.data.booking.isCancelledReservation
 import com.sudsmobile.data.booking.isCompletedReservation
+import com.sudsmobile.data.booking.earnsLoyaltyStamp
 import com.sudsmobile.data.booking.toBookingReservationStatus
 import com.sudsmobile.data.business.BusinessInfo
 import com.sudsmobile.data.business.BusinessInfoError
@@ -434,8 +435,8 @@ private fun BookingHistory.toHomeState(
     businessInfo: HomeBusinessInfoResult,
 ): HomeUiState {
     val validReservations = reservations.filter { it.id.isNotBlank() && it.slotStartIso.isNotBlank() }
-    val completedWashCount = validReservations.count { it.isCompletedReservation() }
-    val loyaltyProgress = loyaltyProgressFor(completedWashCount)
+    val paidWashCount = validReservations.count { it.earnsLoyaltyStamp() }
+    val loyaltyProgress = loyaltyProgressFor(paidWashCount)
     val nextBooking = validReservations
         .filter { it.upcoming && !it.isCancelledReservation() }
         .minByOrNull { it.slotStartIso }

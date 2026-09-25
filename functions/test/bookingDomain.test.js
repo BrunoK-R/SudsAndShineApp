@@ -7,15 +7,32 @@ const {
   buildDaySlots,
   capacityForDate,
   normalizeLoyalty,
+  reservationCanBeMarkedPaid,
   reservationEarnsLoyaltyStamp,
   slotOverlapsBlockedRange,
 } = require("../src/bookingDomain");
 
-test("admin reservation lifecycle requires start before complete", () => {
+test("admin reservation lifecycle completes accepted work before payment", () => {
   assert.deepEqual(adminReservationExpectedStatuses("accept"), ["pending"]);
   assert.deepEqual(adminReservationExpectedStatuses("reject"), ["pending", "confirmed"]);
   assert.deepEqual(adminReservationExpectedStatuses("start"), ["confirmed"]);
-  assert.deepEqual(adminReservationExpectedStatuses("complete"), ["in_progress"]);
+  assert.deepEqual(adminReservationExpectedStatuses("complete"), ["confirmed", "in_progress"]);
+  assert.deepEqual(adminReservationExpectedStatuses("mark_paid"), ["completed"]);
+});
+
+test("only completed unpaid non-reward reservations can be marked paid", () => {
+  assert.equal(reservationCanBeMarkedPaid({ status: "confirmed", paymentStatus: "pending" }), false);
+  assert.equal(reservationCanBeMarkedPaid({ status: "completed", paymentStatus: "pending" }), true);
+  assert.equal(reservationCanBeMarkedPaid({ status: "concluída", paymentStatus: "pending" }), true);
+  assert.equal(reservationCanBeMarkedPaid({ status: "completed", paymentStatus: "paid" }), false);
+  assert.equal(
+    reservationCanBeMarkedPaid({
+      status: "completed",
+      paymentStatus: "covered_by_loyalty",
+      loyaltyRewardApplied: true,
+    }),
+    false,
+  );
 });
 
 test("loyalty reward becomes ready after ten paid completed washes", () => {
@@ -41,7 +58,7 @@ test("loyalty free wash disappears after the reward is claimed", () => {
 });
 
 test("loyalty stamp is only awarded for non-reward reservations with valid payment state", () => {
-  assert.equal(reservationEarnsLoyaltyStamp({ paymentStatus: "pending" }), true);
+  assert.equal(reservationEarnsLoyaltyStamp({ paymentStatus: "pending" }), false);
   assert.equal(reservationEarnsLoyaltyStamp({ paymentStatus: "paid" }), true);
   assert.equal(reservationEarnsLoyaltyStamp({ paymentStatus: "covered_by_loyalty" }), false);
   assert.equal(reservationEarnsLoyaltyStamp({ paymentStatus: "failed" }), false);

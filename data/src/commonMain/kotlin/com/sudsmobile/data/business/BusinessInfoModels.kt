@@ -75,7 +75,7 @@ val DefaultBusinessInfo = BusinessInfo(
         ),
         BusinessFaq(
             question = "Quanto tempo demora cada serviço?",
-            answer = "Lavagem Exterior: 20 min, Lavagem Standard: 30 min, Limpeza Interior: 25 min, Lavagem Premium: 45 min.",
+            answer = "Lavagem Exterior: 50 min, Lavagem Standard: 1h30, Limpeza Interior: 60 min, Lavagem Premium: 1h45 e Estofos em Pele: 4h.",
         ),
         BusinessFaq(
             question = "Como funciona o programa de fidelização?",

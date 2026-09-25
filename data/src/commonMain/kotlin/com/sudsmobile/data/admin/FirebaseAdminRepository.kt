@@ -41,6 +41,13 @@ class FirebaseAdminRepository(
         return api.getPendingBookingRequests(idToken)
     }
 
+    override suspend fun getAllBookingRequests(): AdminBookingRequestsResult {
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBookingRequestsResult.Failure(unauthenticatedError())
+
+        return api.getAllBookingRequests(idToken)
+    }
+
     override suspend fun getAcceptedBookingRequests(): AdminBookingRequestsResult {
         val idToken = currentIdTokenOrNull()
             ?: return AdminBookingRequestsResult.Failure(unauthenticatedError())
@@ -356,6 +363,24 @@ class FirebaseAdminRepository(
             }
     }
 
+    override suspend fun markBookingRequestPaid(
+        request: AdminBookingDecisionRequest,
+    ): AdminBookingDecisionResult {
+        val normalizedRequest = request.normalized()
+        val validationError = validate(normalizedRequest)
+        if (validationError != null) return AdminBookingDecisionResult.Failure(validationError)
+
+        val idToken = currentIdTokenOrNull()
+            ?: return AdminBookingDecisionResult.Failure(unauthenticatedError())
+
+        return api.markBookingRequestPaid(normalizedRequest, idToken)
+            .also { result ->
+                if (result is AdminBookingDecisionResult.Success) {
+                    bookingChangeNotifier.notifyBookingsChanged()
+                }
+            }
+    }
+
     override suspend fun upsertServiceCatalogItem(
         request: AdminServiceCatalogMutationRequest,
     ): AdminServiceCatalogMutationResult {
@@ -472,8 +497,13 @@ class FirebaseAdminRepository(
                 AdminError.Validation("O nome do extra deve ter no máximo 120 caracteres.")
             request.description.length > MaxServiceDescriptionLength ->
                 AdminError.Validation("A descrição do extra deve ter no máximo 1000 caracteres.")
-            request.priceCents !in MinServicePriceCents..MaxServicePriceCents ->
-                AdminError.Validation("O preço deve estar entre 0,00 € e 1000,00 €.")
+            request.passengerPriceCents !in MinServicePriceCents..MaxServicePriceCents ||
+                request.suvPriceCents !in MinServicePriceCents..MaxServicePriceCents ->
+                AdminError.Validation("Os preços devem estar entre 0,00 € e 1000,00 €.")
+            request.additionalDurationMinutes !in 0..480 ->
+                AdminError.Validation("A duração adicional deve estar entre 0 e 480 minutos.")
+            request.quantityEnabled && request.maxQuantity !in 1..20 ->
+                AdminError.Validation("A quantidade máxima deve estar entre 1 e 20.")
             request.iconKey.length > MaxServiceIconKeyLength ->
                 AdminError.Validation("O ícone deve ter no máximo 40 caracteres.")
             request.eligibleServiceIds.size > MaxEligibleServiceLinks ->
@@ -731,6 +761,8 @@ class FirebaseAdminRepository(
             extraId = extraId.trim(),
             name = name.normalizeAdminText(),
             description = description.normalizeAdminText(),
+            priceCents = passengerPriceCents,
+            maxQuantity = if (quantityEnabled) maxQuantity else 1,
             iconKey = iconKey.trim().ifBlank { "auto_awesome" },
             eligibleServiceIds = normalizedEligibleServiceIds,
         )

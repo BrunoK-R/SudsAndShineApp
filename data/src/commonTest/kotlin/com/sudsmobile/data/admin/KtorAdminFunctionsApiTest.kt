@@ -160,6 +160,42 @@ class KtorAdminFunctionsApiTest {
     }
 
     @Test
+    fun mapsAllReservationRequestsIncludingPaymentAction() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "requests": [
+                      {
+                        "id": "reservation-3",
+                        "slotStart": "2026-05-30T09:30:00.000Z",
+                        "slotEnd": "2026-05-30T10:15:00.000Z",
+                        "status": "completed",
+                        "paymentStatus": "pending",
+                        "canMarkPaid": true,
+                        "paidAt": null,
+                        "paidByUid": ""
+                      }
+                    ]
+                  }
+                }
+                """.trimIndent(),
+            ) { request -> requestedPath = request.url.fullPath },
+            config = testConfig(),
+        )
+
+        val result = api.getAllBookingRequests("id-token-1")
+
+        val request = assertIs<AdminBookingRequestsResult.Success>(result).requests.single()
+        assertEquals("/test-project/europe-west1/getAdminReservations", requestedPath)
+        assertEquals("reservation-3", request.id)
+        assertEquals(true, request.canMarkPaid)
+        assertEquals(null, request.paidAtIso)
+    }
+
+    @Test
     fun postsStartReservationDecision() = runTest {
         var requestedPath: String? = null
         var authorizationHeader: String? = null
@@ -224,6 +260,36 @@ class KtorAdminFunctionsApiTest {
         val success = assertIs<AdminBookingDecisionResult.Success>(result)
         assertEquals("/test-project/europe-west1/completeReservation", requestedPath)
         assertEquals("Bearer id-token-1", authorizationHeader)
+        assertEquals("completed", success.receipt.status)
+    }
+
+    @Test
+    fun postsMarkReservationPaidDecision() = runTest {
+        var requestedPath: String? = null
+        val api = KtorAdminFunctionsApi(
+            httpClient = mockClient(
+                """
+                {
+                  "result": {
+                    "ok": true,
+                    "reservationId": "reservation-2",
+                    "reservationCode": "SS-PAID",
+                    "status": "completed",
+                    "paymentStatus": "paid"
+                  }
+                }
+                """.trimIndent(),
+            ) { request -> requestedPath = request.url.fullPath },
+            config = testConfig(),
+        )
+
+        val result = api.markBookingRequestPaid(
+            AdminBookingDecisionRequest(reservationId = "reservation-2"),
+            idToken = "id-token-1",
+        )
+
+        val success = assertIs<AdminBookingDecisionResult.Success>(result)
+        assertEquals("/test-project/europe-west1/markReservationPaid", requestedPath)
         assertEquals("completed", success.receipt.status)
     }
 

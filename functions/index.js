@@ -14,6 +14,8 @@ const {
   buildDaySlots,
   capacityForDate,
   normalizeLoyalty,
+  normalizePaymentStatus,
+  reservationCanBeMarkedPaid,
   reservationEarnsLoyaltyStamp,
   slotOverlapsBlockedRange,
 } = require("./src/bookingDomain");
@@ -1053,6 +1055,16 @@ exports.getAdminPendingReservations = onCall(async (request) => {
   };
 });
 
+exports.getAdminReservations = onCall(async (request) => {
+  await requireAdmin(request);
+  const snapshot = await db.collection("reservations").get();
+  return {
+    requests: snapshot.docs
+      .map((doc) => toAdminReservationPayload(doc.id, doc.data()))
+      .sort((a, b) => String(b.slotStart).localeCompare(String(a.slotStart))),
+  };
+});
+
 exports.getAdminAcceptedReservations = onCall(async (request) => {
   await requireAdmin(request);
   const snapshot = await db.collection("reservations").where("status", "in", ["confirmed", "in_progress"]).get();
@@ -1112,7 +1124,67 @@ exports.completeReservation = onCall(async (request) => {
     status: "completed",
     auditAtField: "completedAt",
     auditByField: "completedByUid",
-    completeLoyalty: true,
+    consumeLoyaltyReward: true,
+  });
+});
+
+exports.markReservationPaid = onCall(async (request) => {
+  const admin = await requireAdmin(request);
+  const reservationId = cleanReservationId(request.data && request.data.reservationId);
+  if (!reservationId) {
+    throw new HttpsError("invalid-argument", "Marcacao invalida.");
+  }
+
+  return await db.runTransaction(async (transaction) => {
+    const ref = db.doc(`reservations/${reservationId}`);
+    const doc = await transaction.get(ref);
+    if (!doc.exists) {
+      throw new HttpsError("not-found", "Marcacao nao encontrada.");
+    }
+    const reservation = doc.data() || {};
+    const status = canonicalStatus(reservation.status) || cleanString(reservation.status, 40);
+    const paymentStatus = normalizePaymentStatus(reservation.paymentStatus);
+    if (["paid", "pago", "succeeded", "complete", "completed"].includes(paymentStatus)) {
+      return {
+        ok: true,
+        reservationId,
+        reservationCode: cleanString(reservation.reservationCode, 80),
+        status,
+        paymentStatus: "paid",
+      };
+    }
+    if (!adminReservationExpectedStatuses("mark_paid").includes(status)) {
+      throw new HttpsError("failed-precondition", "Assinale primeiro o trabalho como realizado.");
+    }
+    if (!reservationCanBeMarkedPaid({ ...reservation, status })) {
+      throw new HttpsError("failed-precondition", "Esta marcacao nao pode ser marcada como paga.");
+    }
+
+    const paidReservation = { ...reservation, status, paymentStatus: "paid" };
+    const patch = {
+      paymentStatus: "paid",
+      paidAt: FieldValue.serverTimestamp(),
+      paidByUid: admin.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (reservation.userUid) {
+      const loyalty = await updateReservationLoyalty(
+        transaction,
+        reservation.userUid,
+        ref,
+        paidReservation,
+        "paid",
+      );
+      patch.loyalty = loyaltyPayloadFromSummary(loyalty);
+    }
+    transaction.set(ref, patch, { merge: true });
+    return {
+      ok: true,
+      reservationId,
+      reservationCode: cleanString(reservation.reservationCode, 80),
+      status,
+      paymentStatus: "paid",
+    };
   });
 });
 
@@ -1242,8 +1314,14 @@ async function updateReservationStatus(data, adminUid, options) {
       ...(options.extra || {}),
     };
 
-    if (options.completeLoyalty && reservation.userUid) {
-      const loyalty = await completeReservationLoyalty(transaction, reservation.userUid, ref, reservation);
+    if (options.consumeLoyaltyReward && reservation.loyaltyRewardApplied === true && reservation.userUid) {
+      const loyalty = await updateReservationLoyalty(
+        transaction,
+        reservation.userUid,
+        ref,
+        reservation,
+        "reward",
+      );
       patch.loyalty = loyaltyPayloadFromSummary(loyalty);
     }
     if (options.status === "rejected" && reservation.loyaltyRewardApplied === true && reservation.userUid) {
@@ -1260,7 +1338,7 @@ async function updateReservationStatus(data, adminUid, options) {
   });
 }
 
-async function completeReservationLoyalty(transaction, uid, reservationRef, reservation) {
+async function updateReservationLoyalty(transaction, uid, reservationRef, reservation, mode) {
   const loyaltyRef = db.doc(`users/${uid}/loyalty/current`);
   const settingsRef = db.doc("adminConfig/loyaltySettings");
   const loyaltyDoc = await transaction.get(loyaltyRef);
@@ -1270,10 +1348,10 @@ async function completeReservationLoyalty(transaction, uid, reservationRef, rese
   let nextTotal = current.totalWashes;
   let nextClaimed = current.claimedRewards;
 
-  if (reservation.loyaltyRewardApplied) {
+  if (mode === "reward" && reservation.loyaltyRewardApplied) {
     nextClaimed += 1;
     await markRewardUsed(transaction, uid, reservation.loyaltyRewardCode, reservationRef.id);
-  } else if (reservationEarnsLoyaltyStamp(reservation)) {
+  } else if (mode === "paid" && reservationEarnsLoyaltyStamp(reservation)) {
     nextTotal += 1;
     const stampRef = db.collection(`users/${uid}/loyaltyStamps`).doc(reservationRef.id);
     transaction.set(stampRef, {
@@ -1610,7 +1688,8 @@ function toAdminReservationPayload(id, data) {
     pendingExpiresAt: firestoreDateToIso(reservation.pendingExpiresAt) || null,
     loyaltyRewardApplied: reservation.loyaltyRewardApplied === true,
     canStart: status === "confirmed",
-    canComplete: status === "in_progress",
+    canComplete: status === "confirmed" || status === "in_progress",
+    canMarkPaid: reservationCanBeMarkedPaid({ ...reservation, status }),
     acceptedAt: firestoreDateToIso(reservation.acceptedAt) || null,
     acceptedByUid: cleanString(reservation.acceptedByUid, 160),
     startedAt: firestoreDateToIso(reservation.startedAt) || null,
@@ -1619,6 +1698,9 @@ function toAdminReservationPayload(id, data) {
     rejectedByUid: cleanString(reservation.rejectedByUid, 160),
     completedAt: firestoreDateToIso(reservation.completedAt) || null,
     completedByUid: cleanString(reservation.completedByUid, 160),
+    paidAt: firestoreDateToIso(reservation.paidAt) || null,
+    paidByUid: cleanString(reservation.paidByUid, 160),
+    rejectionReason: cleanString(reservation.rejectionReason, 280),
   };
 }
 
@@ -2503,7 +2585,17 @@ function sanitizeServiceExtraUpsert(data) {
     extraId: cleanDocumentId(data.extraId, 160),
     name,
     description: cleanString(data.description, 500),
-    priceCents: boundedInteger(data.priceCents, 0, 100000, "Preco invalido."),
+    priceCents: boundedInteger(data.passengerPriceCents ?? data.priceCents, 0, 100000, "Preco invalido."),
+    passengerPriceCents: boundedInteger(
+      data.passengerPriceCents ?? data.priceCents,
+      0,
+      100000,
+      "Preco invalido.",
+    ),
+    suvPriceCents: boundedInteger(data.suvPriceCents ?? data.priceCents, 0, 100000, "Preco SUV invalido."),
+    additionalDurationMinutes: boundedIntegerOrDefault(data.additionalDurationMinutes, 0, 480, 0),
+    quantityEnabled: data.quantityEnabled === true,
+    maxQuantity: data.quantityEnabled === true ? boundedIntegerOrDefault(data.maxQuantity, 1, 20, 20) : 1,
     iconKey: cleanString(data.iconKey, 80) || "auto_awesome",
     eligibleServiceIds: Array.isArray(data.eligibleServiceIds)
       ? [...new Set(data.eligibleServiceIds.map((item) => cleanDocumentId(item, 160)).filter(Boolean))]
@@ -2594,6 +2686,11 @@ function toAdminServiceExtraItem(id, data) {
     name: item.name,
     description: item.description,
     priceCents: item.priceCents,
+    passengerPriceCents: item.passengerPriceCents,
+    suvPriceCents: item.suvPriceCents,
+    additionalDurationMinutes: item.additionalDurationMinutes,
+    quantityEnabled: item.quantityEnabled,
+    maxQuantity: item.maxQuantity,
     iconKey: item.iconKey,
     eligibleServiceIds: item.eligibleServiceIds,
     active: item.archived !== true,
@@ -2630,11 +2727,18 @@ function toServiceExtraItem(id, data) {
   const extraId = cleanString((data && data.id) || id, 120);
   const name = cleanString(data && data.name, 120);
   if (!extraId || !name) return null;
+  const passengerPriceCents = nonNegativeInt(data.passengerPriceCents ?? data.priceCents);
+  const quantityEnabled = data.quantityEnabled === true;
   return {
     id: extraId,
     name,
     description: cleanString(data.description, 500),
-    priceCents: nonNegativeInt(data.priceCents),
+    priceCents: passengerPriceCents,
+    passengerPriceCents,
+    suvPriceCents: nonNegativeInt(data.suvPriceCents ?? passengerPriceCents),
+    additionalDurationMinutes: boundedIntegerOrDefault(data.additionalDurationMinutes, 0, 480, 0),
+    quantityEnabled,
+    maxQuantity: quantityEnabled ? boundedIntegerOrDefault(data.maxQuantity, 1, 20, 20) : 1,
     iconKey: cleanString(data.iconKey, 80) || "auto_awesome",
     eligibleServiceIds: Array.isArray(data.eligibleServiceIds)
       ? [...new Set(data.eligibleServiceIds.map((item) => cleanString(item, 120)).filter(Boolean))]
@@ -2720,9 +2824,9 @@ const defaultServiceCatalogServices = [
     id: "exterior",
     name: "Lavagem Exterior",
     description: "Lavagem exterior com acabamento cuidado.",
-    durationMinutes: 20,
-    passengerPriceCents: 1200,
-    suvPriceCents: 1500,
+    durationMinutes: 50,
+    passengerPriceCents: 1600,
+    suvPriceCents: 1850,
     iconKey: "car",
     popular: false,
   },
@@ -2730,9 +2834,9 @@ const defaultServiceCatalogServices = [
     id: "standard",
     name: "Lavagem Standard",
     description: "Exterior e interior para manutencao regular.",
-    durationMinutes: 30,
-    passengerPriceCents: 2200,
-    suvPriceCents: 2500,
+    durationMinutes: 90,
+    passengerPriceCents: 2000,
+    suvPriceCents: 2700,
     iconKey: "local_car_wash",
     popular: true,
   },
@@ -2740,9 +2844,9 @@ const defaultServiceCatalogServices = [
     id: "interior",
     name: "Limpeza Interior",
     description: "Aspiracao e detalhe interior.",
-    durationMinutes: 25,
-    passengerPriceCents: 1800,
-    suvPriceCents: 2100,
+    durationMinutes: 60,
+    passengerPriceCents: 1600,
+    suvPriceCents: 1850,
     iconKey: "airline_seat_recline_normal",
     popular: false,
   },
@@ -2750,22 +2854,115 @@ const defaultServiceCatalogServices = [
     id: "premium",
     name: "Lavagem Premium",
     description: "Servico completo com detalhe extra.",
-    durationMinutes: 45,
+    durationMinutes: 105,
     passengerPriceCents: 3200,
     suvPriceCents: 3400,
     iconKey: "sparkles",
     popular: true,
   },
+  {
+    id: "leather-upholstery",
+    name: "Lavagem de Estofos em Pele",
+    description: "Lavagem de estofos em pele.",
+    durationMinutes: 240,
+    passengerPriceCents: 7000,
+    suvPriceCents: 8000,
+    iconKey: "weekend",
+    popular: false,
+  },
 ];
 
 const defaultServiceCatalogExtras = [
   {
-    id: "wax",
-    name: "Enceramento",
-    description: "Protecao e brilho extra.",
-    priceCents: 1500,
+    id: "odor-removal",
+    name: "Remoção de odores",
+    description: "+15 minutos",
+    priceCents: 500,
+    passengerPriceCents: 500,
+    suvPriceCents: 500,
+    additionalDurationMinutes: 15,
+    quantityEnabled: false,
+    maxQuantity: 1,
+    iconKey: "air",
+    eligibleServiceIds: ["standard", "premium", "interior", "fabric-upholstery", "leather-upholstery"],
+  },
+  {
+    id: "upholstery-unit",
+    name: "Lavagem de estofos",
+    description: "Preço por unidade",
+    priceCents: 2250,
+    passengerPriceCents: 2250,
+    suvPriceCents: 2250,
+    additionalDurationMinutes: 0,
+    quantityEnabled: true,
+    maxQuantity: 20,
+    iconKey: "weekend",
+    eligibleServiceIds: ["standard", "premium", "interior"],
+  },
+  {
+    id: "paint-protector",
+    name: "Protetor de pintura",
+    description: "Aplicação de protetor de pintura",
+    priceCents: 700,
+    passengerPriceCents: 700,
+    suvPriceCents: 700,
+    additionalDurationMinutes: 0,
+    quantityEnabled: false,
+    maxQuantity: 1,
     iconKey: "shield",
-    eligibleServiceIds: ["standard", "premium"],
+    eligibleServiceIds: ["exterior"],
+  },
+  {
+    id: "exterior-plastic-hydration",
+    name: "Hidratação de plásticos",
+    description: "Plásticos exteriores",
+    priceCents: 200,
+    passengerPriceCents: 200,
+    suvPriceCents: 200,
+    additionalDurationMinutes: 0,
+    quantityEnabled: false,
+    maxQuantity: 1,
+    iconKey: "auto_awesome",
+    eligibleServiceIds: ["exterior"],
+  },
+  {
+    id: "interior-plastic-hydration",
+    name: "Hidratação de plásticos",
+    description: "Plásticos interiores",
+    priceCents: 200,
+    passengerPriceCents: 200,
+    suvPriceCents: 200,
+    additionalDurationMinutes: 0,
+    quantityEnabled: false,
+    maxQuantity: 1,
+    iconKey: "auto_awesome",
+    eligibleServiceIds: ["interior"],
+  },
+  {
+    id: "exterior-wash",
+    name: "Lavagem exterior",
+    description: "Lavagem exterior adicional",
+    priceCents: 1600,
+    passengerPriceCents: 1600,
+    suvPriceCents: 1850,
+    additionalDurationMinutes: 0,
+    quantityEnabled: false,
+    maxQuantity: 1,
+    iconKey: "water_drop",
+    eligibleServiceIds: ["fabric-upholstery", "leather-upholstery"],
+  },
+  {
+    id: "trunk-wash",
+    name: "Lavagem de bagageira",
+    description: "Lavagem da bagageira",
+    priceCents: 2250,
+    passengerPriceCents: 2250,
+    suvPriceCents: 2550,
+    additionalDurationMinutes: 0,
+    quantityEnabled: false,
+    maxQuantity: 1,
+    iconKey: "weekend",
+    eligibleServiceIds: ["fabric-upholstery", "leather-upholstery"],
   },
 ];
 
@@ -2796,7 +2993,7 @@ const defaultBusinessInfo = {
     },
     {
       question: "Como funciona o programa de fidelizacao?",
-      answer: "A cada lavagem completa recebe 1 selo. Ao completar 10 selos ganha 1 lavagem gratis.",
+      answer: "Cada lavagem elegível marcada como paga atribui 1 selo. Ao completar 10 selos ganha 1 lavagem grátis.",
     },
   ],
   stats: [

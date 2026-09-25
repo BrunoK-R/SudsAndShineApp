@@ -668,10 +668,10 @@ private fun defaultNotificationTemplates(): List<AdminNotificationTemplateConfig
         ),
         AdminNotificationTemplateConfig(
             key = "booking_completed",
-            label = "Lavagem concluída",
+            label = "Trabalho realizado",
             enabled = true,
-            title = "Lavagem concluída",
-            body = "A sua lavagem foi concluída. Consulte o histórico e avalie o serviço na app.",
+            title = "Serviço concluído",
+            body = "O serviço foi realizado. Já pode levantar o carro.",
         ),
         AdminNotificationTemplateConfig(
             key = "booking_expired",

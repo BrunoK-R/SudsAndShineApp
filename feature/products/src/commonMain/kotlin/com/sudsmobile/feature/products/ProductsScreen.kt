@@ -72,6 +72,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -277,6 +278,7 @@ private fun ProductsScreenContent(
     var currentStepName by rememberSaveable { mutableStateOf(BookingStep.Service.name) }
     var selectedServiceId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedExtraIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var selectedExtraQuantities by remember { mutableStateOf(emptyMap<String, Int>()) }
     var selectedVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedDateId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTime by rememberSaveable { mutableStateOf<String?>(null) }
@@ -316,6 +318,13 @@ private fun ProductsScreenContent(
     val savedVehicles = (vehiclesState as? BookingVehiclesUiState.Loaded)?.vehicles.orEmpty()
     val vehicleOptions = savedVehicles + bookingVehicleCategories
     val selectedVehicle = vehicleOptions.firstOrNull { it.id == selectedVehicleId }
+    val extrasPriceCents = selectedExtras.sumOf { extra ->
+        extra.priceCentsForVehicle(selectedVehicle?.type) * (selectedExtraQuantities[extra.id] ?: 1)
+    }
+    val extrasDurationMinutes = selectedExtras.sumOf { extra ->
+        extra.additionalDurationMinutes * (selectedExtraQuantities[extra.id] ?: 1)
+    }
+    val bookingDurationMinutes = (selectedService?.durationMinutes ?: 0) + extrasDurationMinutes
     val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
     val hapticFeedback = LocalHapticFeedback.current
     val density = LocalDensity.current
@@ -328,7 +337,7 @@ private fun ProductsScreenContent(
             passengerPriceCents = service.passengerPriceCents,
             suvPriceCents = service.suvPriceCents,
             vehicleType = selectedVehicle?.type,
-            extrasPriceCents = selectedExtras.sumOf { extra -> extra.priceCents },
+            extrasPriceCents = extrasPriceCents,
         )
     }
     val availabilityMonth = when (availabilityState) {
@@ -349,6 +358,7 @@ private fun ProductsScreenContent(
         acceptsPrivacy = acceptsPrivacy,
         loyaltyRewardCode = loyaltyRewardCode,
         selectedExtras = selectedExtras,
+        selectedExtraQuantities = selectedExtraQuantities,
     )
 
     fun clearAppliedContactProfileIfUnchanged() {
@@ -388,6 +398,7 @@ private fun ProductsScreenContent(
             .toSet()
         selectedServiceId = service.id
         selectedExtraIds = preset.extraIds.filter { it in eligibleExtraIds }.distinct()
+        selectedExtraQuantities = selectedExtraIds.associateWith { 1 }
         selectedDateId = null
         selectedTime = null
         availabilityAnchorDate = null
@@ -422,9 +433,9 @@ private fun ProductsScreenContent(
         }
     }
 
-    LaunchedEffect(currentStep, selectedService?.id, availabilityAnchorDate) {
+    LaunchedEffect(currentStep, selectedService?.id, bookingDurationMinutes, availabilityAnchorDate) {
         if (currentStep == BookingStep.DateTime && selectedService != null) {
-            onLoadAvailability(selectedService.durationMinutes, availabilityAnchorDate)
+            onLoadAvailability(bookingDurationMinutes, availabilityAnchorDate)
         }
     }
 
@@ -488,6 +499,7 @@ private fun ProductsScreenContent(
             if (validSelectedExtraIds.size != selectedExtraIds.size) {
                 selectedExtraIds = validSelectedExtraIds
             }
+            selectedExtraQuantities = selectedExtraQuantities.filterKeys { it in validSelectedExtraIds }
         }
     }
 
@@ -673,13 +685,30 @@ private fun ProductsScreenContent(
                                         service = selectedService,
                                         extras = eligibleExtras,
                                         selectedExtraIds = selectedExtraIds,
+                                        selectedExtraQuantities = selectedExtraQuantities,
+                                        vehicleType = selectedVehicle?.type,
                                         onExtraToggled = { extra ->
                                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             selectedExtraIds = if (extra.id in selectedExtraIds) {
+                                                selectedExtraQuantities = selectedExtraQuantities - extra.id
                                                 selectedExtraIds - extra.id
                                             } else {
+                                                selectedExtraQuantities = selectedExtraQuantities + (extra.id to 1)
                                                 selectedExtraIds + extra.id
                                             }
+                                            selectedDateId = null
+                                            selectedTime = null
+                                            availabilityAnchorDate = null
+                                            minimumAvailabilityMonthAnchor = null
+                                            onClearSubmitError()
+                                        },
+                                        onExtraQuantityChanged = { extra, quantity ->
+                                            selectedExtraQuantities = selectedExtraQuantities +
+                                                (extra.id to quantity.coerceIn(1, extra.maxQuantity))
+                                            selectedDateId = null
+                                            selectedTime = null
+                                            availabilityAnchorDate = null
+                                            minimumAvailabilityMonthAnchor = null
                                             onClearSubmitError()
                                         },
                                     )
@@ -714,7 +743,7 @@ private fun ProductsScreenContent(
                                         waitlistState = waitlistState,
                                         serviceId = selectedService?.id.orEmpty(),
                                         serviceName = selectedService?.name.orEmpty(),
-                                        serviceDurationMinutes = selectedService?.durationMinutes ?: 0,
+                                        serviceDurationMinutes = bookingDurationMinutes,
                                         selectedDateId = selectedDateId,
                                         selectedTime = selectedTime,
                                         onDateSelected = { dateId ->
@@ -729,7 +758,7 @@ private fun ProductsScreenContent(
                                         },
                                         onRetryAvailability = {
                                             selectedService?.let {
-                                                onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                                onLoadAvailability(bookingDurationMinutes, availabilityAnchorDate)
                                             }
                                         },
                                         onJoinWaitlist = { dateId ->
@@ -739,7 +768,7 @@ private fun ProductsScreenContent(
                                                         dateId = dateId,
                                                         serviceId = service.id,
                                                         serviceName = service.name,
-                                                        serviceDurationMinutes = service.durationMinutes,
+                                                        serviceDurationMinutes = bookingDurationMinutes,
                                                     ),
                                                 )
                                             }
@@ -830,6 +859,7 @@ private fun ProductsScreenContent(
                                     BookingConfirmationContent(
                                         service = selectedService,
                                         selectedExtras = selectedExtras,
+                                        selectedExtraQuantities = selectedExtraQuantities,
                                         vehicle = selectedVehicle,
                                         date = selectedDate,
                                         time = selectedTime,
@@ -872,7 +902,7 @@ private fun ProductsScreenContent(
                                                     currentStepName = BookingStep.DateTime.name
                                                     onClearSubmitError()
                                                     selectedService?.let {
-                                                        onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                                        onLoadAvailability(bookingDurationMinutes, availabilityAnchorDate)
                                                     }
                                                 }
                                                 BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
@@ -936,7 +966,7 @@ private fun ProductsScreenContent(
                                         currentStepName = BookingStep.DateTime.name
                                         onClearSubmitError()
                                         selectedService?.let {
-                                            onLoadAvailability(it.durationMinutes, availabilityAnchorDate)
+                                            onLoadAvailability(bookingDurationMinutes, availabilityAnchorDate)
                                         }
                                     }
                                     BookingSubmitResolution.Retry -> onSubmitBooking(bookingDraft)
@@ -984,6 +1014,7 @@ private fun ProductsScreenContent(
 private fun BookingConfirmationContent(
     service: ProductServiceUi?,
     selectedExtras: List<ProductExtraUi>,
+    selectedExtraQuantities: Map<String, Int>,
     vehicle: BookingVehicleUi?,
     date: BookingAvailabilityDay?,
     time: String?,
@@ -1028,9 +1059,16 @@ private fun BookingConfirmationContent(
             if (selectedExtras.isNotEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 selectedExtras.forEach { extra ->
+                    val quantity = selectedExtraQuantities[extra.id] ?: 1
                     ConfirmationLine(
                         icon = extra.icon,
-                        text = "${extra.name} (+${extra.price})",
+                        text = buildString {
+                            append(extra.name)
+                            if (extra.quantityEnabled) append(" × $quantity")
+                            append(" (+")
+                            append((extra.priceCentsForVehicle(vehicle?.type) * quantity).toEuroLabel())
+                            append(")")
+                        },
                     )
                 }
             }
@@ -1096,13 +1134,17 @@ private fun BookingConfirmationContent(
         )
 
         val basePriceCents = service?.priceCentsForVehicle(vehicle?.type) ?: 0
-        val extrasPriceCents = selectedExtras.sumOf { it.priceCents }
+        val extrasPriceCents = selectedExtras.sumOf { extra ->
+            extra.priceCentsForVehicle(vehicle?.type) * (selectedExtraQuantities[extra.id] ?: 1)
+        }
         val totalPriceCents = basePriceCents + extrasPriceCents
         val rewardPendingValidation = loyaltyRewardCode.isNotBlank() && sessionState is AuthSessionState.Authenticated
         PriceSummaryCard(
             serviceName = service?.name ?: "Serviço",
             basePrice = basePriceCents.toEuroLabel(),
             extras = selectedExtras,
+            extraQuantities = selectedExtraQuantities,
+            vehicleType = vehicle?.type,
             discount = null,
             pendingRewardValidation = rewardPendingValidation,
             total = totalPriceCents.toEuroLabel(),
@@ -1965,6 +2007,8 @@ private fun PriceSummaryCard(
     serviceName: String,
     basePrice: String,
     extras: List<ProductExtraUi>,
+    extraQuantities: Map<String, Int>,
+    vehicleType: String?,
     discount: String?,
     pendingRewardValidation: Boolean = false,
     total: String,
@@ -2015,17 +2059,18 @@ private fun PriceSummaryCard(
             }
 
             extras.forEach { extra ->
+                val quantity = extraQuantities[extra.id] ?: 1
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = extra.name,
+                        text = extra.name + if (extra.quantityEnabled) " × $quantity" else "",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
                     )
                     Text(
-                        text = extra.price,
+                        text = (extra.priceCentsForVehicle(vehicleType) * quantity).toEuroLabel(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
                     )
@@ -3796,6 +3841,7 @@ private fun buildBookingDraft(
     acceptsPrivacy: Boolean,
     loyaltyRewardCode: String,
     selectedExtras: List<ProductExtraUi>,
+    selectedExtraQuantities: Map<String, Int>,
 ): ProductsBookingDraft? {
     if (service == null || vehicle == null || date == null || time == null) return null
     return ProductsBookingDraft(
@@ -3806,7 +3852,9 @@ private fun buildBookingDraft(
         serviceName = service.name,
         dateId = date.id,
         time = time,
-        serviceDurationMinutes = service.durationMinutes,
+        serviceDurationMinutes = service.durationMinutes + selectedExtras.sumOf { extra ->
+            extra.additionalDurationMinutes * (selectedExtraQuantities[extra.id] ?: 1)
+        },
         vehicleType = vehicle.type,
         userVehicleId = vehicle.userVehicleId,
         vehicleLabel = vehicle.vehicleLabel,
@@ -3814,6 +3862,9 @@ private fun buildBookingDraft(
         notes = notes,
         loyaltyRewardCode = loyaltyRewardCode.trim().takeIf { it.isNotBlank() },
         extraIds = selectedExtras.map { it.id },
+        extraQuantities = selectedExtras
+            .filter { it.quantityEnabled }
+            .associate { it.id to (selectedExtraQuantities[it.id] ?: 1) },
     )
 }
 
@@ -3831,6 +3882,19 @@ private fun String?.normalizedInitialServiceId(): String? = this
 
 private fun ProductServiceUi.priceCentsForVehicle(vehicleType: String?): Int {
     return if (vehicleType == "suv") suvPriceCents else passengerPriceCents
+}
+
+internal fun ProductExtraUi.priceCentsForVehicle(vehicleType: String?): Int {
+    return if (vehicleType == "suv") suvPriceCents else passengerPriceCents
+}
+
+internal fun ProductExtraUi.priceLabelForVehicle(vehicleType: String?): String {
+    return when {
+        vehicleType == "suv" -> suvPriceCents.toEuroLabel()
+        vehicleType == "passenger" -> passengerPriceCents.toEuroLabel()
+        passengerPriceCents == suvPriceCents -> passengerPriceCents.toEuroLabel()
+        else -> "${passengerPriceCents.toEuroLabel()} / ${suvPriceCents.toEuroLabel()} SUV"
+    }
 }
 
 internal fun ProductExtraUi.isEligibleFor(serviceId: String?): Boolean {

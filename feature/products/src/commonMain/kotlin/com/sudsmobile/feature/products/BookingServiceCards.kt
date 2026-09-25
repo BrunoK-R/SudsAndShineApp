@@ -20,7 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -166,7 +168,10 @@ internal fun ProductServiceUi.bookingReferenceDescription(): String = when {
 internal fun BookingExtrasSelectionSection(
     extras: List<ProductExtraUi>,
     selectedExtraIds: List<String>,
+    selectedExtraQuantities: Map<String, Int>,
+    vehicleType: String?,
     onExtraToggled: (ProductExtraUi) -> Unit,
+    onExtraQuantityChanged: (ProductExtraUi, Int) -> Unit,
 ) {
     if (extras.isEmpty()) return
 
@@ -189,7 +194,10 @@ internal fun BookingExtrasSelectionSection(
                 BookingExtraCard(
                     extra = extra,
                     selected = extra.id in selectedExtraIds,
+                    quantity = selectedExtraQuantities[extra.id] ?: 1,
+                    priceLabel = extra.priceLabelForVehicle(vehicleType),
                     onSelected = { onExtraToggled(extra) },
+                    onQuantityChanged = { onExtraQuantityChanged(extra, it) },
                 )
             }
         }
@@ -200,7 +208,10 @@ internal fun BookingExtrasSelectionSection(
 private fun BookingExtraCard(
     extra: ProductExtraUi,
     selected: Boolean,
+    quantity: Int,
+    priceLabel: String,
     onSelected: () -> Unit,
+    onQuantityChanged: (Int) -> Unit,
 ) {
     SudsGlassCard(
         modifier = Modifier
@@ -263,24 +274,47 @@ private fun BookingExtraCard(
                     )
                 }
                 Text(
-                    text = "+ ${extra.price}",
+                    text = "+ $priceLabel" + if (extra.quantityEnabled) " / unidade" else "",
                     color = SudsColors.champagne,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
             }
-            Surface(
-                modifier = Modifier.size(32.dp),
-                shape = CircleShape,
-                color = if (selected) SudsColors.cyan else SudsColors.glassStrong,
-                contentColor = if (selected) SudsColors.onAction else SudsColors.onBrandMuted,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = if (selected) Icons.Filled.Check else Icons.Filled.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+            if (selected && extra.quantityEnabled) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { onQuantityChanged((quantity - 1).coerceAtLeast(1)) },
+                        enabled = quantity > 1,
+                    ) {
+                        Icon(Icons.Filled.Remove, contentDescription = "Diminuir quantidade")
+                    }
+                    Text(
+                        text = quantity.toString(),
+                        color = SudsColors.onBrand,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
                     )
+                    IconButton(
+                        onClick = { onQuantityChanged((quantity + 1).coerceAtMost(extra.maxQuantity)) },
+                        enabled = quantity < extra.maxQuantity,
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "Aumentar quantidade")
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.size(32.dp),
+                    shape = CircleShape,
+                    color = if (selected) SudsColors.cyan else SudsColors.glassStrong,
+                    contentColor = if (selected) SudsColors.onAction else SudsColors.onBrandMuted,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (selected) Icons.Filled.Check else Icons.Filled.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
         }

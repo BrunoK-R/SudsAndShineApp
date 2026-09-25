@@ -746,6 +746,7 @@ private fun homeReservation(
     priceCents: Int? = 3200,
     vehicleLabel: String? = null,
     status: String = if (upcoming) "confirmed" else "completed",
+    paymentStatus: String = if (upcoming) "pending" else "paid",
 ): BookingHistoryReservation = BookingHistoryReservation(
     id = id,
     reservationCode = "SS-$id",
@@ -754,6 +755,7 @@ private fun homeReservation(
     slotStartIso = slotStartIso,
     slotEndIso = "2026-05-22T10:45:00.000Z",
     status = status,
+    paymentStatus = paymentStatus,
     vehicleType = "passageiros",
     vehicleLabel = vehicleLabel,
     priceCents = priceCents,

@@ -949,16 +949,19 @@ class FirebaseAdminRepositoryTest {
         val rejectResult = repository.rejectBookingRequest(AdminBookingDecisionRequest(" reservation-2 "))
         val startResult = repository.startBookingRequest(AdminBookingDecisionRequest(" reservation-3 "))
         val completeResult = repository.completeBookingRequest(AdminBookingDecisionRequest(" reservation-4 "))
+        val paidResult = repository.markBookingRequestPaid(AdminBookingDecisionRequest(" reservation-5 "))
 
         assertIs<AdminBookingDecisionResult.Success>(acceptResult)
         assertIs<AdminBookingDecisionResult.Success>(rejectResult)
         assertIs<AdminBookingDecisionResult.Success>(startResult)
         assertIs<AdminBookingDecisionResult.Success>(completeResult)
-        assertEquals(4L, changeNotifier.revision.value)
+        assertIs<AdminBookingDecisionResult.Success>(paidResult)
+        assertEquals(5L, changeNotifier.revision.value)
         assertEquals("reservation-1", api.acceptBookingRequests.single().reservationId)
         assertEquals("reservation-2", api.rejectBookingRequests.single().reservationId)
         assertEquals("reservation-3", api.startBookingRequests.single().reservationId)
         assertEquals("reservation-4", api.completeBookingRequests.single().reservationId)
+        assertEquals("reservation-5", api.markPaidBookingRequests.single().reservationId)
     }
 
     @Test
@@ -1013,6 +1016,23 @@ class FirebaseAdminRepositoryTest {
         val failure = assertIs<AdminBookingDecisionResult.Failure>(result)
         assertIs<AdminError.Validation>(failure.error)
         assertEquals(0, api.completeBookingRequests.size)
+    }
+
+    @Test
+    fun markBookingRequestPaidNormalizesRequestAndUsesCurrentToken() = runTest {
+        val api = FakeAdminFunctionsApi()
+        val repository = FirebaseAdminRepository(
+            api = api,
+            authRepository = FakeAuthRepository(authenticated = true),
+        )
+
+        val result = repository.markBookingRequestPaid(
+            AdminBookingDecisionRequest(reservationId = " reservation-5 "),
+        )
+
+        assertIs<AdminBookingDecisionResult.Success>(result)
+        assertEquals("id-token-1", api.markPaidBookingIdTokens.single())
+        assertEquals("reservation-5", api.markPaidBookingRequests.single().reservationId)
     }
 }
 
@@ -1081,6 +1101,8 @@ private class FakeAdminFunctionsApi(
     val startBookingIdTokens = mutableListOf<String>()
     val completeBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
     val completeBookingIdTokens = mutableListOf<String>()
+    val markPaidBookingRequests = mutableListOf<AdminBookingDecisionRequest>()
+    val markPaidBookingIdTokens = mutableListOf<String>()
 
     override suspend fun syncMyRole(idToken: String): AdminRoleResult {
         syncRoleIdTokens += idToken
@@ -1163,6 +1185,21 @@ private class FakeAdminFunctionsApi(
             AdminBookingDecisionReceipt(
                 reservationId = request.reservationId,
                 reservationCode = "SS-DONE",
+                status = "completed",
+            ),
+        )
+    }
+
+    override suspend fun markBookingRequestPaid(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult {
+        markPaidBookingRequests += request
+        markPaidBookingIdTokens += idToken
+        return AdminBookingDecisionResult.Success(
+            AdminBookingDecisionReceipt(
+                reservationId = request.reservationId,
+                reservationCode = "SS-PAID",
                 status = "completed",
             ),
         )

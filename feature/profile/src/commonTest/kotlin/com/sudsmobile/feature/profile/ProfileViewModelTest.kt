@@ -1396,6 +1396,7 @@ private fun profileStatsHistoryReservation(
     slotStartIso = "2026-05-20T09:30:00.000Z",
     slotEndIso = "2026-05-20T10:15:00.000Z",
     status = status,
+    paymentStatus = if (upcoming) "pending" else "paid",
     vehicleType = "passageiros",
     priceCents = 3200,
     upcoming = upcoming,

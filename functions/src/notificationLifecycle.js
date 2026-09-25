@@ -44,10 +44,10 @@ const defaultTemplates = [
   },
   {
     key: "booking_completed",
-    label: "Lavagem concluida",
+    label: "Trabalho realizado",
     enabled: true,
-    title: "Lavagem concluida",
-    body: "A lavagem {{reservationCode}} foi concluida. Consulte o historico na app.",
+    title: "Serviço concluído",
+    body: "O serviço {{reservationCode}} foi realizado. Já pode levantar o carro.",
   },
   {
     key: "booking_expired",

@@ -121,7 +121,10 @@ internal fun BookingExtrasStepContent(
     service: ProductServiceUi?,
     extras: List<ProductExtraUi>,
     selectedExtraIds: List<String>,
+    selectedExtraQuantities: Map<String, Int>,
+    vehicleType: String?,
     onExtraToggled: (ProductExtraUi) -> Unit,
+    onExtraQuantityChanged: (ProductExtraUi, Int) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -172,7 +175,10 @@ internal fun BookingExtrasStepContent(
             BookingExtrasSelectionSection(
                 extras = extras,
                 selectedExtraIds = selectedExtraIds,
+                selectedExtraQuantities = selectedExtraQuantities,
+                vehicleType = vehicleType,
                 onExtraToggled = onExtraToggled,
+                onExtraQuantityChanged = onExtraQuantityChanged,
             )
         }
     }

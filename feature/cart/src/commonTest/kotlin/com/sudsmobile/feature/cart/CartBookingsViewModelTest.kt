@@ -238,7 +238,7 @@ class CartBookingsViewModelTest {
         )
         assertEquals(
             listOf(
-                "A lavagem terminou. Pode avaliar o serviço abaixo.",
+                "O carro está pronto para levantamento.",
                 "Escolha outro horário para enviar um novo pedido.",
             ),
             loaded.completed.map { it.statusDescription },
@@ -284,7 +284,7 @@ class CartBookingsViewModelTest {
         val booking = assertIs<CartBookingsUiState.Loaded>(viewModel.uiState.value).completed.single()
         assertEquals("SS-rewarded-1", booking.reference)
         assertEquals(
-            listOf("Pedido enviado", "Pedido aceite", "Lavagem concluída", "Recompensa aplicada"),
+            listOf("Pedido enviado", "Pedido aceite", "Trabalho realizado", "Recompensa aplicada"),
             booking.timeline.map { it.title },
         )
         assertEquals(BookingTimelineStepStateUi.Completed, booking.timeline.last().state)

@@ -48,8 +48,8 @@ internal data class AdminBookingRequestUi(
     val createdAt: String,
     val expiresAt: String,
     val loyaltyRewardApplied: Boolean,
-    val canStart: Boolean,
     val canComplete: Boolean,
+    val canMarkPaid: Boolean,
     val auditLabels: List<String>,
     val timing: AdminBookingTiming,
     val slotStartSortKey: String,
@@ -75,13 +75,14 @@ internal sealed interface AdminBookingsUiState {
     data object NotAdmin : AdminBookingsUiState
     data object Empty : AdminBookingsUiState
     data class Loaded(
+        val allRequests: List<AdminBookingRequestUi>,
         val pendingRequests: List<AdminBookingRequestUi>,
-        val acceptedRequests: List<AdminBookingRequestUi>,
-        val operationalRequests: List<AdminBookingRequestUi>,
-        val upcomingRequests: List<AdminBookingRequestUi>,
+        val activeRequests: List<AdminBookingRequestUi>,
+        val awaitingPaymentRequests: List<AdminBookingRequestUi>,
+        val paidRequests: List<AdminBookingRequestUi>,
+        val closedRequests: List<AdminBookingRequestUi>,
         val businessDateLabel: String,
-        val inProgressCount: Int,
-        val overdueCount: Int,
+        val paidCount: Int,
     ) : AdminBookingsUiState
     data class Error(val message: String, val retryable: Boolean) : AdminBookingsUiState
 }
@@ -100,8 +101,8 @@ internal sealed interface AdminBookingDecisionUiState {
 internal enum class AdminBookingDecisionAction {
     Accept,
     Reject,
-    Start,
     Complete,
+    MarkPaid,
 }
 
 private data class AdminSessionSnapshot(
@@ -322,19 +323,12 @@ internal class AdminBookingsViewModel(
         viewModelScope.launch {
             try {
                 _uiState.value = AdminBookingsUiState.Loading
-                val pendingResult = adminRepository.getPendingBookingRequests()
-                val nextState = when (pendingResult) {
-                    is AdminBookingRequestsResult.Failure -> pendingResult.error.toAdminBookingsState()
-                    is AdminBookingRequestsResult.Success -> {
-                        when (val acceptedResult = adminRepository.getAcceptedBookingRequests()) {
-                            is AdminBookingRequestsResult.Success -> toAdminBookingsState(
-                                pendingRequests = pendingResult.requests,
-                                acceptedRequests = acceptedResult.requests,
-                                businessDateKey = currentBusinessDateKey(),
-                            )
-                            is AdminBookingRequestsResult.Failure -> acceptedResult.error.toAdminBookingsState()
-                        }
-                    }
+                val nextState = when (val result = adminRepository.getAllBookingRequests()) {
+                    is AdminBookingRequestsResult.Failure -> result.error.toAdminBookingsState()
+                    is AdminBookingRequestsResult.Success -> toAdminBookingsState(
+                        requests = result.requests,
+                        businessDateKey = currentBusinessDateKey(),
+                    )
                 }
                 if (requestSequence != requestsSequence) return@launch
 
@@ -386,10 +380,10 @@ internal class AdminBookingsViewModel(
         )
     }
 
-    fun startRequest(reservationId: String) {
+    fun markRequestPaid(reservationId: String) {
         decideRequest(
             reservationId = reservationId,
-            action = AdminBookingDecisionAction.Start,
+            action = AdminBookingDecisionAction.MarkPaid,
             rejectionReason = "",
         )
     }
@@ -446,8 +440,8 @@ internal class AdminBookingsViewModel(
             val result = when (action) {
                 AdminBookingDecisionAction.Accept -> adminRepository.acceptBookingRequest(request)
                 AdminBookingDecisionAction.Reject -> adminRepository.rejectBookingRequest(request)
-                AdminBookingDecisionAction.Start -> adminRepository.startBookingRequest(request)
                 AdminBookingDecisionAction.Complete -> adminRepository.completeBookingRequest(request)
+                AdminBookingDecisionAction.MarkPaid -> adminRepository.markBookingRequestPaid(request)
             }
             if (currentAuthenticatedSessionSnapshot() != requestedSession) {
                 clearLoadedRequests()
@@ -464,8 +458,8 @@ internal class AdminBookingsViewModel(
                     val message = when (action) {
                         AdminBookingDecisionAction.Accept -> "Marcação aceite."
                         AdminBookingDecisionAction.Reject -> "Marcação rejeitada."
-                        AdminBookingDecisionAction.Start -> "Lavagem iniciada."
-                        AdminBookingDecisionAction.Complete -> "Marcação concluída."
+                        AdminBookingDecisionAction.Complete -> "Trabalho marcado como realizado."
+                        AdminBookingDecisionAction.MarkPaid -> "Pagamento marcado como pago."
                     }
                     AdminBookingDecisionUiState.Success(message)
                 }
@@ -507,31 +501,29 @@ private fun com.sudsmobile.data.auth.AuthSession.toAdminSessionSnapshot(): Admin
 }
 
 private fun toAdminBookingsState(
-    pendingRequests: List<AdminBookingRequest>,
-    acceptedRequests: List<AdminBookingRequest>,
+    requests: List<AdminBookingRequest>,
     businessDateKey: String,
 ): AdminBookingsUiState {
-    val pending = pendingRequests.map { it.toUi(businessDateKey) }
-    val accepted = acceptedRequests.map { it.toUi(businessDateKey) }
-    return if (pending.isEmpty() && accepted.isEmpty()) {
+    val all = requests
+        .map { it.toUi(businessDateKey) }
+        .sortedByDescending { it.slotStartSortKey }
+    return if (all.isEmpty()) {
         AdminBookingsUiState.Empty
     } else {
-        val operational = accepted
-            .filter { it.timing != AdminBookingTiming.Upcoming }
-            .sortedWith(
-                compareBy<AdminBookingRequestUi> { it.timing.operationalPriority() }
-                    .thenBy { it.slotStartSortKey },
-            )
         AdminBookingsUiState.Loaded(
-            pendingRequests = pending,
-            acceptedRequests = accepted,
-            operationalRequests = operational,
-            upcomingRequests = accepted
-                .filter { it.timing == AdminBookingTiming.Upcoming }
+            allRequests = all,
+            pendingRequests = all.filter { it.statusLabel == "Pendente" }
                 .sortedBy { it.slotStartSortKey },
+            activeRequests = all.filter { it.statusLabel in setOf("Confirmada", "Em curso") }
+                .sortedBy { it.slotStartSortKey },
+            awaitingPaymentRequests = all.filter { it.canMarkPaid }
+                .sortedByDescending { it.slotStartSortKey },
+            paidRequests = all.filter { it.paymentStatus in setOf("Pago", "Recompensa") }
+                .sortedByDescending { it.slotStartSortKey },
+            closedRequests = all.filter { it.statusLabel in setOf("Recusada", "Cancelada", "Expirada") }
+                .sortedByDescending { it.slotStartSortKey },
             businessDateLabel = businessDateKey.toBusinessDateLabel(),
-            inProgressCount = accepted.count { it.timing == AdminBookingTiming.InProgress },
-            overdueCount = accepted.count { it.timing == AdminBookingTiming.Overdue },
+            paidCount = all.count { it.paymentStatus in setOf("Pago", "Recompensa") },
         )
     }
 }
@@ -551,16 +543,16 @@ private fun AdminBookingRequest.toUi(businessDateKey: String): AdminBookingReque
     statusLabel = status.toReservationStatusLabel(),
     statusDetail = status.toReservationStatusDetail(
         pendingExpiresAtIso = pendingExpiresAtIso,
-        canStart = canStart,
         canComplete = canComplete,
+        canMarkPaid = canMarkPaid,
     ),
     extras = extras.toAdminExtraUi(),
     notes = notes,
     createdAt = createdAtIso.toDateTimeLabel() ?: "Data a confirmar",
     expiresAt = pendingExpiresAtIso?.toDateTimeLabel() ?: "Sem expiração automática",
     loyaltyRewardApplied = loyaltyRewardApplied,
-    canStart = canStart,
     canComplete = canComplete,
+    canMarkPaid = canMarkPaid,
     auditLabels = decisionAuditLabels(),
     timing = operationalTiming(businessDateKey),
     slotStartSortKey = slotStartIso,
@@ -571,7 +563,7 @@ private fun AdminBookingRequest.operationalTiming(businessDateKey: String): Admi
         .lowercase()
         .replace("-", "_")
         .replace(" ", "_")
-    if (canComplete || normalizedStatus in InProgressStatusValues) {
+    if (normalizedStatus in InProgressStatusValues) {
         return AdminBookingTiming.InProgress
     }
 
@@ -586,20 +578,12 @@ private fun AdminBookingRequest.operationalTiming(businessDateKey: String): Admi
     }
 }
 
-private fun AdminBookingTiming.operationalPriority(): Int = when (this) {
-    AdminBookingTiming.InProgress -> 0
-    AdminBookingTiming.Overdue -> 1
-    AdminBookingTiming.Today -> 2
-    AdminBookingTiming.NeedsReview -> 3
-    AdminBookingTiming.Upcoming -> 4
-}
-
 private fun List<BookingReservationExtra>.toAdminExtraUi(): List<AdminBookingExtraUi> {
     return mapNotNull { extra ->
         val name = extra.name.trim()
         if (name.isBlank()) return@mapNotNull null
         AdminBookingExtraUi(
-            name = name,
+            name = name + if (extra.quantity > 1) " × ${extra.quantity}" else "",
             price = if (extra.priceCents > 0) extra.priceCents.toEuroLabel() else "Incluído",
         )
     }.take(12)
@@ -623,6 +607,7 @@ private fun AdminBookingRequest.decisionAuditLabels(): List<String> {
         decisionAuditLabel("Iniciada", startedAtIso, startedByUid),
         decisionAuditLabel("Rejeitada", rejectedAtIso, rejectedByUid),
         decisionAuditLabel("Concluída", completedAtIso, completedByUid),
+        decisionAuditLabel("Paga", paidAtIso, paidByUid),
     )
 }
 
@@ -699,15 +684,19 @@ private fun String.toReservationStatusLabel(): String {
     ) {
         "pending", "novo" -> "Pendente"
         "confirmed", "confirmado" -> "Confirmada"
-        "in_progress", "em_execucao", "em_execução" -> "A decorrer"
-        else -> "Estado a confirmar"
+        "in_progress", "em_execucao", "em_execução" -> "Em curso"
+        "completed", "complete", "concluido", "concluído", "done" -> "Trabalho realizado"
+        "rejected", "rejeitado", "rejeitada" -> "Recusada"
+        "cancelled", "canceled", "cancelado", "cancelada" -> "Cancelada"
+        "expired", "expirado", "expirada" -> "Expirada"
+        else -> "Estado desconhecido"
     }
 }
 
 private fun String.toReservationStatusDetail(
     pendingExpiresAtIso: String?,
-    canStart: Boolean,
     canComplete: Boolean,
+    canMarkPaid: Boolean,
 ): String {
     val normalized = trim()
         .lowercase()
@@ -717,11 +706,15 @@ private fun String.toReservationStatusDetail(
         "pending", "novo" -> pendingExpiresAtIso?.toDateTimeLabel()?.let { "Expira $it" }
             ?: "Sem expiração automática"
         "confirmed", "confirmado" -> when {
-            canComplete -> "Pronta a concluir"
-            canStart -> "Pronta a iniciar"
-            else -> "Aceite"
+            canComplete -> "Trabalho por realizar"
+            else -> "Confirmada"
         }
-        "in_progress", "em_execucao", "em_execução" -> if (canComplete) "Pronta a concluir" else "A decorrer"
+        "in_progress", "em_execucao", "em_execução" -> "Trabalho por realizar"
+        "completed", "complete", "concluido", "concluído", "done" ->
+            if (canMarkPaid) "Aguarda pagamento" else ""
+        "rejected", "rejeitado", "rejeitada" -> ""
+        "cancelled", "canceled", "cancelado", "cancelada" -> ""
+        "expired", "expirado", "expirada" -> ""
         else -> ""
     }
 }

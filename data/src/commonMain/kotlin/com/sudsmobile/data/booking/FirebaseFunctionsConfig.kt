@@ -97,6 +97,9 @@ data class FirebaseFunctionsConfig(
     val getAdminPendingReservationsUrl: String
         get() = functionUrl("getAdminPendingReservations")
 
+    val getAdminReservationsUrl: String
+        get() = functionUrl("getAdminReservations")
+
     val getAdminAcceptedReservationsUrl: String
         get() = functionUrl("getAdminAcceptedReservations")
 
@@ -114,6 +117,9 @@ data class FirebaseFunctionsConfig(
 
     val completeReservationUrl: String
         get() = functionUrl("completeReservation")
+
+    val markReservationPaidUrl: String
+        get() = functionUrl("markReservationPaid")
 
     val getAdminBusinessInfoUrl: String
         get() = functionUrl("getAdminBusinessInfo")

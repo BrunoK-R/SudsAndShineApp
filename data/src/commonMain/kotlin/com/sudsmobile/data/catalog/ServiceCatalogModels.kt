@@ -21,6 +21,11 @@ data class ServiceCatalogExtra(
     val name: String,
     val description: String,
     val priceCents: Int,
+    val passengerPriceCents: Int = priceCents,
+    val suvPriceCents: Int = passengerPriceCents,
+    val additionalDurationMinutes: Int = 0,
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: Int = 1,
     val iconKey: String,
     val eligibleServiceIds: List<String> = emptyList(),
 )

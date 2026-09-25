@@ -17,6 +17,7 @@ data class BookingCreateRequest(
     val vehicleLabel: String? = null,
     val loyaltyRewardCode: String? = null,
     val extraIds: List<String> = emptyList(),
+    val extraQuantities: Map<String, Int> = emptyMap(),
 )
 
 data class BookingReceipt(
@@ -36,6 +37,7 @@ data class BookingReservationExtra(
     val id: String,
     val name: String,
     val priceCents: Int,
+    val quantity: Int = 1,
 )
 
 data class BookingHistory(
@@ -590,6 +592,14 @@ fun BookingHistoryReservation.isCompletedReservation(): Boolean {
     val status = bookingReservationStatus()
     return status == BookingReservationStatus.Completed ||
         (!upcoming && status !in nonCompletedClosedReservationStatuses)
+}
+
+fun BookingHistoryReservation.earnsLoyaltyStamp(): Boolean {
+    return isCompletedReservation() &&
+        !loyaltyRewardApplied &&
+        bookingPaymentStatus() == BookingPaymentStatus.Paid &&
+        loyaltyStampGranted != false &&
+        (priceCents ?: 0) > 0
 }
 
 fun BookingHistoryReservation.isReviewableReservation(): Boolean {

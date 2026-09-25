@@ -167,7 +167,7 @@ class AdminServiceExtrasViewModelTest {
         viewModel.updateForm(
             loaded.form!!.copy(
                 name = " Cera   Deluxe ",
-                price = "17,50",
+                passengerPrice = "17,50",
                 eligibleServiceIds = " premium, standard, premium ",
                 sortOrder = "35",
             ),
@@ -198,7 +198,7 @@ class AdminServiceExtrasViewModelTest {
         runCurrent()
         viewModel.editExtra("wax")
         val loaded = assertIs<AdminServiceExtrasUiState.Loaded>(viewModel.uiState.value)
-        viewModel.updateForm(loaded.form!!.copy(price = "abc"))
+        viewModel.updateForm(loaded.form!!.copy(passengerPrice = "abc"))
         viewModel.save()
         runCurrent()
 

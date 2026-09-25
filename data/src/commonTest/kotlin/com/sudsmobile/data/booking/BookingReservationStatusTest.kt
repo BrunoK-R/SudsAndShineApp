@@ -81,6 +81,22 @@ class BookingReservationStatusTest {
                 .requiresPayment(),
         )
     }
+
+    @Test
+    fun loyaltyStampRequiresCompletedPaidEligibleReservation() {
+        assertFalse(
+            reservation(status = "completed", upcoming = false, paymentStatus = "pending", priceCents = 3200)
+                .earnsLoyaltyStamp(),
+        )
+        assertTrue(
+            reservation(status = "completed", upcoming = false, paymentStatus = "paid", priceCents = 3200)
+                .earnsLoyaltyStamp(),
+        )
+        assertFalse(
+            reservation(status = "completed", upcoming = false, paymentStatus = "paid", priceCents = 0)
+                .earnsLoyaltyStamp(),
+        )
+    }
 }
 
 private fun reservation(

@@ -64,6 +64,32 @@ class KtorAdminFunctionsApi(
         }
     }
 
+    override suspend fun getAllBookingRequests(idToken: String): AdminBookingRequestsResult {
+        return try {
+            val response = httpClient.post(config.getAdminReservationsUrl) {
+                callableHeaders(idToken)
+                setBody(CallableEmptyRequest(data = emptyMap()))
+            }
+            val body = response.body<CallablePendingReservationsResponse>()
+            val error = body.error
+            when {
+                error != null -> AdminBookingRequestsResult.Failure(error.toAdminError())
+                body.result != null -> AdminBookingRequestsResult.Success(
+                    body.result.requests.map { it.toAdminBookingRequest() },
+                )
+                else -> AdminBookingRequestsResult.Failure(
+                    AdminError.Backend("A resposta das marcações veio sem dados."),
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            AdminBookingRequestsResult.Failure(
+                AdminError.Unavailable("Não foi possível carregar as marcações. Tente novamente."),
+            )
+        }
+    }
+
     override suspend fun getAcceptedBookingRequests(idToken: String): AdminBookingRequestsResult {
         return try {
             val response = httpClient.post(config.getAdminAcceptedReservationsUrl) {
@@ -132,6 +158,16 @@ class KtorAdminFunctionsApi(
         payload = DecisionPayload.from(request),
         idToken = idToken,
         unavailableMessage = "Não foi possível concluir a marcação. Tente novamente.",
+    )
+
+    override suspend fun markBookingRequestPaid(
+        request: AdminBookingDecisionRequest,
+        idToken: String,
+    ): AdminBookingDecisionResult = postDecision(
+        url = config.markReservationPaidUrl,
+        payload = DecisionPayload.from(request),
+        idToken = idToken,
+        unavailableMessage = "Não foi possível marcar a marcação como paga. Tente novamente.",
     )
 
     override suspend fun getBusinessInfoConfiguration(idToken: String): AdminBusinessInfoResult {
@@ -1257,6 +1293,11 @@ private data class ServiceExtraUpsertPayload(
     val name: String,
     val description: String = "",
     val priceCents: Int,
+    val passengerPriceCents: Int = priceCents,
+    val suvPriceCents: Int = passengerPriceCents,
+    val additionalDurationMinutes: Int = 0,
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: Int = 1,
     val iconKey: String = "auto_awesome",
     val eligibleServiceIds: List<String> = emptyList(),
     val active: Boolean = true,
@@ -1269,6 +1310,11 @@ private data class ServiceExtraUpsertPayload(
                 name = request.name,
                 description = request.description,
                 priceCents = request.priceCents,
+                passengerPriceCents = request.passengerPriceCents,
+                suvPriceCents = request.suvPriceCents,
+                additionalDurationMinutes = request.additionalDurationMinutes,
+                quantityEnabled = request.quantityEnabled,
+                maxQuantity = request.maxQuantity,
                 iconKey = request.iconKey,
                 eligibleServiceIds = request.eligibleServiceIds,
                 active = request.active,
@@ -1444,6 +1490,7 @@ private data class AdminBookingRequestPayload(
     val loyaltyRewardApplied: Boolean = false,
     val canStart: Boolean = false,
     val canComplete: Boolean = false,
+    val canMarkPaid: Boolean = false,
     val acceptedAt: String? = null,
     val acceptedByUid: String = "",
     val startedAt: String? = null,
@@ -1452,6 +1499,9 @@ private data class AdminBookingRequestPayload(
     val rejectedByUid: String = "",
     val completedAt: String? = null,
     val completedByUid: String = "",
+    val paidAt: String? = null,
+    val paidByUid: String = "",
+    val rejectionReason: String = "",
 ) {
     fun toAdminBookingRequest(): AdminBookingRequest = AdminBookingRequest(
         id = id,
@@ -1475,6 +1525,7 @@ private data class AdminBookingRequestPayload(
         loyaltyRewardApplied = loyaltyRewardApplied,
         canStart = canStart,
         canComplete = canComplete,
+        canMarkPaid = canMarkPaid,
         acceptedAtIso = acceptedAt,
         acceptedByUid = acceptedByUid.trim(),
         startedAtIso = startedAt,
@@ -1483,6 +1534,9 @@ private data class AdminBookingRequestPayload(
         rejectedByUid = rejectedByUid.trim(),
         completedAtIso = completedAt,
         completedByUid = completedByUid.trim(),
+        paidAtIso = paidAt,
+        paidByUid = paidByUid.trim(),
+        rejectionReason = rejectionReason.trim(),
     )
 }
 
@@ -1491,11 +1545,13 @@ private data class AdminReservationExtraPayload(
     val id: String,
     val name: String,
     val priceCents: Int,
+    val quantity: Int = 1,
 ) {
     fun toReservationExtra(): BookingReservationExtra = BookingReservationExtra(
         id = id,
         name = name,
         priceCents = priceCents.coerceAtLeast(0),
+        quantity = quantity.coerceIn(1, 20),
     )
 }
 
@@ -1627,6 +1683,11 @@ private data class AdminServiceExtraItemPayload(
     val name: String,
     val description: String = "",
     val priceCents: Int = 0,
+    val passengerPriceCents: Int = priceCents,
+    val suvPriceCents: Int = passengerPriceCents,
+    val additionalDurationMinutes: Int = 0,
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: Int = 1,
     val iconKey: String = "auto_awesome",
     val eligibleServiceIds: List<String> = emptyList(),
     val active: Boolean = true,
@@ -1643,6 +1704,11 @@ private data class AdminServiceExtraItemPayload(
         name = name.trim(),
         description = description.trim(),
         priceCents = priceCents.coerceIn(0, 100000),
+        passengerPriceCents = passengerPriceCents.coerceIn(0, 100000),
+        suvPriceCents = suvPriceCents.coerceIn(0, 100000),
+        additionalDurationMinutes = additionalDurationMinutes.coerceIn(0, 480),
+        quantityEnabled = quantityEnabled,
+        maxQuantity = if (quantityEnabled) maxQuantity.coerceIn(1, 20) else 1,
         iconKey = iconKey.trim().ifBlank { "auto_awesome" },
         eligibleServiceIds = eligibleServiceIds
             .map { it.trim() }

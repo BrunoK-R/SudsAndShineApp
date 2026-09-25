@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
@@ -44,7 +44,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -122,8 +122,8 @@ fun AdminBookingsScreen(
         onOpenNotificationPreferences = onOpenNotificationPreferences,
         onDismissDecision = viewModel::clearDecisionState,
         onAccept = viewModel::acceptRequest,
-        onStart = viewModel::startRequest,
         onComplete = viewModel::completeRequest,
+        onMarkPaid = viewModel::markRequestPaid,
         onStartReject = { reservationId ->
             viewModel.clearDecisionState()
             rejectingReservationId = reservationId
@@ -155,8 +155,8 @@ private fun AdminBookingsScreenContent(
     onOpenNotificationPreferences: () -> Unit,
     onDismissDecision: () -> Unit,
     onAccept: (String) -> Unit,
-    onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
+    onMarkPaid: (String) -> Unit,
     onStartReject: (String) -> Unit,
     onCancelReject: () -> Unit,
     onRejectionReasonChange: (String) -> Unit,
@@ -164,9 +164,12 @@ private fun AdminBookingsScreenContent(
 ) {
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     val tabs = listOf(
-        AdminBookingsTab.Operations,
         AdminBookingsTab.Pending,
-        AdminBookingsTab.Upcoming,
+        AdminBookingsTab.Active,
+        AdminBookingsTab.AwaitingPayment,
+        AdminBookingsTab.Paid,
+        AdminBookingsTab.Closed,
+        AdminBookingsTab.All,
     )
     val selectedTab = tabs[selectedTabIndex.coerceIn(0, tabs.lastIndex)]
     val loadedState = uiState as? AdminBookingsUiState.Loaded
@@ -213,8 +216,8 @@ private fun AdminBookingsScreenContent(
                 AdminBookingsUiState.Idle,
                 AdminBookingsUiState.Loading -> item(key = "loading", contentType = "status") {
                     AdminBookingsStatusCard(
-                        title = "A preparar a operação",
-                        body = "Estamos a organizar as prioridades, os pedidos e as marcações de hoje.",
+                        title = "A carregar marcações",
+                        body = "",
                         icon = Icons.Filled.CalendarMonth,
                         loading = true,
                     )
@@ -240,8 +243,8 @@ private fun AdminBookingsScreenContent(
 
                 AdminBookingsUiState.Empty -> item(key = "empty", contentType = "status") {
                     AdminBookingsStatusCard(
-                        title = "Operação em dia",
-                        body = "Não existem pedidos por decidir nem marcações aceites neste momento.",
+                        title = "Sem marcações",
+                        body = "Ainda não existem marcações registadas.",
                         icon = Icons.Filled.CheckCircle,
                         actionLabel = "Atualizar",
                         onAction = onRetry,
@@ -262,48 +265,25 @@ private fun AdminBookingsScreenContent(
                     item(key = "summary", contentType = "summary") {
                         AdminBookingsCountCard(
                             pendingCount = uiState.pendingRequests.size,
-                            operationalCount = uiState.operationalRequests.size,
-                            upcomingCount = uiState.upcomingRequests.size,
-                            inProgressCount = uiState.inProgressCount,
-                            overdueCount = uiState.overdueCount,
+                            activeCount = uiState.activeRequests.size,
+                            awaitingPaymentCount = uiState.awaitingPaymentRequests.size,
+                            paidCount = uiState.paidCount,
                             onRetry = onRetry,
                         )
                     }
                     item(key = "tabs", contentType = "tabs") {
                         AdminBookingsTabs(
                             selectedTab = selectedTab,
-                            operationalCount = uiState.operationalRequests.size,
                             pendingCount = uiState.pendingRequests.size,
-                            upcomingCount = uiState.upcomingRequests.size,
+                            activeCount = uiState.activeRequests.size,
+                            awaitingPaymentCount = uiState.awaitingPaymentRequests.size,
+                            paidCount = uiState.paidRequests.size,
+                            closedCount = uiState.closedRequests.size,
+                            allCount = uiState.allRequests.size,
                             onSelect = { tab -> selectedTabIndex = tabs.indexOf(tab) },
                         )
                     }
                     when (selectedTab) {
-                        AdminBookingsTab.Operations -> {
-                            if (uiState.operationalRequests.isEmpty()) {
-                                item(key = "operations-empty", contentType = "status") {
-                                    AdminBookingsStatusCard(
-                                        title = "Sem trabalhos para hoje",
-                                        body = "Não há marcações em curso, em atraso ou previstas para hoje.",
-                                        icon = Icons.Filled.CheckCircle,
-                                    )
-                                }
-                            } else {
-                                items(
-                                    items = uiState.operationalRequests,
-                                    key = { "operation-${it.id}" },
-                                    contentType = { "accepted-booking" },
-                                ) { request ->
-                                    AdminAcceptedBookingCard(
-                                        request = request,
-                                        decisionState = decisionState,
-                                        onStart = onStart,
-                                        onComplete = onComplete,
-                                    )
-                                }
-                            }
-                        }
-
                         AdminBookingsTab.Pending -> {
                             if (uiState.pendingRequests.isEmpty()) {
                                 item(key = "pending-empty", contentType = "status") {
@@ -325,8 +305,6 @@ private fun AdminBookingsScreenContent(
                                         rejectingReservationId = rejectingReservationId,
                                         rejectionReason = rejectionReason,
                                         onAccept = onAccept,
-                                        onStart = onStart,
-                                        onComplete = onComplete,
                                         onStartReject = onStartReject,
                                         onCancelReject = onCancelReject,
                                         onRejectionReasonChange = onRejectionReasonChange,
@@ -336,28 +314,91 @@ private fun AdminBookingsScreenContent(
                             }
                         }
 
-                        AdminBookingsTab.Upcoming -> {
-                            if (uiState.upcomingRequests.isEmpty()) {
-                                item(key = "upcoming-empty", contentType = "status") {
+                        AdminBookingsTab.Active -> {
+                            if (uiState.activeRequests.isEmpty()) {
+                                item(key = "active-empty", contentType = "status") {
                                     AdminBookingsStatusCard(
-                                        title = "Sem próximas marcações",
-                                        body = "Não há marcações aceites para os próximos dias.",
+                                        title = "Sem marcações confirmadas",
+                                        body = "Não há trabalhos por marcar como realizados.",
                                         icon = Icons.Filled.CheckCircle,
                                     )
                                 }
                             } else {
                                 items(
-                                    items = uiState.upcomingRequests,
-                                    key = { "upcoming-${it.id}" },
+                                    items = uiState.activeRequests,
+                                    key = { "active-${it.id}" },
                                     contentType = { "accepted-booking" },
                                 ) { request ->
                                     AdminAcceptedBookingCard(
                                         request = request,
                                         decisionState = decisionState,
-                                        onStart = onStart,
                                         onComplete = onComplete,
+                                        onMarkPaid = onMarkPaid,
                                     )
                                 }
+                            }
+                        }
+
+                        AdminBookingsTab.AwaitingPayment -> {
+                            if (uiState.awaitingPaymentRequests.isEmpty()) {
+                                item(key = "payment-empty", contentType = "status") {
+                                    AdminBookingsStatusCard(
+                                        title = "Sem pagamentos pendentes",
+                                        body = "Não há trabalhos realizados por marcar como pagos.",
+                                        icon = Icons.Filled.CheckCircle,
+                                    )
+                                }
+                            } else {
+                                items(
+                                    items = uiState.awaitingPaymentRequests,
+                                    key = { "payment-${it.id}" },
+                                    contentType = { "payment-booking" },
+                                ) { request ->
+                                    AdminAcceptedBookingCard(
+                                        request = request,
+                                        decisionState = decisionState,
+                                        onComplete = onComplete,
+                                        onMarkPaid = onMarkPaid,
+                                    )
+                                }
+                            }
+                        }
+
+                        AdminBookingsTab.Paid -> {
+                            AdminReadOnlyBookingList(
+                                requests = uiState.paidRequests,
+                                emptyTitle = "Sem marcações pagas",
+                                itemKeyPrefix = "paid",
+                                decisionState = decisionState,
+                                onComplete = onComplete,
+                                onMarkPaid = onMarkPaid,
+                            )
+                        }
+
+                        AdminBookingsTab.Closed -> {
+                            AdminReadOnlyBookingList(
+                                requests = uiState.closedRequests,
+                                emptyTitle = "Sem marcações recusadas ou canceladas",
+                                itemKeyPrefix = "closed",
+                                decisionState = decisionState,
+                                onComplete = onComplete,
+                                onMarkPaid = onMarkPaid,
+                            )
+                        }
+
+                        AdminBookingsTab.All -> {
+                            items(
+                                items = uiState.allRequests,
+                                key = { "all-${it.id}" },
+                                contentType = { "all-booking" },
+                            ) { request ->
+                                AdminAcceptedBookingCard(
+                                    request = request,
+                                    decisionState = decisionState,
+                                    onComplete = onComplete,
+                                    onMarkPaid = onMarkPaid,
+                                    actionsEnabled = false,
+                                )
                             }
                         }
                     }
@@ -367,38 +408,84 @@ private fun AdminBookingsScreenContent(
     }
 }
 
+private fun LazyListScope.AdminReadOnlyBookingList(
+    requests: List<AdminBookingRequestUi>,
+    emptyTitle: String,
+    itemKeyPrefix: String,
+    decisionState: AdminBookingDecisionUiState,
+    onComplete: (String) -> Unit,
+    onMarkPaid: (String) -> Unit,
+) {
+    if (requests.isEmpty()) {
+        item(key = "$itemKeyPrefix-empty", contentType = "status") {
+            AdminBookingsStatusCard(
+                title = emptyTitle,
+                body = "",
+                icon = Icons.Filled.CheckCircle,
+            )
+        }
+    } else {
+        items(
+            items = requests,
+            key = { "$itemKeyPrefix-${it.id}" },
+            contentType = { "$itemKeyPrefix-booking" },
+        ) { request ->
+            AdminAcceptedBookingCard(
+                request = request,
+                decisionState = decisionState,
+                onComplete = onComplete,
+                onMarkPaid = onMarkPaid,
+                actionsEnabled = false,
+            )
+        }
+    }
+}
+
 private enum class AdminBookingsTab(val label: String) {
-    Operations("Hoje"),
-    Pending("Decisões"),
-    Upcoming("Próximas"),
+    Pending("Pedidos"),
+    Active("Ativas"),
+    AwaitingPayment("A pagar"),
+    Paid("Pagas"),
+    Closed("Fechadas"),
+    All("Todas"),
 }
 
 @Composable
 private fun AdminBookingsTabs(
     selectedTab: AdminBookingsTab,
-    operationalCount: Int,
     pendingCount: Int,
-    upcomingCount: Int,
+    activeCount: Int,
+    awaitingPaymentCount: Int,
+    paidCount: Int,
+    closedCount: Int,
+    allCount: Int,
     onSelect: (AdminBookingsTab) -> Unit,
 ) {
     val tabs = listOf(
-        AdminBookingsTab.Operations,
         AdminBookingsTab.Pending,
-        AdminBookingsTab.Upcoming,
+        AdminBookingsTab.Active,
+        AdminBookingsTab.AwaitingPayment,
+        AdminBookingsTab.Paid,
+        AdminBookingsTab.Closed,
+        AdminBookingsTab.All,
     )
-    TabRow(
+    ScrollableTabRow(
         selectedTabIndex = tabs.indexOf(selectedTab),
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp)),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         contentColor = MaterialTheme.colorScheme.tertiary,
+        edgePadding = 0.dp,
     ) {
         tabs.forEach { tab ->
             val count = when (tab) {
-                AdminBookingsTab.Operations -> operationalCount
                 AdminBookingsTab.Pending -> pendingCount
-                AdminBookingsTab.Upcoming -> upcomingCount
+                AdminBookingsTab.Active -> activeCount
+                AdminBookingsTab.AwaitingPayment -> awaitingPaymentCount
+                AdminBookingsTab.Paid -> paidCount
+                AdminBookingsTab.Closed -> closedCount
+                AdminBookingsTab.All -> allCount
             }
             Tab(
                 selected = selectedTab == tab,
@@ -424,8 +511,6 @@ private fun AdminPendingBookingCard(
     rejectingReservationId: String?,
     rejectionReason: String,
     onAccept: (String) -> Unit,
-    onStart: (String) -> Unit,
-    onComplete: (String) -> Unit,
     onStartReject: (String) -> Unit,
     onCancelReject: () -> Unit,
     onRejectionReasonChange: (String) -> Unit,
@@ -437,8 +522,8 @@ private fun AdminPendingBookingCard(
         rejecting = rejectingReservationId == request.id,
         rejectionReason = rejectionReason,
         onAccept = { onAccept(request.id) },
-        onStart = { onStart(request.id) },
-        onComplete = { onComplete(request.id) },
+        onComplete = {},
+        onMarkPaid = {},
         onStartReject = { onStartReject(request.id) },
         onCancelReject = onCancelReject,
         onRejectionReasonChange = onRejectionReasonChange,
@@ -450,8 +535,9 @@ private fun AdminPendingBookingCard(
 private fun AdminAcceptedBookingCard(
     request: AdminBookingRequestUi,
     decisionState: AdminBookingDecisionUiState,
-    onStart: (String) -> Unit,
     onComplete: (String) -> Unit,
+    onMarkPaid: (String) -> Unit,
+    actionsEnabled: Boolean = true,
 ) {
     AdminBookingRequestCard(
         request = request,
@@ -459,9 +545,10 @@ private fun AdminAcceptedBookingCard(
         rejecting = false,
         rejectionReason = "",
         acceptedOnly = true,
+        actionsEnabled = actionsEnabled,
         onAccept = {},
-        onStart = { onStart(request.id) },
         onComplete = { onComplete(request.id) },
+        onMarkPaid = { onMarkPaid(request.id) },
         onStartReject = {},
         onCancelReject = {},
         onRejectionReasonChange = { _ -> },
@@ -512,7 +599,7 @@ private fun AdminBookingsHeader(
         Spacer(Modifier.height(18.dp))
 
         Text(
-            text = "Operação de hoje",
+            text = "Marcações",
             modifier = Modifier.semantics { heading() },
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.inverseOnSurface,
@@ -520,7 +607,7 @@ private fun AdminBookingsHeader(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = businessDateLabel ?: "Prioridades, marcações e decisões",
+            text = businessDateLabel ?: "Todas as marcações",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
         )
@@ -538,8 +625,8 @@ private fun AdminDecisionBanner(
             message = when (decisionState.action) {
                 AdminBookingDecisionAction.Accept -> "A aceitar marcação."
                 AdminBookingDecisionAction.Reject -> "A rejeitar marcação."
-                AdminBookingDecisionAction.Start -> "A iniciar lavagem."
-                AdminBookingDecisionAction.Complete -> "A concluir marcação."
+                AdminBookingDecisionAction.Complete -> "A marcar trabalho realizado."
+                AdminBookingDecisionAction.MarkPaid -> "A marcar pagamento."
             },
             loading = true,
         )
@@ -683,10 +770,9 @@ private fun AdminNotificationDevicePromptCard(
 @Composable
 private fun AdminBookingsCountCard(
     pendingCount: Int,
-    operationalCount: Int,
-    upcomingCount: Int,
-    inProgressCount: Int,
-    overdueCount: Int,
+    activeCount: Int,
+    awaitingPaymentCount: Int,
+    paidCount: Int,
     onRetry: () -> Unit,
 ) {
     Card(
@@ -710,7 +796,7 @@ private fun AdminBookingsCountCard(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = operationalCount.toString(),
+                        text = activeCount.toString(),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -721,19 +807,19 @@ private fun AdminBookingsCountCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = "Resumo da operação",
+                    text = "Marcações",
                     modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onTertiary,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "$inProgressCount a decorrer · $overdueCount em atraso",
+                    text = "$pendingCount pedidos · $activeCount confirmadas",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.76f),
                 )
                 Text(
-                    text = "$pendingCount por decidir · $upcomingCount próximas",
+                    text = "$awaitingPaymentCount a pagar · $paidCount pagas",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiary.copy(alpha = 0.76f),
                 )
@@ -746,7 +832,7 @@ private fun AdminBookingsCountCard(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Refresh,
-                    contentDescription = "Atualizar operação",
+                    contentDescription = "Atualizar marcações",
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -761,9 +847,10 @@ private fun AdminBookingRequestCard(
     rejecting: Boolean,
     rejectionReason: String,
     acceptedOnly: Boolean = false,
+    actionsEnabled: Boolean = true,
     onAccept: () -> Unit,
-    onStart: () -> Unit,
     onComplete: () -> Unit,
+    onMarkPaid: () -> Unit,
     onStartReject: () -> Unit,
     onCancelReject: () -> Unit,
     onRejectionReasonChange: (String) -> Unit,
@@ -802,7 +889,7 @@ private fun AdminBookingRequestCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (acceptedOnly) {
+                    if (acceptedOnly && request.statusLabel in setOf("Confirmada", "Em curso")) {
                         AdminTimingPill(timing = request.timing)
                     }
                     AdminPill(text = request.statusLabel)
@@ -840,33 +927,18 @@ private fun AdminBookingRequestCard(
             }
 
             if (acceptedOnly) {
-                val actionIsComplete = request.canComplete
-                val actionIsStart = !request.canComplete &&
-                    request.canStart &&
-                    (request.timing == AdminBookingTiming.Today ||
-                        request.timing == AdminBookingTiming.Overdue)
-                val actionEnabled = (actionIsComplete || actionIsStart) && !decisionInProgress
-                val action = if (actionIsComplete) {
-                    AdminBookingDecisionAction.Complete
-                } else {
-                    AdminBookingDecisionAction.Start
+                val action = when {
+                    request.canMarkPaid -> AdminBookingDecisionAction.MarkPaid
+                    request.canComplete -> AdminBookingDecisionAction.Complete
+                    else -> null
                 }
-                AdminInlineStatus(
-                    message = when {
-                        request.canComplete -> "Lavagem em execução, pronta a concluir."
-                        request.timing == AdminBookingTiming.Upcoming ->
-                            "Agendada para mais tarde. A ação fica disponível no próprio dia."
-                        request.timing == AdminBookingTiming.NeedsReview ->
-                            "Confirme o horário antes de iniciar esta lavagem."
-                        request.canStart -> "Marcação aceite, pronta a iniciar."
-                        else -> "Marcação aceite, ainda sem ação disponível."
-                    },
-                    icon = Icons.Filled.CheckCircle,
-                )
-                if (actionIsComplete || actionIsStart) {
+                if (actionsEnabled && action != null) {
                     Button(
-                        onClick = if (actionIsComplete) onComplete else onStart,
-                        enabled = actionEnabled,
+                        onClick = when (action) {
+                            AdminBookingDecisionAction.MarkPaid -> onMarkPaid
+                            else -> onComplete
+                        },
+                        enabled = !decisionInProgress,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(46.dp),
@@ -884,18 +956,17 @@ private fun AdminBookingRequestCard(
                             )
                         } else {
                             Icon(
-                                imageVector = if (actionIsComplete) {
-                                    Icons.Filled.CheckCircle
-                                } else {
-                                    Icons.Filled.PlayArrow
-                                },
+                                imageVector = Icons.Filled.CheckCircle,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
                             )
                         }
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = if (actionIsComplete) "Concluir" else "Iniciar lavagem",
+                            text = when (action) {
+                                AdminBookingDecisionAction.MarkPaid -> "Marcar como pago"
+                                else -> "Trabalho realizado"
+                            },
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                         )

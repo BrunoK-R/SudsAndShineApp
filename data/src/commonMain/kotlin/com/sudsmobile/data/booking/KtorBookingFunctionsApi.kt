@@ -539,6 +539,7 @@ private data class CreateReservationPayload(
     val vehicleLabel: String? = null,
     val loyaltyRewardCode: String? = null,
     val extraIds: List<String> = emptyList(),
+    val extraQuantities: Map<String, Int> = emptyMap(),
 ) {
     companion object {
         fun from(request: BookingCreateRequest): CreateReservationPayload = CreateReservationPayload(
@@ -556,6 +557,7 @@ private data class CreateReservationPayload(
             vehicleLabel = request.vehicleLabel,
             loyaltyRewardCode = request.loyaltyRewardCode,
             extraIds = request.extraIds,
+            extraQuantities = request.extraQuantities,
         )
     }
 }
@@ -851,11 +853,13 @@ private data class ReservationExtraPayload(
     val id: String,
     val name: String,
     val priceCents: Int,
+    val quantity: Int = 1,
 ) {
     fun toReservationExtra(): BookingReservationExtra = BookingReservationExtra(
         id = id,
         name = name,
         priceCents = priceCents.coerceAtLeast(0),
+        quantity = quantity.coerceIn(1, 20),
     )
 }
 

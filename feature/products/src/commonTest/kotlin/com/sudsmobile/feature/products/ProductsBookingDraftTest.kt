@@ -45,11 +45,17 @@ class ProductsBookingDraftTest {
     @Test
     fun mapsSelectedExtrasToBackendRequest() {
         val request = validDraft()
-            .copy(extraIds = listOf("wax", "vacuum"))
+            .copy(
+                extraIds = listOf("wax", "upholstery"),
+                extraQuantities = mapOf("upholstery" to 3),
+                serviceDurationMinutes = 90,
+            )
             .toCreateRequest()
 
         assertNotNull(request)
-        assertEquals(listOf("wax", "vacuum"), request.extraIds)
+        assertEquals(listOf("wax", "upholstery"), request.extraIds)
+        assertEquals(mapOf("upholstery" to 3), request.extraQuantities)
+        assertEquals("2026-05-20T11:00:00.000Z", request.slotEndIso)
     }
 
     @Test

@@ -93,6 +93,11 @@ private data class GetServiceCatalogExtra(
     val name: String,
     val description: String = "",
     val priceCents: Int,
+    val passengerPriceCents: Int = priceCents,
+    val suvPriceCents: Int = passengerPriceCents,
+    val additionalDurationMinutes: Int = 0,
+    val quantityEnabled: Boolean = false,
+    val maxQuantity: Int = 1,
     val iconKey: String = "auto_awesome",
     val eligibleServiceIds: List<String> = emptyList(),
 ) {
@@ -101,6 +106,11 @@ private data class GetServiceCatalogExtra(
         name = name,
         description = description,
         priceCents = priceCents.coerceAtLeast(0),
+        passengerPriceCents = passengerPriceCents.coerceAtLeast(0),
+        suvPriceCents = suvPriceCents.coerceAtLeast(0),
+        additionalDurationMinutes = additionalDurationMinutes.coerceIn(0, 480),
+        quantityEnabled = quantityEnabled,
+        maxQuantity = if (quantityEnabled) maxQuantity.coerceIn(1, 20) else 1,
         iconKey = iconKey.ifBlank { "auto_awesome" },
         eligibleServiceIds = eligibleServiceIds
             .map { it.trim() }
