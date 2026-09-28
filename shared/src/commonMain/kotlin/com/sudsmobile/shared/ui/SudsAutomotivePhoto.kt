@@ -12,6 +12,9 @@ import sudsandshine.shared.generated.resources.suds_appointment_hero
 import sudsandshine.shared.generated.resources.suds_booking_navigation
 import sudsandshine.shared.generated.resources.suds_brand_mark
 import sudsandshine.shared.generated.resources.suds_service_exterior
+import sudsandshine.shared.generated.resources.suds_service_fabric_upholstery
+import sudsandshine.shared.generated.resources.suds_service_headlight_polish
+import sudsandshine.shared.generated.resources.suds_service_leather_upholstery
 import sudsandshine.shared.generated.resources.suds_service_premium
 import sudsandshine.shared.generated.resources.suds_service_standard
 import sudsandshine.shared.generated.resources.suds_vehicle_passenger
@@ -22,6 +25,9 @@ enum class SudsAutomotivePhotoKind {
     Standard,
     Premium,
     Exterior,
+    FabricUpholstery,
+    LeatherUpholstery,
+    HeadlightPolish,
 }
 
 enum class SudsVehiclePhotoKind {
@@ -32,6 +38,15 @@ enum class SudsVehiclePhotoKind {
 fun automotivePhotoKindForKey(key: String): SudsAutomotivePhotoKind {
     val normalized = key.lowercase()
     return when {
+        normalized.contains("fabric-upholstery") || normalized.contains("estofos em tecido") -> {
+            SudsAutomotivePhotoKind.FabricUpholstery
+        }
+        normalized.contains("leather-upholstery") || normalized.contains("estofos em pele") -> {
+            SudsAutomotivePhotoKind.LeatherUpholstery
+        }
+        normalized.contains("headlight-polish") ||
+            normalized.contains("polimento de faróis") ||
+            normalized.contains("polimento de farois") -> SudsAutomotivePhotoKind.HeadlightPolish
         normalized.contains("premium") || normalized.contains("detail") -> SudsAutomotivePhotoKind.Premium
         normalized.contains("exterior") || normalized.contains("outside") -> SudsAutomotivePhotoKind.Exterior
         else -> SudsAutomotivePhotoKind.Standard
@@ -103,6 +118,9 @@ private fun SudsAutomotivePhotoKind.resource(): DrawableResource = when (this) {
     SudsAutomotivePhotoKind.Standard -> Res.drawable.suds_service_standard
     SudsAutomotivePhotoKind.Premium -> Res.drawable.suds_service_premium
     SudsAutomotivePhotoKind.Exterior -> Res.drawable.suds_service_exterior
+    SudsAutomotivePhotoKind.FabricUpholstery -> Res.drawable.suds_service_fabric_upholstery
+    SudsAutomotivePhotoKind.LeatherUpholstery -> Res.drawable.suds_service_leather_upholstery
+    SudsAutomotivePhotoKind.HeadlightPolish -> Res.drawable.suds_service_headlight_polish
 }
 
 private fun SudsVehiclePhotoKind.resource(): DrawableResource = when (this) {

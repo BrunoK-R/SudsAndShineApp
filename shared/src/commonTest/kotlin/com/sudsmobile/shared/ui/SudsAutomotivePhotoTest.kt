@@ -19,5 +19,17 @@ class SudsAutomotivePhotoTest {
             SudsAutomotivePhotoKind.Exterior,
             automotivePhotoKindForKey("Lavagem Exterior"),
         )
+        assertEquals(
+            SudsAutomotivePhotoKind.FabricUpholstery,
+            automotivePhotoKindForKey("fabric-upholstery Lavagem de Estofos em Tecido"),
+        )
+        assertEquals(
+            SudsAutomotivePhotoKind.LeatherUpholstery,
+            automotivePhotoKindForKey("leather-upholstery Lavagem de Estofos em Pele"),
+        )
+        assertEquals(
+            SudsAutomotivePhotoKind.HeadlightPolish,
+            automotivePhotoKindForKey("headlight-polish Polimento de Faróis"),
+        )
     }
 }
