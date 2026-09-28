@@ -5,6 +5,7 @@ const test = require("node:test");
 const {
   MIN_BOOKING_LEAD_MINUTES,
   adminReservationExpectedStatuses,
+  businessClockDate,
   buildDaySlots,
   capacityForDate,
   normalizeLoyalty,
@@ -20,6 +21,17 @@ test("booking slots require at least fifteen minutes of lead time", () => {
   assert.equal(MIN_BOOKING_LEAD_MINUTES, 15);
   assert.equal(slotMeetsMinimumBookingLeadTime("2026-07-03T10:14:59.999Z", now), false);
   assert.equal(slotMeetsMinimumBookingLeadTime("2026-07-03T10:15:00.000Z", now), true);
+});
+
+test("business clock follows Lisbon daylight saving time", () => {
+  assert.equal(
+    businessClockDate(new Date("2026-07-03T09:00:00.000Z")).toISOString(),
+    "2026-07-03T10:00:00.000Z",
+  );
+  assert.equal(
+    businessClockDate(new Date("2026-01-03T09:00:00.000Z")).toISOString(),
+    "2026-01-03T09:00:00.000Z",
+  );
 });
 
 test("availability hides past and too-soon slots", () => {

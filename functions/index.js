@@ -11,6 +11,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const {
   adminReservationExpectedStatuses,
+  businessClockDate,
   buildDaySlots,
   capacityForDate,
   normalizeLoyalty,
@@ -2031,7 +2032,7 @@ async function getNotificationCampaignDraftsPayload() {
 }
 
 async function buildAvailabilityMonth(request) {
-  const now = new Date();
+  const now = businessClockDate();
   const anchor = parseDateId(request.anchorDate) || todayUtcDate(now);
   const year = anchor.getUTCFullYear();
   const month = anchor.getUTCMonth();

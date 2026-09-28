@@ -1,6 +1,32 @@
 "use strict";
 
 const MIN_BOOKING_LEAD_MINUTES = 15;
+const BUSINESS_TIME_ZONE = "Europe/Lisbon";
+
+function businessClockDate(now = new Date(), timeZone = BUSINESS_TIME_ZONE) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now).reduce((values, part) => {
+    if (part.type !== "literal") values[part.type] = Number(part.value);
+    return values;
+  }, {});
+  return new Date(Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    now.getUTCMilliseconds(),
+  ));
+}
 
 function cleanString(value, maxLength) {
   return String(value || "")
@@ -108,7 +134,7 @@ function capacityForDate(date, config) {
 
 function slotMeetsMinimumBookingLeadTime(
   slotStart,
-  now = new Date(),
+  now = businessClockDate(),
   leadMinutes = MIN_BOOKING_LEAD_MINUTES,
 ) {
   const start = slotStart instanceof Date ? slotStart : new Date(String(slotStart || ""));
@@ -163,8 +189,10 @@ function toTimeLabel(totalMinutes) {
 }
 
 module.exports = {
+  BUSINESS_TIME_ZONE,
   MIN_BOOKING_LEAD_MINUTES,
   adminReservationExpectedStatuses,
+  businessClockDate,
   buildDaySlots,
   capacityForDate,
   normalizeLoyalty,
