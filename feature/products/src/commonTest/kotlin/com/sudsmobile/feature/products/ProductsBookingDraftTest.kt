@@ -17,7 +17,7 @@ class ProductsBookingDraftTest {
             description = "",
             durationMinutes = 90,
             dryingDurationMinutes = 240,
-            durationLabel = "90 min trabalho",
+            durationLabel = "90 min",
             passengerPriceCents = 7000,
             suvPriceCents = 8000,
             passengerPrice = "70,00€",

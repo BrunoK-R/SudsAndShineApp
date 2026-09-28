@@ -1092,7 +1092,7 @@ private fun BookingConfirmationContent(
             if (workDurationMinutes > 0) {
                 ConfirmationLine(
                     icon = Icons.Filled.AccessTime,
-                    text = "Trabalho: $workDurationMinutes min",
+                    text = "$workDurationMinutes min",
                 )
             }
             if (dryingDurationMinutes > 0) {

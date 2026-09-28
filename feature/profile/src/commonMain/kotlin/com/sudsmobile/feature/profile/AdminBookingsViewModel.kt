@@ -539,7 +539,7 @@ private fun AdminBookingRequest.toUi(businessDateKey: String): AdminBookingReque
     date = slotStartIso.toDateLabel(),
     time = "${slotStartIso.toTimeLabel()} - ${slotEndIso.toTimeLabel()}",
     durationLabels = buildList {
-        if (workDurationMinutes > 0) add("Trabalho: $workDurationMinutes min")
+        if (workDurationMinutes > 0) add("$workDurationMinutes min")
         if (dryingDurationMinutes > 0) add("Secagem: $dryingDurationMinutes min")
         if (dryingDurationMinutes > 0) {
             estimatedReadyAtIso?.toDateTimeLabel()?.let { add("Levantamento previsto: $it") }

@@ -108,7 +108,7 @@ private fun ServiceCatalogService.toUiModelOrNull(): ProductServiceUi? {
         description = description,
         durationMinutes = durationMinutes,
         dryingDurationMinutes = dryingDurationMinutes.coerceIn(0, 10_080),
-        durationLabel = "$durationMinutes min trabalho",
+        durationLabel = "$durationMinutes min",
         passengerPriceCents = passengerPriceCents,
         suvPriceCents = suvPriceCents,
         passengerPrice = passengerPriceCents.toEuroLabel(),

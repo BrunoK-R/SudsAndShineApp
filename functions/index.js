@@ -17,6 +17,7 @@ const {
   normalizePaymentStatus,
   reservationCanBeMarkedPaid,
   reservationEarnsLoyaltyStamp,
+  slotMeetsMinimumBookingLeadTime,
   slotOverlapsBlockedRange,
 } = require("./src/bookingDomain");
 const {
@@ -798,6 +799,12 @@ exports.createReservation = onCall(async (request) => {
   const authUid = request.auth && request.auth.uid;
   const data = request.data || {};
   const reservation = sanitizeReservationCreate(data, authUid || "");
+  if (!slotMeetsMinimumBookingLeadTime(reservation.slotStart)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "A marcação deve ser feita com pelo menos 15 minutos de antecedência.",
+    );
+  }
   const doc = db.collection("reservations").doc();
   const reservationCode = await nextReservationCode();
   const availabilityConfig = await getAvailabilityConfig();
@@ -957,6 +964,12 @@ exports.cancelMyReservation = onCall(async (request) => {
 exports.rescheduleMyReservation = onCall(async (request) => {
   const uid = requireUid(request);
   const reschedule = sanitizeReschedule(request.data || {});
+  if (!slotMeetsMinimumBookingLeadTime(reschedule.slotStart)) {
+    throw new HttpsError(
+      "failed-precondition",
+      "A nova marcação deve ter pelo menos 15 minutos de antecedência.",
+    );
+  }
   const availabilityConfig = await getAvailabilityConfig();
   await db.runTransaction(async (transaction) => {
     const ref = db.doc(`reservations/${reschedule.reservationId}`);
@@ -2018,7 +2031,8 @@ async function getNotificationCampaignDraftsPayload() {
 }
 
 async function buildAvailabilityMonth(request) {
-  const anchor = parseDateId(request.anchorDate) || todayUtcDate();
+  const now = new Date();
+  const anchor = parseDateId(request.anchorDate) || todayUtcDate(now);
   const year = anchor.getUTCFullYear();
   const month = anchor.getUTCMonth();
   const monthStart = new Date(Date.UTC(year, month, 1));
@@ -2031,9 +2045,15 @@ async function buildAvailabilityMonth(request) {
   for (let cursor = new Date(monthStart); cursor < nextMonthStart; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
     const dateId = toDateId(cursor);
     const dayOpening = openingForDate(cursor, config.openingHours);
-    const slots = dayOpening && !dayOpening.closed
-      ? buildDaySlots(dateId, dayOpening, slotInterval, request.serviceDurationMinutes, config, reservations)
-      : [];
+    const slots = dayOpening && !dayOpening.closed ? buildDaySlots(
+      dateId,
+      dayOpening,
+      slotInterval,
+      request.serviceDurationMinutes,
+      config,
+      reservations,
+      now,
+    ) : [];
     days.push({
       id: dateId,
       dayOfMonth: cursor.getUTCDate(),
@@ -2808,8 +2828,7 @@ function parseDateId(dateId) {
   return Number.isNaN(date.getTime()) || toDateId(date) !== dateId ? null : date;
 }
 
-function todayUtcDate() {
-  const now = new Date();
+function todayUtcDate(now = new Date()) {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 

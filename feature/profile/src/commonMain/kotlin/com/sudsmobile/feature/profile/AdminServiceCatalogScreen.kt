@@ -487,7 +487,7 @@ private fun AdminServiceCatalogServiceCard(
             ) {
                 AdminServiceCatalogMetric(
                     value = service.durationLabel,
-                    label = "Trabalho",
+                    label = "Duração",
                     modifier = Modifier.weight(1f),
                 )
                 AdminServiceCatalogMetric(
@@ -634,7 +634,7 @@ private fun AdminServiceCatalogFormCard(
                 AdminServiceTextField(
                     value = form.durationMinutes,
                     onValueChange = { onFormChange(form.copy(durationMinutes = it.take(3))) },
-                    label = "Trabalho (min)",
+                    label = "Duração (min)",
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )

@@ -284,7 +284,7 @@ private fun BookingExtraCard(
                     Text(
                         text = buildList {
                             if (extra.additionalDurationMinutes > 0) {
-                                add("+${extra.additionalDurationMinutes} min trabalho")
+                                add("+${extra.additionalDurationMinutes} min")
                             }
                             if (extra.dryingDurationMinutes > 0) {
                                 add("${extra.dryingDurationMinutes} min secagem")

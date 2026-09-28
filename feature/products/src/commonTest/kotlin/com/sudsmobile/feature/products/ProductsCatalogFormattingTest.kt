@@ -82,6 +82,7 @@ class ProductsCatalogFormattingTest {
         runCurrent()
 
         val loaded = assertIs<ProductCatalogUiState.Loaded>(viewModel.catalogState.value)
+        assertEquals("45 min", loaded.services.single().durationLabel)
         val extra = loaded.extras.single()
         assertEquals("wax", extra.id)
         assertEquals("Enceramento", extra.name)

@@ -3,14 +3,39 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+  MIN_BOOKING_LEAD_MINUTES,
   adminReservationExpectedStatuses,
   buildDaySlots,
   capacityForDate,
   normalizeLoyalty,
   reservationCanBeMarkedPaid,
   reservationEarnsLoyaltyStamp,
+  slotMeetsMinimumBookingLeadTime,
   slotOverlapsBlockedRange,
 } = require("../src/bookingDomain");
+
+test("booking slots require at least fifteen minutes of lead time", () => {
+  const now = new Date("2026-07-03T10:00:00.000Z");
+
+  assert.equal(MIN_BOOKING_LEAD_MINUTES, 15);
+  assert.equal(slotMeetsMinimumBookingLeadTime("2026-07-03T10:14:59.999Z", now), false);
+  assert.equal(slotMeetsMinimumBookingLeadTime("2026-07-03T10:15:00.000Z", now), true);
+});
+
+test("availability hides past and too-soon slots", () => {
+  const slots = buildDaySlots(
+    "2026-07-03",
+    {hoursLabel: "10:00 - 11:00"},
+    15,
+    15,
+    {capacityPerSlot: 1, capacityOverrides: [], blockedSlots: []},
+    new Map(),
+    new Date("2026-07-03T10:00:00.000Z"),
+  );
+
+  assert.equal(slots.find((slot) => slot.time === "10:00").available, false);
+  assert.equal(slots.find((slot) => slot.time === "10:15").available, true);
+});
 
 test("admin reservation lifecycle completes accepted work before payment", () => {
   assert.deepEqual(adminReservationExpectedStatuses("accept"), ["pending"]);

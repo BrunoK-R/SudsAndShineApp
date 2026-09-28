@@ -1,5 +1,7 @@
 "use strict";
 
+const MIN_BOOKING_LEAD_MINUTES = 15;
+
 function cleanString(value, maxLength) {
   return String(value || "")
     .trim()
@@ -104,7 +106,17 @@ function capacityForDate(date, config) {
   return config.capacityPerSlot;
 }
 
-function buildDaySlots(dateId, opening, slotInterval, durationMinutes, config, reservations) {
+function slotMeetsMinimumBookingLeadTime(
+  slotStart,
+  now = new Date(),
+  leadMinutes = MIN_BOOKING_LEAD_MINUTES,
+) {
+  const start = slotStart instanceof Date ? slotStart : new Date(String(slotStart || ""));
+  if (Number.isNaN(start.getTime())) return false;
+  return start.getTime() >= now.getTime() + leadMinutes * 60 * 1000;
+}
+
+function buildDaySlots(dateId, opening, slotInterval, durationMinutes, config, reservations, now = null) {
   const range = parseTimeRange(opening.hoursLabel);
   if (!range) return [];
   const slots = [];
@@ -118,9 +130,10 @@ function buildDaySlots(dateId, opening, slotInterval, durationMinutes, config, r
     const used = reservations.get(slotStart) || 0;
     const blocked = blockedRanges.some((slot) => slotOverlapsBlockedRange(slotStart, slotEnd, slot));
     const remainingCapacity = blocked ? 0 : Math.max(0, capacityPerSlot - used);
+    const tooSoon = now !== null && !slotMeetsMinimumBookingLeadTime(slotStart, now);
     slots.push({
       time,
-      available: !blocked && remainingCapacity > 0,
+      available: !blocked && !tooSoon && remainingCapacity > 0,
       remainingCapacity,
     });
   }
@@ -150,6 +163,7 @@ function toTimeLabel(totalMinutes) {
 }
 
 module.exports = {
+  MIN_BOOKING_LEAD_MINUTES,
   adminReservationExpectedStatuses,
   buildDaySlots,
   capacityForDate,
@@ -157,5 +171,6 @@ module.exports = {
   normalizePaymentStatus,
   reservationCanBeMarkedPaid,
   reservationEarnsLoyaltyStamp,
+  slotMeetsMinimumBookingLeadTime,
   slotOverlapsBlockedRange,
 };

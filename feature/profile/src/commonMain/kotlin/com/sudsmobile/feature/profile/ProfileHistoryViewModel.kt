@@ -230,7 +230,7 @@ private fun BookingHistoryReservation.toHistoryItemOrNull(): ProfileHistoryItemU
         date = slotStartIso.toDateLabel(),
         time = slotStartIso.toTimeLabel(),
         durationLabels = buildList {
-            if (workDurationMinutes > 0) add("Trabalho: $workDurationMinutes min")
+            if (workDurationMinutes > 0) add("$workDurationMinutes min")
             if (dryingDurationMinutes > 0) add("Secagem: $dryingDurationMinutes min")
             if (dryingDurationMinutes > 0) {
                 estimatedReadyAtIso?.toDateTimeLabel()?.let { add("Levantamento previsto: $it") }

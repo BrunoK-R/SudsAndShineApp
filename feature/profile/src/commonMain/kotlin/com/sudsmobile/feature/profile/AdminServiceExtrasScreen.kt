@@ -507,7 +507,7 @@ private fun AdminServiceExtraCard(
             ) {
                 AdminServiceExtraMetric(
                     value = "+${extra.additionalDurationMinutes} min",
-                    label = "Trabalho",
+                    label = "Duração",
                     modifier = Modifier.weight(1f),
                 )
                 AdminServiceExtraMetric(
@@ -660,7 +660,7 @@ private fun AdminServiceExtraFormCard(
                 AdminServiceExtraTextField(
                     value = form.additionalDurationMinutes,
                     onValueChange = { onFormChange(form.copy(additionalDurationMinutes = it.take(3))) },
-                    label = "Trabalho adicional (min)",
+                    label = "Duração adicional (min)",
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                 )
