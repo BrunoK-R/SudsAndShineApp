@@ -143,7 +143,6 @@ internal val bookingVehicleCategories = listOf(
 @Composable
 fun ProductsScreen(
     contentPadding: PaddingValues,
-    visualFixtureEnabled: Boolean = false,
     initialServiceId: String? = null,
     initialSelectionPreset: BookingSelectionPreset? = null,
     initialServiceRequestKey: Long = 0L,
@@ -170,14 +169,8 @@ fun ProductsScreen(
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val catalogState by catalogViewModel.catalogState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(visualFixtureEnabled) {
-        if (!visualFixtureEnabled) catalogViewModel.loadCatalog()
-    }
-
-    val renderedCatalogState = if (visualFixtureEnabled) {
-        bookingPixelReferenceCatalog()
-    } else {
-        catalogState
+    LaunchedEffect(Unit) {
+        catalogViewModel.loadCatalog()
     }
 
     ProductsScreenContent(
@@ -185,7 +178,7 @@ fun ProductsScreen(
         initialServiceId = initialServiceId,
         initialSelectionPreset = initialSelectionPreset,
         initialServiceRequestKey = initialServiceRequestKey,
-        catalogState = renderedCatalogState,
+        catalogState = catalogState,
         vehiclesState = vehiclesState,
         vehicleRevision = vehicleRevision,
         bookingRevision = bookingRevision,
@@ -322,6 +315,11 @@ private fun ProductsScreenContent(
         extra.priceCentsForVehicle(selectedVehicle?.type) * (selectedExtraQuantities[extra.id] ?: 1)
     }
     val bookingDurationMinutes = bookingWorkDurationMinutes(
+        service = selectedService,
+        selectedExtras = selectedExtras,
+        selectedExtraQuantities = selectedExtraQuantities,
+    )
+    val bookingDryingMinutes = bookingDryingDurationMinutes(
         service = selectedService,
         selectedExtras = selectedExtras,
         selectedExtraQuantities = selectedExtraQuantities,
@@ -549,7 +547,7 @@ private fun ProductsScreenContent(
             availabilityAnchorDate = null
             minimumAvailabilityMonthAnchor = null
             unavailableInitialServiceId = null
-            currentStepName = BookingStep.Extras.name
+            currentStepName = BookingStep.Service.name
             onClearSubmitError()
         }
     }
@@ -687,6 +685,8 @@ private fun ProductsScreenContent(
                                         extras = eligibleExtras,
                                         selectedExtraIds = selectedExtraIds,
                                         selectedExtraQuantities = selectedExtraQuantities,
+                                        workDurationMinutes = bookingDurationMinutes,
+                                        dryingDurationMinutes = bookingDryingMinutes,
                                         vehicleType = selectedVehicle?.type,
                                         onExtraToggled = { extra ->
                                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -998,7 +998,11 @@ private fun ProductsScreenContent(
                             currentStep == BookingStep.Confirmation -> null
                             (currentStep == BookingStep.Service || currentStep == BookingStep.Extras) &&
                                 selectedService != null -> {
-                                "${selectedService.durationLabel} · ${selectedService.passengerPrice}"
+                                bookingDurationAndPriceLabel(
+                                    workDurationMinutes = bookingDurationMinutes,
+                                    dryingDurationMinutes = bookingDryingMinutes,
+                                    priceLabel = selectedService.passengerPrice,
+                                )
                             }
                             else -> selectionPriceLabel
                         },
@@ -1050,6 +1054,8 @@ private fun BookingConfirmationContent(
             .padding(top = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        BookingArrivalNoticeCard()
+
         ConfirmationCard(
             title = "Detalhes do Serviço",
             onEdit = onEditService,
@@ -1169,6 +1175,50 @@ private fun BookingConfirmationContent(
             submitState = submitState,
             onAction = onSubmitErrorAction,
         )
+    }
+}
+
+@Composable
+private fun BookingArrivalNoticeCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.32f),
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.45f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.AccessTime,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(24.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "Entregue o veículo 10 minutos antes",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Chegue 10 minutos antes da hora marcada.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -2043,17 +2093,29 @@ private fun PriceSummaryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "Total a Pagar",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
-                    fontWeight = FontWeight.Bold,
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "Total a pagar no levantamento do veículo",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "Não é necessário pagar agora.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.76f),
+                    )
+                }
                 Icon(
                     imageVector = Icons.Filled.Euro,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.tertiaryContainer,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier
+                        .padding(start = 12.dp)
+                        .size(22.dp),
                 )
             }
 
@@ -3896,6 +3958,16 @@ internal fun bookingDryingDurationMinutes(
 ): Int = (service?.dryingDurationMinutes ?: 0) + selectedExtras.sumOf { extra ->
     extra.dryingDurationMinutes * (selectedExtraQuantities[extra.id] ?: 1)
 }
+
+internal fun bookingDurationAndPriceLabel(
+    workDurationMinutes: Int,
+    dryingDurationMinutes: Int,
+    priceLabel: String,
+): String = buildList {
+    add("$workDurationMinutes min")
+    if (dryingDurationMinutes > 0) add("$dryingDurationMinutes min secagem")
+    add(priceLabel)
+}.joinToString(separator = " · ")
 
 internal fun resolveInitialServiceId(
     initialServiceId: String?,

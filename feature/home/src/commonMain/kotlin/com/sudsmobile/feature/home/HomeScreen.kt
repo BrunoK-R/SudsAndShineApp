@@ -28,7 +28,6 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun HomeScreen(
     contentPadding: PaddingValues,
-    visualFixtureEnabled: Boolean = false,
     onBookService: () -> Unit = {},
     onBookSelectedService: (String) -> Unit = { onBookService() },
     onViewServices: () -> Unit = {},
@@ -49,7 +48,7 @@ fun HomeScreen(
 
     HomeScreenContent(
         contentPadding = contentPadding,
-        uiState = if (visualFixtureEnabled) homePixelReferenceState() else uiState,
+        uiState = uiState,
         onBookService = onBookService,
         onBookSelectedService = onBookSelectedService,
         onViewServices = onViewServices,

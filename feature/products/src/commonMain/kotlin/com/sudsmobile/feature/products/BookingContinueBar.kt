@@ -86,8 +86,7 @@ internal fun ContinueBar(
                             text = summaryTitle,
                             color = SudsColors.onBrand,
                             style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 2,
                         )
                         if (summaryDetail != null) {
                             Text(
@@ -105,7 +104,7 @@ internal fun ContinueBar(
 
                 Surface(
                     modifier = Modifier
-                        .width(150.dp)
+                        .width(184.dp)
                         .then(if (summaryTitle == null) Modifier.weight(1f) else Modifier)
                         .height(64.dp)
                         .semantics { role = Role.Button }
@@ -126,23 +125,22 @@ internal fun ContinueBar(
                                     Modifier
                                 },
                             )
-                            .padding(horizontal = SudsSpacing.lg),
+                            .padding(horizontal = SudsSpacing.md),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
                             text = label,
                             modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 2,
                         )
                         Spacer(Modifier.width(SudsSpacing.xs))
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
-                            modifier = Modifier.size(SudsSpacing.xl),
+                            modifier = Modifier.size(SudsSpacing.lg),
                         )
                     }
                 }

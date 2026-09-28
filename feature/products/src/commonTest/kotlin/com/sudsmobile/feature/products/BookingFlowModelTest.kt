@@ -183,19 +183,6 @@ class BookingFlowModelTest {
         )
     }
 
-    @Test
-    fun pixelReferenceCatalogKeepsVisualAcceptanceOrderAndPremiumSelection() {
-        val fixture = bookingPixelReferenceCatalog()
-
-        assertEquals(
-            listOf("standard", "premium", "exterior"),
-            fixture.services.map(ProductServiceUi::id),
-        )
-        assertEquals("premium", preferredBookingServiceId(fixture.services))
-        assertEquals("45 min", fixture.services[1].durationLabel)
-        assertEquals("32,00€", fixture.services[1].passengerPrice)
-    }
-
     private fun service(
         id: String,
         name: String,

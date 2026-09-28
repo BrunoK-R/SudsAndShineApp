@@ -38,6 +38,26 @@ class ProductsBookingDraftTest {
 
         assertEquals(105, bookingWorkDurationMinutes(service, listOf(extra), mapOf("trunk" to 1)))
         assertEquals(300, bookingDryingDurationMinutes(service, listOf(extra), mapOf("trunk" to 1)))
+        assertEquals(
+            "105 min · 300 min secagem · 70,00€",
+            bookingDurationAndPriceLabel(
+                workDurationMinutes = bookingWorkDurationMinutes(service, listOf(extra), mapOf("trunk" to 1)),
+                dryingDurationMinutes = bookingDryingDurationMinutes(service, listOf(extra), mapOf("trunk" to 1)),
+                priceLabel = "70,00€",
+            ),
+        )
+    }
+
+    @Test
+    fun durationSummaryOmitsDryingWhenItDoesNotApply() {
+        assertEquals(
+            "150 min · 32,00€",
+            bookingDurationAndPriceLabel(
+                workDurationMinutes = 150,
+                dryingDurationMinutes = 0,
+                priceLabel = "32,00€",
+            ),
+        )
     }
 
     @Test

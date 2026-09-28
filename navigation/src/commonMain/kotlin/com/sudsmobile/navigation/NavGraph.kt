@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun SetupNavGraph(
     showOnboarding: Boolean = false,
-    visualFixtureEnabled: Boolean = false,
     onCompleteOnboarding: suspend () -> Unit = {},
     onResetOnboardingPreference: suspend () -> Unit = {},
     pendingNotificationRoute: String? = null,
@@ -60,7 +59,6 @@ fun SetupNavGraph(
         composable(Routes.Main) {
             MainScreen(
                 onRequestSignIn = { navController.navigate(Routes.Auth) },
-                visualFixtureEnabled = visualFixtureEnabled,
                 pendingNotificationRoute = pendingNotificationRoute,
                 onNotificationRouteConsumed = onNotificationRouteConsumed,
             )

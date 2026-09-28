@@ -122,6 +122,8 @@ internal fun BookingExtrasStepContent(
     extras: List<ProductExtraUi>,
     selectedExtraIds: List<String>,
     selectedExtraQuantities: Map<String, Int>,
+    workDurationMinutes: Int,
+    dryingDurationMinutes: Int,
     vehicleType: String?,
     onExtraToggled: (ProductExtraUi) -> Unit,
     onExtraQuantityChanged: (ProductExtraUi, Int) -> Unit,
@@ -157,7 +159,11 @@ internal fun BookingExtrasStepContent(
                 )
                 service?.let {
                     Text(
-                        text = "${it.durationLabel} · a partir de ${it.passengerPrice}",
+                        text = bookingDurationAndPriceLabel(
+                            workDurationMinutes = workDurationMinutes,
+                            dryingDurationMinutes = dryingDurationMinutes,
+                            priceLabel = "a partir de ${it.passengerPrice}",
+                        ),
                         color = SudsColors.onBrandMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
