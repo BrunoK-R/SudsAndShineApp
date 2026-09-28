@@ -11,6 +11,7 @@ internal enum class BookingStep {
 }
 
 internal const val BookingProgressStepCount = 5
+internal const val EndOfDayPickupPolicy = "end_of_day_if_booked_by_10_otherwise_next_day"
 
 internal enum class BookingStepDirection {
     Forward,
@@ -39,6 +40,41 @@ internal fun List<ProductServiceUi>.filteredBy(filter: BookingServiceFilter): Li
 private fun ProductServiceUi.isDetailingService(): Boolean {
     val searchable = "$id $name $description".lowercase()
     return listOf("detail", "premium", "acabamento", "ceramic").any(searchable::contains)
+}
+
+internal fun bookingPickupPolicy(
+    service: ProductServiceUi?,
+    selectedExtras: List<ProductExtraUi>,
+): String = if (
+    service?.pickupPolicy == EndOfDayPickupPolicy ||
+    selectedExtras.any { it.pickupPolicy == EndOfDayPickupPolicy }
+) {
+    EndOfDayPickupPolicy
+} else {
+    ""
+}
+
+internal fun bookingPickupLabel(pickupPolicy: String, selectedTime: String?): String? {
+    if (pickupPolicy != EndOfDayPickupPolicy) return null
+    val selectedMinutes = selectedTime
+        ?.trim()
+        ?.split(":")
+        ?.takeIf { it.size == 2 }
+        ?.let { parts ->
+            val hour = parts[0].toIntOrNull()
+            val minute = parts[1].toIntOrNull()
+            if (hour != null && minute != null && hour in 0..23 && minute in 0..59) {
+                hour * 60 + minute
+            } else {
+                null
+            }
+        }
+
+    return when {
+        selectedMinutes == null -> "Levantamento no próprio dia até às 10h; depois, no dia seguinte"
+        selectedMinutes <= 10 * 60 -> "Levantamento no final do próprio dia"
+        else -> "Levantamento no dia seguinte"
+    }
 }
 
 internal fun bookingProgressIndex(step: BookingStep): Int? = when (step) {

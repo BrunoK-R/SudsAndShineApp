@@ -15,6 +15,7 @@ data class ServiceCatalogService(
     val iconKey: String,
     val popular: Boolean,
     val dryingDurationMinutes: Int = 0,
+    val pickupPolicy: String = "",
 )
 
 data class ServiceCatalogExtra(
@@ -30,6 +31,7 @@ data class ServiceCatalogExtra(
     val iconKey: String,
     val eligibleServiceIds: List<String> = emptyList(),
     val dryingDurationMinutes: Int = 0,
+    val pickupPolicy: String = "",
 )
 
 sealed interface ServiceCatalogResult {

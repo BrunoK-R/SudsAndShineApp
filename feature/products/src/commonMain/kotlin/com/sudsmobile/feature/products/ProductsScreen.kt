@@ -1047,6 +1047,10 @@ private fun BookingConfirmationContent(
 ) {
     val workDurationMinutes = bookingWorkDurationMinutes(service, selectedExtras, selectedExtraQuantities)
     val dryingDurationMinutes = bookingDryingDurationMinutes(service, selectedExtras, selectedExtraQuantities)
+    val pickupLabel = bookingPickupLabel(
+        pickupPolicy = bookingPickupPolicy(service, selectedExtras),
+        selectedTime = time,
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1105,6 +1109,12 @@ private fun BookingConfirmationContent(
                 ConfirmationLine(
                     icon = Icons.Filled.AccessTime,
                     text = "Secagem: $dryingDurationMinutes min",
+                )
+            }
+            pickupLabel?.let {
+                ConfirmationLine(
+                    icon = Icons.Filled.AccessTime,
+                    text = it,
                 )
             }
         }

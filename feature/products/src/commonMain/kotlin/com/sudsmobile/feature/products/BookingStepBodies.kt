@@ -167,6 +167,13 @@ internal fun BookingExtrasStepContent(
                         color = SudsColors.onBrandMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    bookingPickupLabel(it.pickupPolicy, selectedTime = null)?.let { pickupLabel ->
+                        Text(
+                            text = pickupLabel,
+                            color = SudsColors.onBrandMuted,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
             }
         }

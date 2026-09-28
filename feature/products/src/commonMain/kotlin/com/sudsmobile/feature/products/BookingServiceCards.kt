@@ -294,6 +294,13 @@ private fun BookingExtraCard(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+                bookingPickupLabel(extra.pickupPolicy, selectedTime = null)?.let { pickupLabel ->
+                    Text(
+                        text = pickupLabel,
+                        color = SudsColors.onBrandMuted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
                 Text(
                     text = "+ $priceLabel" + if (extra.quantityEnabled) " / unidade" else "",
                     color = SudsColors.champagne,

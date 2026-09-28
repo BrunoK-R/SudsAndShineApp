@@ -183,6 +183,28 @@ class BookingFlowModelTest {
         )
     }
 
+    @Test
+    fun describesTheUpholsteryPickupRuleFromTheSelectedTime() {
+        val service = service("fabric-upholstery", "Lavagem de Estofos em Tecido").copy(
+            pickupPolicy = EndOfDayPickupPolicy,
+        )
+
+        assertEquals(EndOfDayPickupPolicy, bookingPickupPolicy(service, emptyList()))
+        assertEquals(
+            "Levantamento no próprio dia até às 10h; depois, no dia seguinte",
+            bookingPickupLabel(EndOfDayPickupPolicy, selectedTime = null),
+        )
+        assertEquals(
+            "Levantamento no final do próprio dia",
+            bookingPickupLabel(EndOfDayPickupPolicy, selectedTime = "10:00"),
+        )
+        assertEquals(
+            "Levantamento no dia seguinte",
+            bookingPickupLabel(EndOfDayPickupPolicy, selectedTime = "10:30"),
+        )
+        assertNull(bookingPickupLabel("", selectedTime = "10:00"))
+    }
+
     private fun service(
         id: String,
         name: String,
