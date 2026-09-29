@@ -6,18 +6,27 @@ Este documento contém apenas o que continua por decidir, preparar ou validar. A
 
 ### Horários
 
-- Confirmar o horário final: segunda a quinta das 10h às 19h e sexta a domingo das 10h às 20h.
+- Confirmar o horário final: segunda a quinta das 10h às 19h e sexta a domingo das 10h às 20h. 
+reposta: Confirmado
 - Confirmar que o domingo deve aceitar marcações.
+resposta: Confirmado
 - Depois da confirmação, usar o mesmo horário na agenda e na informação pública da app.
+  resposta: Confirmado
 
 ### Serviços ainda incompletos
 
 - Definir separadamente o tempo de trabalho e o tempo de secagem da **Aspiração** (11,50 € para passageiros e 14 € para SUV).
+Resposta: Aqui a regra de negocio é que o levantamento é no final do dia se o serviço for até as 10h. Caso contrario é no dia seguinte, isso para lavagem de bagageira e lavagem de estofos. Não aspiração. 
 - Definir separadamente o tempo de trabalho e o tempo de secagem da **Lavagem de Bagageira**, atualmente indicada como “1h+” (22,50 € para passageiros e 25,50 € para SUV).
+Resposta: Igual acima. 
 - Definir separadamente o tempo de trabalho e o tempo de secagem da **Lavagem de Estofos em Tecido** (75 € para passageiros e 85 € para SUV).
+Resposta: Igual acima. 
 - Confirmar se a Lavagem de Estofos em Tecido só pode ser marcada às 10h.
+Resposta: Pode sempre ser marcada mas só pode ser levantado no mesmo dia se marcada até as 10h. Itual dito acima
 - Definir separadamente o tempo de trabalho e o tempo de secagem da lavagem de estofos por unidade.
+Resposta: igual acima. Tempo de trabalho é o que foi informado e está nos OCR. 
 - Confirmar se as 4 horas da **Lavagem de Estofos em Pele** são apenas trabalho ou se incluem secagem e, nesse caso, indicar a divisão exata.
+Resposta: Ainda por confirmar deixa esta parte. 
 
 Os tempos de secagem ainda não confirmados permanecem a zero. Não devem ser usados valores estimados.
 
@@ -28,6 +37,7 @@ Confirmar com o João se o **Polimento de Faróis** deve ser:
 - um serviço independente de 1h30 e 37 €;
 - um extra;
 - ou ambas as opções.
+Resposta: Ambas as opções. 
 
 ### Convite de amigo
 
@@ -36,6 +46,8 @@ Confirmar com o João quem recebe o selo extra depois da primeira lavagem paga d
 - quem fez o convite;
 - o novo cliente;
 - ou ambos.
+
+Resposta: Por enquanto remova o convite de amigo. 
 
 ### Emails
 
@@ -46,14 +58,21 @@ Se forem necessários emails, falta definir:
 - em que momentos são enviados;
 - qual o endereço de contacto a usar;
 - se o cliente pode corrigir o email recebido da conta Apple ou Google antes de concluir a marcação.
+Resposta:  por enquanto não vamos enviar emails. 
+
 
 ## 2. Preparação de produção
 
 - Atualizar no Firestore os serviços e extras já confirmados. Os novos valores predefinidos só são usados quando não existem registos de catálogo.
+Resposta:  Sim reveja. 
 - Rever os registos antigos do catálogo para evitar serviços ou extras duplicados depois da atualização.
+  Resposta:  sim reveja
 - Decidir como tratar marcações antigas que aparecem como concluídas, mas não têm o pagamento registado.
+- Resposta: implementar um botão de admin de reset de marcações e elas ficam como canceladas, todos os utilizadores ou por data. 
 - Manter os selos históricos até existir uma decisão explícita para os alterar.
+Resposta: implementar um botão de admin de reset de Selos, todos os utilizadores ou por data. 
 - Publicar primeiro as funções Firebase e depois as novas versões Android e iOS.
+  Resposta: Sempre. 
 
 ## 3. Validação em dispositivos reais
 
