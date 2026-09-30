@@ -1,24 +1,29 @@
 package org.sudsmobile.app
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,8 +31,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
@@ -100,6 +108,9 @@ internal fun ShakeFeedbackHost(content: @Composable () -> Unit) {
     val feedback: FeedbackRepository = koinInject()
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val capture = rememberFeedbackScreenshotCapture()
     var visible by remember { mutableStateOf(false) }
     var screenshot by remember { mutableStateOf<FeedbackScreenshot?>(null) }
@@ -134,10 +145,15 @@ internal fun ShakeFeedbackHost(content: @Composable () -> Unit) {
 
     if (visible) {
         val signedIn = auth.sessionState.value is AuthSessionState.Authenticated
-        ModalBottomSheet(onDismissRequest = { if (!submitting) visible = false }) {
+        ModalBottomSheet(
+            onDismissRequest = { if (!submitting) visible = false },
+            sheetState = sheetState,
+        ) {
             Column(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                    .imePadding().padding(horizontal = 24.dp, vertical = 16.dp),
+                    .imePadding().pointerInput(Unit) {
+                        detectTapGestures(onTap = { focusManager.clearFocus() })
+                    }.padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("Enviar feedback", style = MaterialTheme.typography.headlineSmall)
@@ -171,9 +187,10 @@ internal fun ShakeFeedbackHost(content: @Composable () -> Unit) {
                         )
                     }
                     message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (submitting) CircularProgressIndicator()
                     Button(
                         onClick = {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
                             submitting = true
                             message = null
                             scope.launch {
@@ -190,7 +207,23 @@ internal fun ShakeFeedbackHost(content: @Composable () -> Unit) {
                         },
                         enabled = title.trim().isNotEmpty() && !submitting,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Enviar") }
+                    ) {
+                        if (submitting) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = LocalContentColor.current,
+                                    strokeWidth = 2.dp,
+                                )
+                                Text("A enviar…")
+                            }
+                        } else {
+                            Text("Enviar")
+                        }
+                    }
                 }
             }
         }

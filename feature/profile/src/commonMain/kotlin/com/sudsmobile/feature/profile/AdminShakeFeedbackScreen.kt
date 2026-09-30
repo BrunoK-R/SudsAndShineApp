@@ -1,7 +1,10 @@
 package com.sudsmobile.feature.profile
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,27 +16,36 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -59,6 +71,7 @@ fun AdminShakeFeedbackScreen(
     val access: AdminAccessViewModel = koinViewModel()
     val repository: FeedbackRepository = koinInject()
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     val sessionState by access.sessionState.collectAsStateWithLifecycle()
     val accessState by access.uiState.collectAsStateWithLifecycle()
     var items by remember { mutableStateOf<List<FeedbackItem>?>(null) }
@@ -70,7 +83,8 @@ fun AdminShakeFeedbackScreen(
     var comment by remember { mutableStateOf("") }
     var mutationPending by remember { mutableStateOf(false) }
     var mutationError by remember { mutableStateOf<String?>(null) }
-    var confirmDelete by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<FeedbackItem?>(null) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
     var retryKey by remember { mutableIntStateOf(0) }
     var sortByLikes by remember { mutableStateOf(false) }
 
@@ -86,6 +100,7 @@ fun AdminShakeFeedbackScreen(
         if (accessState !is AdminAccessUiState.Admin) {
             items = null
             selected = null
+            pendingDelete = null
             return@LaunchedEffect
         }
         error = null
@@ -159,17 +174,47 @@ fun AdminShakeFeedbackScreen(
                             items!!.sortedWith(compareByDescending<FeedbackItem> { it.likeCount }.thenByDescending { it.createdAtIso })
                         } else items!!
                         sortedItems.forEach { item ->
-                            Card(modifier = Modifier.fillMaxWidth().clickable { selected = item }) {
-                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text(item.title, style = MaterialTheme.typography.titleMedium)
-                                    if (item.likeCount > 0) {
-                                        Text("${item.likeCount} gostos", style = MaterialTheme.typography.bodySmall)
+                            key(item.id) {
+                                val dismissState = rememberSwipeToDismissBoxState(
+                                    confirmValueChange = { value ->
+                                        if (value == SwipeToDismissBoxValue.EndToStart && !mutationPending) {
+                                            pendingDelete = item
+                                            deleteError = null
+                                        }
+                                        false
+                                    },
+                                )
+                                SwipeToDismissBox(
+                                    state = dismissState,
+                                    enableDismissFromStartToEnd = false,
+                                    backgroundContent = {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize()
+                                                .background(MaterialTheme.colorScheme.errorContainer)
+                                                .padding(end = 20.dp),
+                                            contentAlignment = Alignment.CenterEnd,
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "Eliminar feedback",
+                                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                            )
+                                        }
+                                    },
+                                ) {
+                                    Card(modifier = Modifier.fillMaxWidth().clickable { selected = item }) {
+                                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text(item.title, style = MaterialTheme.typography.titleMedium)
+                                            if (item.likeCount > 0) {
+                                                Text("${item.likeCount} gostos", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                            Text(item.body, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
+                                            Text(
+                                                "${item.submitterEmail} · ${item.platform} · ${item.createdAtIso.take(10)}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        }
                                     }
-                                    Text(item.body, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        "${item.submitterEmail} · ${item.platform} · ${item.createdAtIso.take(10)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
                                 }
                             }
                         }
@@ -180,10 +225,12 @@ fun AdminShakeFeedbackScreen(
     }
 
     selected?.let { item ->
-        ModalBottomSheet(onDismissRequest = { selected = null }) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(onDismissRequest = { selected = null }, sheetState = sheetState) {
             Column(
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f)
                     .verticalScroll(rememberScrollState())
+                    .pointerInput(Unit) { detectTapGestures(onTap = { focusManager.clearFocus() }) }
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -208,6 +255,7 @@ fun AdminShakeFeedbackScreen(
                     TextButton(
                         enabled = !mutationPending,
                         onClick = {
+                            focusManager.clearFocus()
                             mutationPending = true
                             mutationError = null
                             scope.launch {
@@ -242,6 +290,7 @@ fun AdminShakeFeedbackScreen(
                     Button(
                         enabled = comment.trim().isNotEmpty() && !mutationPending,
                         onClick = {
+                            focusManager.clearFocus()
                             mutationPending = true
                             mutationError = null
                             scope.launch {
@@ -258,31 +307,40 @@ fun AdminShakeFeedbackScreen(
                     ) { Text("Adicionar comentário") }
                 }
                 mutationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = { confirmDelete = true }, enabled = !mutationPending) {
+                TextButton(onClick = {
+                    focusManager.clearFocus()
+                    pendingDelete = item
+                    deleteError = null
+                }, enabled = !mutationPending) {
                     Text("Eliminar feedback", color = MaterialTheme.colorScheme.error)
                 }
             }
         }
     }
-    if (confirmDelete && selected != null) {
-        val item = selected!!
+    pendingDelete?.let { item ->
         AlertDialog(
-            onDismissRequest = { if (!mutationPending) confirmDelete = false },
+            onDismissRequest = { if (!mutationPending) pendingDelete = null },
             title = { Text("Eliminar feedback?") },
-            text = { Text("Esta ação elimina a mensagem, os comentários e a captura de ecrã.") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Esta ação elimina a mensagem, os comentários e a captura de ecrã.")
+                    deleteError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
             confirmButton = {
                 TextButton(
                     enabled = !mutationPending,
                     onClick = {
                         mutationPending = true
+                        deleteError = null
                         scope.launch {
                             when (val result = repository.delete(item.id)) {
                                 is FeedbackResult.Success -> {
                                     items = items?.filterNot { it.id == item.id }
-                                    selected = null
-                                    confirmDelete = false
+                                    if (selected?.id == item.id) selected = null
+                                    pendingDelete = null
                                 }
-                                is FeedbackResult.Failure -> mutationError = result.message
+                                is FeedbackResult.Failure -> deleteError = result.message
                             }
                             mutationPending = false
                         }
@@ -290,7 +348,7 @@ fun AdminShakeFeedbackScreen(
                 ) { Text("Eliminar") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDelete = false }, enabled = !mutationPending) { Text("Cancelar") }
+                TextButton(onClick = { pendingDelete = null }, enabled = !mutationPending) { Text("Cancelar") }
             },
         )
     }
