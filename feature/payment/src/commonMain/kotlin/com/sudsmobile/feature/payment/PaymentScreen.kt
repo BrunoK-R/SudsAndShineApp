@@ -79,15 +79,16 @@ fun PaymentScreen(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                .fillMaxSize(),
         ) {
             PaymentHeader(onBack = onBack)
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                     .padding(horizontal = 24.dp)
                     .padding(top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -109,7 +110,6 @@ fun PaymentScreen(
 private fun PaymentHeader(onBack: () -> Unit) {
     SudsSecondaryTopBar(
         title = "Pagamentos",
-        eyebrow = "Conta e reservas",
         onBack = onBack,
     )
 }

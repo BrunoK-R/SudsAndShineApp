@@ -382,92 +382,93 @@ private fun ProfileScreenContent(
         SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                    .fillMaxSize(),
             ) {
                 SudsCompactTopBar(
                     title = "Perfil",
-                    eyebrow = "A sua conta",
-                    modifier = Modifier
-                        .statusBarsPadding()
-                        .padding(top = 8.dp, bottom = 4.dp),
+                    modifier = Modifier.statusBarsPadding(),
                 )
-                if (authenticatedUser != null) {
-                    ProfileHeader(
-                        user = authenticatedUser,
-                        statsState = statsState,
-                        preferencesState = preferencesState,
-                        profilePhotoState = profilePhotoState,
-                        onRetryStats = onRetryStats,
-                        onOpenRewards = onOpenRewards,
-                        onEditPhoto = { showProfilePhotoActions = true },
-                    )
-                } else if (isRestoringSession) {
-                    RestoringProfileHeader()
-                } else {
-                    GuestProfileHeader(onRequestSignIn = onRequestSignIn)
-                }
-
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(top = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
                 ) {
                     if (authenticatedUser != null) {
-                        NotificationDevicePromptCard(
-                            deviceState = notificationDeviceState,
-                            isAdmin = adminAccessState is AdminAccessUiState.Admin,
-                            onOpenNotificationPreferences = onOpenNotificationPreferences,
-                        )
-                        ProfileMenuCard(
-                            onOpenPersonalData = onOpenPersonalData,
-                            onOpenNotificationPreferences = onOpenNotificationPreferences,
-                            onManageVehicles = onManageVehicles,
-                            onOpenHistory = onOpenHistory,
-                            onOpenContact = onOpenContact,
-                            onOpenRewards = onOpenRewards,
-                        )
-                        AdminOperationsCard(
-                            adminAccessState = adminAccessState,
-                            onRetryAdminAccess = onRetryAdminAccess,
-                            onOpenAdminBookings = onOpenAdminBookings,
-                            onOpenAdminAvailability = onOpenAdminAvailability,
-                            onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
-                            onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
-                            onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
-                            onOpenAdminNotificationCampaignDrafts = onOpenAdminNotificationCampaignDrafts,
-                            onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
-                            onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
-                            onOpenAdminServiceExtras = onOpenAdminServiceExtras,
-                            onOpenAdminShakeFeedback = onOpenAdminShakeFeedback,
-                        )
-                        PreferencesCard(
+                        ProfileHeader(
+                            user = authenticatedUser,
+                            statsState = statsState,
                             preferencesState = preferencesState,
-                            onAppointmentReminderOptInChange = onAppointmentReminderOptInChange,
-                            onMarketingOptInChange = onMarketingOptInChange,
-                            onRetryPreferences = onRetryPreferences,
-                            onRetryPreferenceSave = onRetryPreferenceSave,
-                        )
-                        LogoutButton(onClick = onSignOut)
-                        DeleteAccountButton(
-                            enabled = accountDeletionState !is AccountDeletionUiState.Deleting,
-                            onClick = {
-                                onDismissAccountDeletionError()
-                                showAccountDeletionDialog = true
-                            },
+                            profilePhotoState = profilePhotoState,
+                            onRetryStats = onRetryStats,
+                            onOpenRewards = onOpenRewards,
+                            onEditPhoto = { showProfilePhotoActions = true },
                         )
                     } else if (isRestoringSession) {
-                        RestoringSessionCard()
-                    } else if (restoreFailedMessage != null) {
-                        RestoreFailedSessionCard(
-                            message = restoreFailedMessage,
-                            onRequestSignIn = onRequestSignIn,
-                        )
+                        RestoringProfileHeader()
+                    } else {
+                        GuestProfileHeader(onRequestSignIn = onRequestSignIn)
                     }
-                    AppVersionText()
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        if (authenticatedUser != null) {
+                            NotificationDevicePromptCard(
+                                deviceState = notificationDeviceState,
+                                isAdmin = adminAccessState is AdminAccessUiState.Admin,
+                                onOpenNotificationPreferences = onOpenNotificationPreferences,
+                            )
+                            ProfileMenuCard(
+                                onOpenPersonalData = onOpenPersonalData,
+                                onOpenNotificationPreferences = onOpenNotificationPreferences,
+                                onManageVehicles = onManageVehicles,
+                                onOpenHistory = onOpenHistory,
+                                onOpenContact = onOpenContact,
+                                onOpenRewards = onOpenRewards,
+                            )
+                            AdminOperationsCard(
+                                adminAccessState = adminAccessState,
+                                onRetryAdminAccess = onRetryAdminAccess,
+                                onOpenAdminBookings = onOpenAdminBookings,
+                                onOpenAdminAvailability = onOpenAdminAvailability,
+                                onOpenAdminBookingPolicy = onOpenAdminBookingPolicy,
+                                onOpenAdminLoyaltySettings = onOpenAdminLoyaltySettings,
+                                onOpenAdminNotificationSettings = onOpenAdminNotificationSettings,
+                                onOpenAdminNotificationCampaignDrafts = onOpenAdminNotificationCampaignDrafts,
+                                onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
+                                onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
+                                onOpenAdminServiceExtras = onOpenAdminServiceExtras,
+                                onOpenAdminShakeFeedback = onOpenAdminShakeFeedback,
+                            )
+                            PreferencesCard(
+                                preferencesState = preferencesState,
+                                onAppointmentReminderOptInChange = onAppointmentReminderOptInChange,
+                                onMarketingOptInChange = onMarketingOptInChange,
+                                onRetryPreferences = onRetryPreferences,
+                                onRetryPreferenceSave = onRetryPreferenceSave,
+                            )
+                            LogoutButton(onClick = onSignOut)
+                            DeleteAccountButton(
+                                enabled = accountDeletionState !is AccountDeletionUiState.Deleting,
+                                onClick = {
+                                    onDismissAccountDeletionError()
+                                    showAccountDeletionDialog = true
+                                },
+                            )
+                        } else if (isRestoringSession) {
+                            RestoringSessionCard()
+                        } else if (restoreFailedMessage != null) {
+                            RestoreFailedSessionCard(
+                                message = restoreFailedMessage,
+                                onRequestSignIn = onRequestSignIn,
+                            )
+                        }
+                        AppVersionText()
+                    }
                 }
             }
         }

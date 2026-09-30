@@ -15,20 +15,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -54,9 +53,7 @@ import com.sudsmobile.data.feedback.FeedbackItem
 import com.sudsmobile.data.feedback.FeedbackInteractions
 import com.sudsmobile.data.feedback.FeedbackRepository
 import com.sudsmobile.data.feedback.FeedbackResult
-import com.sudsmobile.shared.theme.SudsColors
-import com.sudsmobile.shared.ui.SudsBrandBackground
-import com.sudsmobile.shared.ui.SudsCompactTopBar
+import com.sudsmobile.shared.ui.SudsAdminHeader
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import kotlinx.coroutines.launch
@@ -125,20 +122,12 @@ fun AdminShakeFeedbackScreen(
         }
     }
 
-    SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
-            SudsCompactTopBar(
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(modifier = Modifier.fillMaxSize().padding(bottom = contentPadding.calculateBottomPadding())) {
+            SudsAdminHeader(
                 title = "Feedback recebido",
-                eyebrow = "ADMINISTRAÇÃO",
-                leadingContent = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Voltar",
-                            tint = SudsColors.onBrand,
-                        )
-                    }
-                },
+                subtitle = "Comentários e sugestões",
+                onBack = onBack,
             )
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),

@@ -66,15 +66,16 @@ fun ServicesScreen(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                .fillMaxSize(),
         ) {
             ServicesHeader(onBack = onBack)
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                     .padding(horizontal = 24.dp)
                     .padding(top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -95,7 +96,6 @@ fun ServicesScreen(
 private fun ServicesHeader(onBack: () -> Unit) {
     SudsSecondaryTopBar(
         title = "Serviços",
-        eyebrow = "Cuidado automóvel",
         onBack = onBack,
     )
 }

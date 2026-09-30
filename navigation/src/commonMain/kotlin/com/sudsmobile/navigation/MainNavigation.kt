@@ -87,11 +87,36 @@ fun MainNavigation(
         }
     }
 
+    fun navigateToMainDestination(route: String) {
+        if (mainDestinationNavigationAction(route) == MainDestinationNavigationAction.ReturnToHomeRoot) {
+            returnToHome()
+            return
+        }
+        if (route == currentRoute) return
+        if (route == Routes.Products) {
+            initialBookingServiceId = null
+            initialBookingSelectionPreset = null
+        }
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     fun navigateToBooking(serviceId: String? = null) {
         initialBookingServiceId = serviceId
         initialBookingSelectionPreset = null
         initialBookingRequestKey += 1
-        navController.navigate(Routes.Products)
+        navController.navigate(Routes.Products) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
     }
 
     fun navigateToBookingFromLeaf(serviceId: String? = null) {
@@ -145,24 +170,7 @@ fun MainNavigation(
             if (showBottomBar) {
                 SudsNavigationBar(
                     currentRoute = currentRoute,
-                    onDestinationClick = { route ->
-                        when (mainDestinationNavigationAction(route)) {
-                            MainDestinationNavigationAction.ReturnToHomeRoot -> returnToHome()
-                            MainDestinationNavigationAction.NavigateAndRestore -> {
-                                if (route == Routes.Products) {
-                                    initialBookingServiceId = null
-                                    initialBookingSelectionPreset = null
-                                }
-                                navController.navigate(route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        }
-                    }
+                    onDestinationClick = ::navigateToMainDestination,
                 )
             }
         },
@@ -210,10 +218,9 @@ fun MainNavigation(
                     onBookService = { navigateToBooking() },
                     onBookSelectedService = { serviceId -> navigateToBooking(serviceId) },
                     onViewServices = { navigateToBooking() },
-                    onViewBookings = { navController.navigate(Routes.Cart) },
-                    onOpenRewards = { navController.navigate(Routes.Loyalty) },
+                    onViewBookings = { navigateToMainDestination(Routes.Cart) },
+                    onOpenRewards = { navigateToMainDestination(Routes.Loyalty) },
                     onOpenNotifications = { navController.navigate(Routes.NotificationPreferences) },
-                    onOpenProfile = { navController.navigate(Routes.Profile) },
                     onRequestSignIn = onRequestSignIn,
                 )
             }
@@ -231,15 +238,7 @@ fun MainNavigation(
                     initialSelectionPreset = initialBookingSelectionPreset,
                     initialServiceRequestKey = initialBookingRequestKey,
                     onBack = { navController.popBackStack() },
-                    onViewBooking = {
-                        navController.navigate(Routes.Cart) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onViewBooking = { navigateToMainDestination(Routes.Cart) },
                     onHome = { returnToHome() },
                     onOpenPayment = { reservationId ->
                         navController.navigate(
@@ -281,7 +280,7 @@ fun MainNavigation(
                     onManageVehicles = { navController.navigate(Routes.Vehicles) },
                     onOpenHistory = { navController.navigate(Routes.History) },
                     onOpenContact = { navController.navigate(Routes.Contact) },
-                    onOpenRewards = { navController.navigate(Routes.Loyalty) },
+                    onOpenRewards = { navigateToMainDestination(Routes.Loyalty) },
                     onOpenAdminBookings = { navController.navigate(Routes.AdminBookings) },
                     onOpenAdminAvailability = { navController.navigate(Routes.AdminAvailability) },
                     onOpenAdminBookingPolicy = { navController.navigate(Routes.AdminBookingPolicy) },

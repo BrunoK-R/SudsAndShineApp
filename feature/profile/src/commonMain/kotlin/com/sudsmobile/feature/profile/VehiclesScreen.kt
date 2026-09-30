@@ -151,9 +151,7 @@ private fun VehiclesScreenContent(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                .fillMaxSize(),
         ) {
             VehiclesHeader(
                 onBack = onBack,
@@ -163,6 +161,9 @@ private fun VehiclesScreenContent(
             Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                 .padding(horizontal = 24.dp)
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -220,7 +221,6 @@ private fun VehiclesHeader(
 ) {
     SudsSecondaryTopBar(
         title = "Veículos",
-        eyebrow = "A sua garagem",
         onBack = onBack,
         trailingContent = {
             Button(

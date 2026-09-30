@@ -128,15 +128,16 @@ private fun PersonalDataScreenContent(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                .fillMaxSize(),
         ) {
             PersonalDataHeader(onBack = onBack)
 
             Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                 .padding(horizontal = 24.dp)
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -250,7 +251,6 @@ private fun PersonalDataScreenContent(
 private fun PersonalDataHeader(onBack: () -> Unit) {
     SudsSecondaryTopBar(
         title = "Dados pessoais",
-        eyebrow = "A sua conta",
         onBack = onBack,
     )
 }

@@ -34,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +51,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -59,12 +61,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsCustomerTheme
 import com.sudsmobile.shared.theme.SudsShapes
 import com.sudsmobile.shared.theme.SudsSpacing
 import com.sudsmobile.shared.ui.SudsGlassCard
 import com.sudsmobile.shared.ui.SudsAutomotivePhoto
 import com.sudsmobile.shared.ui.SudsAutomotivePhotoKind
 import com.sudsmobile.shared.ui.SudsBrandMark
+import com.sudsmobile.shared.ui.SudsCompactTopBar
 import com.sudsmobile.shared.ui.SudsSectionHeader
 import com.sudsmobile.shared.ui.SudsStatus
 import com.sudsmobile.shared.ui.SudsStatusCard
@@ -72,174 +76,65 @@ import com.sudsmobile.shared.ui.SudsWashCalendarIcon
 import com.sudsmobile.shared.ui.automotivePhotoKindForKey
 
 @Composable
+internal fun HomeTopBar(
+    onOpenNotifications: () -> Unit,
+) {
+    SudsCustomerTheme {
+        SudsCompactTopBar(
+            title = "Suds e Shine",
+            modifier = Modifier.statusBarsPadding(),
+            centered = true,
+            customTitle = {
+                SudsBrandMark(
+                    modifier = Modifier.size(48.dp).clip(CircleShape).semantics { heading() },
+                    contentDescription = "Suds e Shine",
+                )
+            },
+            trailingContent = {
+                IconButton(onClick = onOpenNotifications) {
+                    Icon(Icons.Filled.NotificationsNone, contentDescription = "Abrir notificações")
+                }
+            },
+        )
+    }
+}
+
+@Composable
 internal fun HomeExpandedHeader(
     identity: HomeIdentityUi,
-    collapseProgress: Float,
     onOpenLocation: () -> Unit,
-    onOpenNotifications: () -> Unit,
-    onOpenProfile: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .heightIn(min = 88.dp)
-            .padding(horizontal = SudsSpacing.contentGutter)
-            .then(
-                if (collapseProgress >= 0.5f) Modifier.clearAndSetSemantics { }
-                else Modifier,
-            ),
-        horizontalArrangement = Arrangement.spacedBy(SudsSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = SudsSpacing.contentGutter, vertical = SudsSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(SudsSpacing.xs),
     ) {
-        SudsBrandMark(
-            modifier = Modifier
-                .size(52.dp)
-                .clip(CircleShape)
-                .semantics {
-                    role = Role.Button
-                    contentDescription = "Abrir perfil"
-                }
-                .clickable(onClick = onOpenProfile),
-            contentDescription = null,
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-        ) {
-            Text(
-                text = identity.greeting,
-                color = SudsColors.onBrand,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = identity.subtitle,
-                color = SudsColors.onBrandMuted,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(
-                modifier = Modifier
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = "Abrir localização da Suds e Shine no Google Maps"
-                    }
-                    .clickable(onClick = onOpenLocation),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Place,
-                    contentDescription = null,
-                    tint = SudsColors.champagne,
-                    modifier = Modifier.size(14.dp),
-                )
-                Spacer(Modifier.width(SudsSpacing.xxs))
-                Text(
-                    text = HomeLocationActionLabel,
-                    color = SudsColors.onBrandMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = null,
-                    tint = SudsColors.onBrandMuted,
-                    modifier = Modifier.size(15.dp),
-                )
-            }
-        }
-        HomeNotificationAction(onClick = onOpenNotifications)
-    }
-}
-
-@Composable
-internal fun HomeCompactHeader(
-    collapseProgress: Float,
-    reduceMotion: Boolean,
-    onOpenNotifications: () -> Unit,
-    onOpenProfile: () -> Unit,
-) {
-    val progress = collapseProgress.coerceIn(0f, 1f)
-    val visibleProgress = if (reduceMotion) {
-        if (progress >= 0.5f) 1f else 0f
-    } else {
-        progress
-    }
-    val interactive = progress >= 0.5f
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer { alpha = visibleProgress }
-            .background(SudsColors.ink)
-            .statusBarsPadding()
-            .heightIn(min = 64.dp)
-            .padding(horizontal = SudsSpacing.contentGutter)
-            .then(
-                if (!interactive) Modifier.clearAndSetSemantics { }
-                else Modifier,
-            ),
-        horizontalArrangement = Arrangement.spacedBy(SudsSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SudsBrandMark(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .semantics {
-                    role = Role.Button
-                    contentDescription = "Abrir perfil"
-                }
-                .clickable(enabled = interactive, onClick = onOpenProfile),
-            contentDescription = null,
+        Text(
+            text = identity.greeting,
+            color = SudsColors.onBrand,
+            style = MaterialTheme.typography.headlineSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = "Início",
-            modifier = Modifier.weight(1f),
-            color = SudsColors.onBrand,
-            style = MaterialTheme.typography.titleLarge,
+            text = identity.subtitle,
+            color = SudsColors.onBrandMuted,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
-        HomeNotificationAction(
-            onClick = onOpenNotifications,
-            enabled = interactive,
-        )
-    }
-}
-
-@Composable
-private fun HomeNotificationAction(
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-) {
-    Surface(
-        modifier = Modifier
-            .size(SudsSpacing.minimumTouchTarget)
-            .semantics {
-                role = Role.Button
-                contentDescription = "Abrir notificações"
-            }
-            .clickable(enabled = enabled, onClick = onClick),
-        shape = CircleShape,
-        color = Color.Transparent,
-    ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        TextButton(onClick = onOpenLocation, contentPadding = PaddingValues(0.dp)) {
             Icon(
-                imageVector = Icons.Filled.NotificationsNone,
+                imageVector = Icons.Filled.Place,
                 contentDescription = null,
-                tint = SudsColors.onBrand,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(18.dp),
             )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = 8.dp)
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(SudsColors.champagne),
+            Spacer(Modifier.width(SudsSpacing.xs))
+            Text(HomeLocationActionLabel)
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
             )
         }
     }

@@ -62,7 +62,6 @@ private fun SudsComponentsPreviewContent(darkTheme: Boolean = false) {
             ) {
                 SudsCompactTopBar(
                     title = "O teu carro, impecável",
-                    eyebrow = "Suds e Shine",
                 )
                 SudsProgressSegments(currentStepIndex = 1, totalSteps = 4)
                 SudsSectionHeader(

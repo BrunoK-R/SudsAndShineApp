@@ -121,15 +121,16 @@ private fun NotificationPreferencesScreenContent(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                .fillMaxSize(),
         ) {
             NotificationPreferencesHeader(onBack = onBack)
 
             Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                 .padding(horizontal = 24.dp)
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -185,7 +186,6 @@ private fun NotificationPreferencesScreenContent(
 private fun NotificationPreferencesHeader(onBack: () -> Unit) {
     SudsSecondaryTopBar(
         title = "Notificações",
-        eyebrow = "Preferências da conta",
         onBack = onBack,
     )
 }

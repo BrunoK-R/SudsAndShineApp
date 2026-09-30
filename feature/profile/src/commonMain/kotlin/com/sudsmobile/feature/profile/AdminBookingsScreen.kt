@@ -64,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.shared.ui.SudsAdminHeader
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -187,7 +188,6 @@ private fun AdminBookingsScreenContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset(y = (-16).dp)
                 .weight(1f),
             contentPadding = PaddingValues(
                 start = 24.dp,
@@ -561,57 +561,11 @@ private fun AdminBookingsHeader(
     businessDateLabel: String?,
     onBack: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 24.dp, bottom = 32.dp),
-    ) {
-        TextButton(
-            onClick = onBack,
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = MaterialTheme.colorScheme.tertiaryContainer,
-            ),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Spacer(Modifier.height(18.dp))
-
-        Text(
-            text = "Marcações",
-            modifier = Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = businessDateLabel ?: "Todas as marcações",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f),
-        )
-    }
+    SudsAdminHeader(
+        title = "Marcações",
+        subtitle = businessDateLabel ?: "Todas as marcações",
+        onBack = onBack,
+    )
 }
 
 @Composable

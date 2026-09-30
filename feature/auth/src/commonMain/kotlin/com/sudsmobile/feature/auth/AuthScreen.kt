@@ -73,10 +73,7 @@ private fun AuthShell(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(bottom = 32.dp),
+                .fillMaxSize(),
         ) {
             SudsSecondaryTopBar(
                 title = "Iniciar sessão",
@@ -85,6 +82,10 @@ private fun AuthShell(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .navigationBarsPadding()
+                    .padding(bottom = 32.dp)
                     .padding(horizontal = 24.dp)
                     .padding(top = 20.dp),
                 content = content,

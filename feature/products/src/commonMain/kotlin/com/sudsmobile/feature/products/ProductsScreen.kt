@@ -617,12 +617,33 @@ private fun ProductsScreenContent(
                     },
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(if (currentStep == BookingStep.Contact) Modifier.imePadding() else Modifier)
-                        .verticalScroll(bookingScrollState)
-                        .padding(bottom = contentPadding.calculateBottomPadding() + 176.dp),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
+                    when (currentStep) {
+                        BookingStep.Service -> BookingServiceHeader(onBack = onBack)
+                        BookingStep.Extras -> BookingExtrasHeader(
+                            onBack = { currentStepName = BookingStep.Service.name },
+                        )
+                        BookingStep.Vehicle -> BookingVehicleHeader(
+                            onBack = { currentStepName = BookingStep.Extras.name },
+                        )
+                        BookingStep.DateTime -> BookingDateTimeHeader(
+                            onBack = { currentStepName = BookingStep.Vehicle.name },
+                        )
+                        BookingStep.Contact -> BookingContactHeader(
+                            onBack = { currentStepName = BookingStep.DateTime.name },
+                        )
+                        BookingStep.Confirmation -> BookingConfirmationHeader(
+                            onBack = { currentStepName = BookingStep.Contact.name },
+                        )
+                        BookingStep.Success -> Unit
+                    }
+                    Column(
+                        modifier = Modifier.fillMaxWidth().weight(1f)
+                            .then(if (currentStep == BookingStep.Contact) Modifier.imePadding() else Modifier)
+                            .verticalScroll(bookingScrollState)
+                            .padding(bottom = contentPadding.calculateBottomPadding() + 176.dp),
+                    ) {
                     AnimatedContent(
                         targetState = currentStep,
                         transitionSpec = {
@@ -639,8 +660,6 @@ private fun ProductsScreenContent(
                         Column(modifier = Modifier.fillMaxWidth()) {
                             when (animatedStep) {
                                 BookingStep.Service -> {
-                                    BookingServiceHeader(onBack = onBack)
-
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -676,10 +695,6 @@ private fun ProductsScreenContent(
                                 }
 
                                 BookingStep.Extras -> {
-                                    BookingExtrasHeader(
-                                        onBack = { currentStepName = BookingStep.Service.name },
-                                    )
-
                                     BookingExtrasStepContent(
                                         service = selectedService,
                                         extras = eligibleExtras,
@@ -716,10 +731,6 @@ private fun ProductsScreenContent(
                                 }
 
                                 BookingStep.Vehicle -> {
-                                    BookingVehicleHeader(
-                                        onBack = { currentStepName = BookingStep.Extras.name },
-                                    )
-
                                     BookingVehicleStepContent(
                                         vehiclesState = vehiclesState,
                                         selectedVehicleId = selectedVehicleId,
@@ -735,10 +746,6 @@ private fun ProductsScreenContent(
                                 }
 
                                 BookingStep.DateTime -> {
-                                    BookingDateTimeHeader(
-                                        onBack = { currentStepName = BookingStep.Vehicle.name },
-                                    )
-
                                     DateTimeStepContent(
                                         availabilityState = availabilityState,
                                         waitlistState = waitlistState,
@@ -812,10 +819,6 @@ private fun ProductsScreenContent(
                                 }
 
                                 BookingStep.Contact -> {
-                                    BookingContactHeader(
-                                        onBack = { currentStepName = BookingStep.DateTime.name },
-                                    )
-
                                     BookingContactContent(
                                         contactProfileState = contactProfileState,
                                         name = contactName,
@@ -853,10 +856,6 @@ private fun ProductsScreenContent(
                                 }
 
                                 BookingStep.Confirmation -> {
-                                    BookingConfirmationHeader(
-                                        onBack = { currentStepName = BookingStep.Contact.name },
-                                    )
-
                                     BookingConfirmationContent(
                                         service = selectedService,
                                         selectedExtras = selectedExtras,
@@ -936,6 +935,7 @@ private fun ProductsScreenContent(
                                 }
                             }
                         }
+                    }
                     }
                 }
 

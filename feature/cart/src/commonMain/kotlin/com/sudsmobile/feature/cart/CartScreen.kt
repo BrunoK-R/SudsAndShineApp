@@ -281,11 +281,7 @@ fun CartScreen(
 private fun BookingsHeader() {
     SudsCompactTopBar(
         title = "Marcações",
-        eyebrow = "A sua agenda",
-        modifier = Modifier
-            .statusBarsPadding()
-            .padding(top = 8.dp, bottom = 4.dp)
-            .semantics { heading() },
+        modifier = Modifier.statusBarsPadding(),
     )
 }
 
@@ -1880,15 +1876,16 @@ fun RatingScreen(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + if (rating > 0) 112.dp else 24.dp),
+                .fillMaxSize(),
         ) {
             RatingHeader(onBack = onBack)
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = contentPadding.calculateBottomPadding() + if (rating > 0) 112.dp else 24.dp)
                     .padding(horizontal = 24.dp)
                     .padding(top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -2042,7 +2039,6 @@ private fun List<String>.toRatingLabels(): List<String> {
 private fun RatingHeader(onBack: () -> Unit) {
     SudsSecondaryTopBar(
         title = "Avaliar serviço",
-        eyebrow = "A sua experiência",
         onBack = onBack,
     )
 }

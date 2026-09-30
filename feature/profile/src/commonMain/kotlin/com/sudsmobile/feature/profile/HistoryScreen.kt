@@ -96,18 +96,13 @@ private fun HistoryScreenContent(
     onBookAgain: (BookingSelectionPreset) -> Unit,
 ) {
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+        Column(modifier = Modifier.fillMaxSize()) {
+            HistoryHeader(onBack = onBack)
+            LazyColumn(
+            modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-        item(
-            key = "history-header",
-            contentType = "header",
-        ) {
-            HistoryHeader(onBack = onBack)
-        }
-
         when (uiState) {
             ProfileHistoryUiState.Idle,
             ProfileHistoryUiState.Loading -> item(
@@ -196,6 +191,7 @@ private fun HistoryScreenContent(
             }
             }
         }
+        }
     }
 }
 
@@ -216,7 +212,6 @@ private fun HistoryContentItem(
 private fun HistoryHeader(onBack: () -> Unit) {
     SudsSecondaryTopBar(
         title = "Histórico",
-        eyebrow = "As suas lavagens",
         onBack = onBack,
     )
 }

@@ -1,80 +1,93 @@
 package com.sudsmobile.shared.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sudsmobile.shared.theme.SudsColors
+import com.sudsmobile.shared.theme.SudsCustomerTheme
 import com.sudsmobile.shared.theme.SudsSpacing
+import com.sudsmobile.shared.platformName
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SudsCompactTopBar(
     title: String,
     modifier: Modifier = Modifier,
-    eyebrow: String? = null,
     leadingContent: (@Composable () -> Unit)? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
+    centered: Boolean = false,
+    customTitle: (@Composable () -> Unit)? = null,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .padding(horizontal = SudsSpacing.contentGutter),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (leadingContent != null) {
-            leadingContent()
-            Spacer(Modifier.width(SudsSpacing.sm))
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            if (eyebrow != null) {
-                Text(
-                    text = eyebrow.uppercase(),
-                    color = SudsColors.cyanMuted,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+    val isIos = platformName() == "iOS"
+    val titleContent: @Composable () -> Unit = {
+        if (customTitle != null) {
+            customTitle()
+        } else {
             Text(
                 text = title,
-                color = SudsColors.onBrand,
-                style = MaterialTheme.typography.titleLarge,
+                style = if (isIos) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
         }
-        if (trailingContent != null) {
-            Spacer(Modifier.width(SudsSpacing.sm))
-            trailingContent()
-        }
+    }
+    val navigationIcon: @Composable () -> Unit = { leadingContent?.invoke() }
+    val actions: @Composable RowScope.() -> Unit = { trailingContent?.invoke(this) }
+    val colors = TopAppBarDefaults.topAppBarColors(
+        containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+        actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+    )
+    if (isIos || centered) {
+        CenterAlignedTopAppBar(
+            title = titleContent,
+            modifier = modifier,
+            navigationIcon = navigationIcon,
+            actions = actions,
+            windowInsets = WindowInsets(0),
+            colors = colors,
+        )
+    } else {
+        TopAppBar(
+            title = titleContent,
+            modifier = modifier,
+            navigationIcon = navigationIcon,
+            actions = actions,
+            windowInsets = WindowInsets(0),
+            colors = colors,
+        )
     }
 }
 
@@ -83,48 +96,44 @@ fun SudsSecondaryTopBar(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    eyebrow: String? = null,
     trailingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
     SudsCompactTopBar(
         title = title,
-        eyebrow = eyebrow,
-        modifier = modifier
-            .statusBarsPadding()
-            .padding(top = SudsSpacing.sm, bottom = SudsSpacing.xs),
+        modifier = modifier.statusBarsPadding(),
         leadingContent = {
-            Surface(
-                modifier = Modifier.size(48.dp),
-                color = SudsColors.glass,
-                contentColor = SudsColors.onBrand,
-                shape = CircleShape,
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.semantics { contentDescription = "Voltar" },
-                ) {
-                    Canvas(Modifier.size(20.dp)) {
-                        val strokeWidth = 2.dp.toPx()
-                        drawLine(
-                            color = SudsColors.onBrand,
-                            start = Offset(size.width * 0.68f, size.height * 0.16f),
-                            end = Offset(size.width * 0.34f, size.height * 0.5f),
-                            strokeWidth = strokeWidth,
-                            cap = StrokeCap.Round,
-                        )
-                        drawLine(
-                            color = SudsColors.onBrand,
-                            start = Offset(size.width * 0.34f, size.height * 0.5f),
-                            end = Offset(size.width * 0.68f, size.height * 0.84f),
-                            strokeWidth = strokeWidth,
-                            cap = StrokeCap.Round,
-                        )
-                    }
-                }
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Voltar",
+                )
             }
         },
         trailingContent = trailingContent,
     )
+}
+
+@Composable
+fun SudsAdminHeader(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+) {
+    SudsCustomerTheme {
+        Column(Modifier.fillMaxWidth().background(SudsColors.navy)) {
+            SudsSecondaryTopBar(title = title, onBack = onBack)
+            Text(
+                text = subtitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(
+                    start = SudsSpacing.contentGutter,
+                    end = SudsSpacing.contentGutter,
+                    bottom = SudsSpacing.md,
+                ),
+            )
+        }
+    }
 }
 
 @Composable
@@ -183,7 +192,6 @@ fun SudsCollapsingHeader(
 
         SudsCompactTopBar(
             title = title,
-            eyebrow = eyebrow,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .alpha(progress)

@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sudsmobile.shared.ui.SudsAdminHeader
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -96,16 +97,16 @@ private fun AdminBusinessInfoScreenContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+            .background(MaterialTheme.colorScheme.background),
     ) {
         AdminBusinessInfoHeader(onBack = onBack)
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset(y = (-16).dp)
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -158,59 +159,11 @@ private fun AdminBusinessInfoScreenContent(
 
 @Composable
 private fun AdminBusinessInfoHeader(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.inverseSurface,
-                        MaterialTheme.colorScheme.secondary,
-                    ),
-                ),
-            )
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp)
-            .padding(top = 18.dp, bottom = 38.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onBack)
-                .padding(vertical = 8.dp, horizontal = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiaryContainer,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Voltar",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "Configuração do negócio",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.inverseOnSurface,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "Contactos, morada e horários públicos",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.68f),
-            )
-        }
-    }
+    SudsAdminHeader(
+        title = "Configuração do negócio",
+        subtitle = "Contactos, morada e horários públicos",
+        onBack = onBack,
+    )
 }
 
 @Composable

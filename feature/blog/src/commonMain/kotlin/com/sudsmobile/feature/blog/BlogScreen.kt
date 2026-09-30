@@ -95,15 +95,16 @@ fun BlogScreen(
         SudsBrandBackground(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                    .fillMaxSize(),
             ) {
                 LoyaltyHeader()
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                         .padding(horizontal = 24.dp)
                         .padding(top = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -135,11 +136,7 @@ fun BlogScreen(
 private fun LoyaltyHeader() {
     SudsCompactTopBar(
         title = "Recompensas",
-        eyebrow = "Clube de brilho",
-        modifier = Modifier
-            .statusBarsPadding()
-            .padding(top = 8.dp, bottom = 4.dp)
-            .semantics { heading() },
+        modifier = Modifier.statusBarsPadding(),
     )
 }
 

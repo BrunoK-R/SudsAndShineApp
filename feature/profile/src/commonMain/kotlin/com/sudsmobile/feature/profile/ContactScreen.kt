@@ -108,15 +108,16 @@ private fun ContactScreenContent(
     SudsCustomerScreen(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp),
+                .fillMaxSize(),
         ) {
             ContactHeader(onBack = onBack)
 
             Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = contentPadding.calculateBottomPadding() + 24.dp)
                 .padding(horizontal = 24.dp)
                 .padding(top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -278,7 +279,6 @@ private fun ContactStatusCard(
 private fun ContactHeader(onBack: () -> Unit) {
     SudsSecondaryTopBar(
         title = "Contacto e apoio",
-        eyebrow = "Fale connosco",
         onBack = onBack,
     )
 }

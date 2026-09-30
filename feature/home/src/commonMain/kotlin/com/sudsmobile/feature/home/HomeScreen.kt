@@ -2,7 +2,7 @@ package com.sudsmobile.feature.home
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -34,7 +34,6 @@ fun HomeScreen(
     onViewBookings: () -> Unit = {},
     onOpenRewards: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
-    onOpenProfile: () -> Unit = {},
     onRequestSignIn: () -> Unit = {},
 ) {
     val viewModel: HomeViewModel = koinViewModel()
@@ -55,7 +54,6 @@ fun HomeScreen(
         onViewBookings = onViewBookings,
         onOpenRewards = onOpenRewards,
         onOpenNotifications = onOpenNotifications,
-        onOpenProfile = onOpenProfile,
         onRequestSignIn = onRequestSignIn,
         onRetry = viewModel::retry,
     )
@@ -71,7 +69,6 @@ internal fun HomeScreenContent(
     onViewBookings: () -> Unit,
     onOpenRewards: () -> Unit,
     onOpenNotifications: () -> Unit,
-    onOpenProfile: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -97,13 +94,16 @@ internal fun HomeScreenContent(
     val uriHandler = LocalUriHandler.current
 
     SudsBrandBackground(Modifier.fillMaxSize()) {
-        Box(
+        Column(
             Modifier
                 .fillMaxSize()
                 .background(SudsColors.scrim.copy(alpha = 0.65f)),
         ) {
+            HomeTopBar(
+                onOpenNotifications = onOpenNotifications,
+            )
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f),
                 state = listState,
                 contentPadding = PaddingValues(
                     bottom = contentPadding.calculateBottomPadding() + SudsSpacing.xl,
@@ -115,12 +115,9 @@ internal fun HomeScreenContent(
                         when (section) {
                             HomeSection.Header -> HomeExpandedHeader(
                                 identity = identity,
-                                collapseProgress = collapseProgress,
                                 onOpenLocation = {
                                     uriHandler.openUri(DefaultBusinessInfo.mapsUri)
                                 },
-                                onOpenNotifications = onOpenNotifications,
-                                onOpenProfile = onOpenProfile,
                             )
 
                             HomeSection.Booking -> HomeBookingSection(
@@ -166,14 +163,6 @@ internal fun HomeScreenContent(
                 }
             }
 
-            if (collapseProgress > 0.01f) {
-                HomeCompactHeader(
-                    collapseProgress = collapseProgress,
-                    reduceMotion = reduceMotion,
-                    onOpenNotifications = onOpenNotifications,
-                    onOpenProfile = onOpenProfile,
-                )
-            }
         }
     }
 }
