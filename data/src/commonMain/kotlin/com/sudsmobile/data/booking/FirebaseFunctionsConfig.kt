@@ -145,6 +145,27 @@ data class FirebaseFunctionsConfig(
     val getAdminServiceExtrasUrl: String
         get() = functionUrl("getAdminServiceExtras")
 
+    val submitShakeFeedbackUrl: String
+        get() = functionUrl("submitShakeFeedback")
+
+    val getAdminShakeFeedbackUrl: String
+        get() = functionUrl("getAdminShakeFeedback")
+
+    val getAdminShakeFeedbackScreenshotUrl: String
+        get() = functionUrl("getAdminShakeFeedbackScreenshot")
+
+    val getAdminShakeFeedbackInteractionsUrl: String
+        get() = functionUrl("getAdminShakeFeedbackInteractions")
+
+    val setAdminShakeFeedbackLikedUrl: String
+        get() = functionUrl("setAdminShakeFeedbackLiked")
+
+    val addAdminShakeFeedbackCommentUrl: String
+        get() = functionUrl("addAdminShakeFeedbackComment")
+
+    val deleteAdminShakeFeedbackUrl: String
+        get() = functionUrl("deleteAdminShakeFeedback")
+
     val updateBusinessInfoUrl: String
         get() = functionUrl("updateBusinessInfo")
 

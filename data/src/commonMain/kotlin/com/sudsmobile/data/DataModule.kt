@@ -54,6 +54,8 @@ import com.sudsmobile.data.vehicle.MutableUserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicleChangeNotifier
 import com.sudsmobile.data.vehicle.UserVehicleRepository
 import com.sudsmobile.data.vehicle.VehicleFunctionsApi
+import com.sudsmobile.data.feedback.FeedbackRepository
+import com.sudsmobile.data.feedback.FirebaseFeedbackRepository
 import io.ktor.client.HttpClient
 import org.koin.dsl.module
 
@@ -85,6 +87,7 @@ val dataModule = module {
     single<ServiceEntitlementRepository> { FirebaseServiceEntitlementRepository(get(), get()) }
     single<AdminFunctionsApi> { KtorAdminFunctionsApi(get(), get()) }
     single<AdminRepository> { FirebaseAdminRepository(get(), get(), get()) }
+    single<FeedbackRepository> { FirebaseFeedbackRepository(get(), get(), get()) }
     single<CatalogFunctionsApi> { KtorCatalogFunctionsApi(get(), get()) }
     single<ServiceCatalogRepository> { FirebaseServiceCatalogRepository(get()) }
     single<BusinessInfoFunctionsApi> { KtorBusinessInfoFunctionsApi(get(), get()) }

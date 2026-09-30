@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -99,6 +100,7 @@ private enum class ProfileMenuAction {
     AdminBusinessInfo,
     AdminServiceCatalog,
     AdminServiceExtras,
+    AdminShakeFeedback,
     PersonalData,
     NotificationPreferences,
     Vehicles,
@@ -166,6 +168,7 @@ private val adminMenuItems = listOf(
     adminAvailabilityMenuItem,
     adminNotificationSettingsMenuItem,
     adminNotificationCampaignDraftsMenuItem,
+    ProfileMenuItem(Icons.Filled.Feedback, "Feedback recebido", ProfileMenuAction.AdminShakeFeedback),
     adminServiceCatalogMenuItem,
     adminServiceExtrasMenuItem,
 )
@@ -223,6 +226,7 @@ fun ProfileScreen(
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
+    onOpenAdminShakeFeedback: () -> Unit = {},
 ) {
     val viewModel: ProfileViewModel = koinViewModel()
     val adminAccessViewModel: AdminAccessViewModel = koinViewModel()
@@ -305,6 +309,7 @@ fun ProfileScreen(
         onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
         onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
         onOpenAdminServiceExtras = onOpenAdminServiceExtras,
+        onOpenAdminShakeFeedback = onOpenAdminShakeFeedback,
     )
 }
 
@@ -347,6 +352,7 @@ private fun ProfileScreenContent(
     onOpenAdminBusinessInfo: () -> Unit = {},
     onOpenAdminServiceCatalog: () -> Unit = {},
     onOpenAdminServiceExtras: () -> Unit = {},
+    onOpenAdminShakeFeedback: () -> Unit = {},
 ) {
     val authenticatedUser = (sessionState as? AuthSessionState.Authenticated)?.session?.user
     val isRestoringSession = sessionState == AuthSessionState.Restoring
@@ -436,6 +442,7 @@ private fun ProfileScreenContent(
                             onOpenAdminBusinessInfo = onOpenAdminBusinessInfo,
                             onOpenAdminServiceCatalog = onOpenAdminServiceCatalog,
                             onOpenAdminServiceExtras = onOpenAdminServiceExtras,
+                            onOpenAdminShakeFeedback = onOpenAdminShakeFeedback,
                         )
                         PreferencesCard(
                             preferencesState = preferencesState,
@@ -1294,6 +1301,7 @@ private fun ProfileMenuCard(
                             ProfileMenuAction.AdminBusinessInfo,
                             ProfileMenuAction.AdminServiceCatalog,
                             ProfileMenuAction.AdminServiceExtras -> Unit
+                            ProfileMenuAction.AdminShakeFeedback -> Unit
                             ProfileMenuAction.PersonalData -> onOpenPersonalData()
                             ProfileMenuAction.NotificationPreferences -> onOpenNotificationPreferences()
                             ProfileMenuAction.Vehicles -> onManageVehicles()
@@ -1327,6 +1335,7 @@ private fun AdminOperationsCard(
     onOpenAdminBusinessInfo: () -> Unit,
     onOpenAdminServiceCatalog: () -> Unit,
     onOpenAdminServiceExtras: () -> Unit,
+    onOpenAdminShakeFeedback: () -> Unit,
 ) {
     when (adminAccessState) {
         is AdminAccessUiState.Admin -> Card(
@@ -1359,6 +1368,7 @@ private fun AdminOperationsCard(
                                 ProfileMenuAction.AdminBusinessInfo -> onOpenAdminBusinessInfo()
                                 ProfileMenuAction.AdminServiceCatalog -> onOpenAdminServiceCatalog()
                                 ProfileMenuAction.AdminServiceExtras -> onOpenAdminServiceExtras()
+                                ProfileMenuAction.AdminShakeFeedback -> onOpenAdminShakeFeedback()
                                 ProfileMenuAction.None,
                                 ProfileMenuAction.PersonalData,
                                 ProfileMenuAction.NotificationPreferences,

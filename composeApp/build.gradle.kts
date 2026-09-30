@@ -88,6 +88,7 @@ kotlin {
 
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
+            implementation(libs.coil.compose)
 
             implementation(project(path = ":di"))
             implementation(project(path = ":navigation"))

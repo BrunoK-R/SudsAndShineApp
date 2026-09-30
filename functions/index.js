@@ -5,6 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getStorage } = require("firebase-admin/storage");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -58,12 +59,132 @@ const {
   tokenPreferencePatch,
   userProfilePreferencePatch,
 } = require("./src/notificationPreferences");
+const { normalizeShakeFeedback, SCREENSHOT_MAX_BYTES } = require("./src/shakeFeedback");
 
 initializeApp();
 setGlobalOptions({ region: "europe-west1", maxInstances: 10 });
 
 const db = getFirestore();
 const messaging = getMessaging();
+
+exports.submitShakeFeedback = onCall(async (request) => {
+  const uid = requireUid(request);
+  const input = normalizeShakeFeedback(request.data || {});
+  if (!input) throw new HttpsError("invalid-argument", "Feedback invalido.");
+
+  const ref = db.collection("admin_shake_feedback").doc();
+  const email = cleanString(request.auth && request.auth.token && request.auth.token.email, 160).toLowerCase();
+  let screenshotStoragePath = "";
+  if (input.screenshot) {
+    screenshotStoragePath = `admin-shake-feedback/${uid}/${ref.id}/screenshot.${input.screenshot.extension}`;
+    await getStorage().bucket().file(screenshotStoragePath).save(input.screenshot.bytes, {
+      resumable: false,
+      contentType: input.screenshot.mimeType,
+      metadata: { cacheControl: "private, max-age=0" },
+    });
+  }
+  try {
+    const createdAtIso = new Date().toISOString();
+    await ref.set({
+      id: ref.id, title: input.title, body: input.body,
+      submitterUid: uid, submitterEmail: email, platform: input.platform,
+      createdAt: FieldValue.serverTimestamp(), createdAtIso,
+      screenshotStoragePath,
+      screenshotMimeType: input.screenshot ? input.screenshot.mimeType : "",
+      screenshotWidthPx: input.screenshot ? input.screenshot.widthPx : 0,
+      screenshotHeightPx: input.screenshot ? input.screenshot.heightPx : 0,
+    });
+    return { id: ref.id, createdAtIso };
+  } catch (error) {
+    if (screenshotStoragePath) await getStorage().bucket().file(screenshotStoragePath).delete({ ignoreNotFound: true });
+    throw error;
+  }
+});
+
+exports.getAdminShakeFeedback = onCall(async (request) => {
+  await requireAdmin(request);
+  const snapshot = await db.collection("admin_shake_feedback").orderBy("createdAt", "desc").limit(100).get();
+  return { items: snapshot.docs.map((doc) => {
+    const { createdAt, likedByAdminUids, ...data } = doc.data();
+    return { id: doc.id, ...data, likeCount: Array.isArray(likedByAdminUids) ? likedByAdminUids.length : 0 };
+  }) };
+});
+
+exports.getAdminShakeFeedbackScreenshot = onCall(async (request) => {
+  await requireAdmin(request);
+  const id = cleanDocumentId((request.data || {}).feedbackId, 160);
+  if (!id) throw new HttpsError("invalid-argument", "Feedback invalido.");
+  const snapshot = await db.collection("admin_shake_feedback").doc(id).get();
+  if (!snapshot.exists) throw new HttpsError("not-found", "Feedback nao encontrado.");
+  const path = snapshot.get("screenshotStoragePath");
+  if (!path || !path.startsWith("admin-shake-feedback/")) {
+    throw new HttpsError("not-found", "Captura de ecra nao encontrada.");
+  }
+  const [bytes] = await getStorage().bucket().file(path).download();
+  if (bytes.length > SCREENSHOT_MAX_BYTES) throw new HttpsError("resource-exhausted", "Captura demasiado grande.");
+  return { base64: bytes.toString("base64"), mimeType: snapshot.get("screenshotMimeType") };
+});
+
+exports.getAdminShakeFeedbackInteractions = onCall(async (request) => {
+  const admin = await requireAdmin(request);
+  const ref = shakeFeedbackRef((request.data || {}).feedbackId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new HttpsError("not-found", "Feedback nao encontrado.");
+  const comments = await ref.collection("comments").orderBy("createdAt", "asc").limit(100).get();
+  const likedBy = Array.isArray(snapshot.get("likedByAdminUids")) ? snapshot.get("likedByAdminUids") : [];
+  return { interactions: {
+    likeCount: likedBy.length,
+    likedByCurrentAdmin: likedBy.includes(admin.uid),
+    comments: comments.docs.map((doc) => {
+      const { createdAt, ...data } = doc.data();
+      return { id: doc.id, ...data };
+    }),
+  } };
+});
+
+exports.setAdminShakeFeedbackLiked = onCall(async (request) => {
+  const admin = await requireAdmin(request);
+  if (typeof (request.data || {}).liked !== "boolean") throw new HttpsError("invalid-argument", "Reacao invalida.");
+  const ref = shakeFeedbackRef((request.data || {}).feedbackId);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new HttpsError("not-found", "Feedback nao encontrado.");
+    transaction.update(ref, { likedByAdminUids: request.data.liked ?
+      FieldValue.arrayUnion(admin.uid) : FieldValue.arrayRemove(admin.uid) });
+  });
+  return { ok: true };
+});
+
+exports.addAdminShakeFeedbackComment = onCall(async (request) => {
+  const admin = await requireAdmin(request);
+  const body = typeof (request.data || {}).body === "string" ? request.data.body.trim() : "";
+  if (!body || body.length > 1000) throw new HttpsError("invalid-argument", "Comentario invalido.");
+  const ref = shakeFeedbackRef(request.data.feedbackId);
+  if (!(await ref.get()).exists) throw new HttpsError("not-found", "Feedback nao encontrado.");
+  await ref.collection("comments").add({
+    body, adminEmail: admin.email, createdAt: FieldValue.serverTimestamp(), createdAtIso: new Date().toISOString(),
+  });
+  return { ok: true };
+});
+
+exports.deleteAdminShakeFeedback = onCall(async (request) => {
+  await requireAdmin(request);
+  const ref = shakeFeedbackRef((request.data || {}).feedbackId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new HttpsError("not-found", "Feedback nao encontrado.");
+  const path = snapshot.get("screenshotStoragePath");
+  if (path && path.startsWith("admin-shake-feedback/")) {
+    await getStorage().bucket().file(path).delete({ ignoreNotFound: true });
+  }
+  await db.recursiveDelete(ref);
+  return { ok: true };
+});
+
+function shakeFeedbackRef(value) {
+  const id = String(value || "").trim();
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) throw new HttpsError("invalid-argument", "Feedback invalido.");
+  return db.collection("admin_shake_feedback").doc(id);
+}
 
 exports.getServiceCatalog = onCall(async () => {
   return await getPublicServiceCatalog();

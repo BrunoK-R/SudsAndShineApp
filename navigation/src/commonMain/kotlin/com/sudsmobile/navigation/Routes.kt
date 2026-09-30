@@ -22,6 +22,7 @@ object Routes {
     const val AdminBusinessInfo = "admin_business_info"
     const val AdminServiceCatalog = "admin_service_catalog"
     const val AdminServiceExtras = "admin_service_extras"
+    const val AdminShakeFeedback = "admin_shake_feedback"
     const val PersonalData = "personal_data"
     const val NotificationPreferences = "notification_preferences"
     const val Vehicles = "vehicles"

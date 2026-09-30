@@ -24,13 +24,15 @@ fun App(
     val onboardingGateState by onboardingGateViewModel.uiState.collectAsStateWithLifecycle()
 
     SudsAndShineTheme {
-        AppContent(
-            onboardingGateState = onboardingGateState,
-            onCompleteOnboarding = onboardingGateViewModel::completeOnboarding,
-            onResetOnboardingPreference = onboardingGateViewModel::resetOnboardingPreference,
-            pendingNotificationRoute = pendingNotificationRoute,
-            onNotificationRouteConsumed = onNotificationRouteConsumed,
-        )
+        ShakeFeedbackHost {
+            AppContent(
+                onboardingGateState = onboardingGateState,
+                onCompleteOnboarding = onboardingGateViewModel::completeOnboarding,
+                onResetOnboardingPreference = onboardingGateViewModel::resetOnboardingPreference,
+                pendingNotificationRoute = pendingNotificationRoute,
+                onNotificationRouteConsumed = onNotificationRouteConsumed,
+            )
+        }
     }
 }
 

@@ -39,6 +39,7 @@ import com.sudsmobile.feature.profile.AdminNotificationCampaignDraftsScreen
 import com.sudsmobile.feature.profile.AdminNotificationSettingsScreen
 import com.sudsmobile.feature.profile.AdminServiceCatalogScreen
 import com.sudsmobile.feature.profile.AdminServiceExtrasScreen
+import com.sudsmobile.feature.profile.AdminShakeFeedbackScreen
 import com.sudsmobile.feature.profile.ContactScreen
 import com.sudsmobile.feature.profile.HistoryScreen
 import com.sudsmobile.feature.profile.NotificationPreferencesScreen
@@ -292,6 +293,14 @@ fun MainNavigation(
                     },
                     onOpenAdminServiceCatalog = { navController.navigate(Routes.AdminServiceCatalog) },
                     onOpenAdminServiceExtras = { navController.navigate(Routes.AdminServiceExtras) },
+                    onOpenAdminShakeFeedback = { navController.navigate(Routes.AdminShakeFeedback) },
+                )
+            }
+            composable(Routes.AdminShakeFeedback) {
+                AdminShakeFeedbackScreen(
+                    contentPadding = paddingValues,
+                    onBack = { navController.popBackStack() },
+                    onRequestSignIn = onRequestSignIn,
                 )
             }
             composable(Routes.AdminBookings) {
