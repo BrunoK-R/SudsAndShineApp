@@ -962,12 +962,13 @@ private fun AdminBlockedSlotEditor(
             enabled = !saving,
             onTimeSelected = { selectedEnd -> onFormChange(form.copy(blockedEndTime = selectedEnd)) },
         )
-        AdminAvailabilityTextField(
+        AdminPresetField(
             value = form.blockedReason,
             onValueChange = { onFormChange(form.copy(blockedReason = it)) },
             label = "Motivo",
+            options = adminBlockingReasons,
+            customLabel = "Outro motivo",
             enabled = !saving,
-            singleLine = true,
         )
         Button(
             onClick = onSaveBlockedSlot,

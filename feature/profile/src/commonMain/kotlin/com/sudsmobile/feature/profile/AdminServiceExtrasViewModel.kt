@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
+import com.sudsmobile.data.admin.AdminServiceCatalogResult
 import com.sudsmobile.data.admin.AdminServiceExtraArchiveRequest
 import com.sudsmobile.data.admin.AdminServiceExtraItem
 import com.sudsmobile.data.admin.AdminServiceExtraMutationRequest
@@ -65,6 +66,8 @@ internal sealed interface AdminServiceExtrasUiState {
     data class Loaded(
         val extras: List<AdminServiceExtraUi>,
         val form: AdminServiceExtraForm? = null,
+        val serviceOptions: List<AdminLookupOption> = emptyList(),
+        val serviceLookupError: String? = null,
     ) : AdminServiceExtrasUiState
 
     data class Error(val message: String, val retryable: Boolean) : AdminServiceExtrasUiState
@@ -89,6 +92,8 @@ internal class AdminServiceExtrasViewModel(
         MutableStateFlow<AdminServiceExtrasMutationState>(AdminServiceExtrasMutationState.Idle)
     val mutationState: StateFlow<AdminServiceExtrasMutationState> = _mutationState.asStateFlow()
 
+    private var availableServices: List<AdminLookupOption> = emptyList()
+    private var serviceLookupError: String? = null
     private var loadedUid: String? = null
     private var loadingUid: String? = null
     private var loadSequence: Long = 0
@@ -155,10 +160,30 @@ internal class AdminServiceExtrasViewModel(
                 }
                 if (requestSequence != loadSequence) return@launch
 
+                var nextOptions = emptyList<AdminLookupOption>()
+                var nextLookupError: String? = null
+                if (nextState is AdminServiceExtrasUiState.Loaded || nextState == AdminServiceExtrasUiState.Empty) {
+                    when (val catalog = adminRepository.getServiceCatalogConfiguration()) {
+                        is AdminServiceCatalogResult.Success -> {
+                            nextOptions = catalog.config.services.map {
+                                AdminLookupOption(it.id, it.name, if (it.active) "" else "Inativo")
+                            }
+                            nextLookupError = null
+                        }
+                        is AdminServiceCatalogResult.Failure -> {
+                            nextLookupError = "Não foi possível carregar os serviços. Volte a carregar este ecrã."
+                        }
+                    }
+                    if (requestSequence != loadSequence) return@launch
+                }
                 val currentUid = (sessionState.value as? AuthSessionState.Authenticated)?.session?.user?.uid
                 if (currentUid == requestedUid) {
+                    availableServices = nextOptions
+                    serviceLookupError = nextLookupError
                     loadedUid = requestedUid
-                    _uiState.value = nextState
+                    _uiState.value = if (nextState is AdminServiceExtrasUiState.Loaded) {
+                        nextState.copy(serviceOptions = availableServices, serviceLookupError = serviceLookupError)
+                    } else nextState
                 } else {
                     handleSessionChangedDuringRequest()
                 }
@@ -180,6 +205,8 @@ internal class AdminServiceExtrasViewModel(
         _uiState.value = AdminServiceExtrasUiState.Loaded(
             extras = extras,
             form = AdminServiceExtraForm(sortOrder = nextExtraSortOrder(extras).toString()),
+            serviceOptions = availableServices,
+            serviceLookupError = serviceLookupError,
         )
         _mutationState.value = AdminServiceExtrasMutationState.Idle
     }
@@ -315,6 +342,8 @@ internal class AdminServiceExtrasViewModel(
     }
 
     private fun clearLoadedExtras() {
+        availableServices = emptyList()
+        serviceLookupError = null
         loadedUid = null
         loadingUid = null
         loadSequence += 1

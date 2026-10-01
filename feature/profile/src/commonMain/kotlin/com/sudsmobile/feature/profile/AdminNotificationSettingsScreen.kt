@@ -370,22 +370,22 @@ private fun AdminNotificationSettingsFormCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                 )
-                AdminNotificationTextField(
+                AdminDurationLookup(
                     value = form.reminderLeadMinutes,
                     onValueChange = { onFormChange(form.copy(reminderLeadMinutes = it)) },
                     label = "Antecedência do lembrete (minutos)",
                     enabled = !saving,
-                    keyboardType = KeyboardType.Number,
+                    minutes = listOf(15, 30, 60, 120, 180, 1440, 2880, 10080),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AdminNotificationTextField(
+                    AdminTimeLookup(
                         value = form.quietHoursStart,
                         onValueChange = { onFormChange(form.copy(quietHoursStart = it)) },
                         label = "Silêncio início",
                         enabled = !saving,
                         modifier = Modifier.weight(1f),
                     )
-                    AdminNotificationTextField(
+                    AdminTimeLookup(
                         value = form.quietHoursEnd,
                         onValueChange = { onFormChange(form.copy(quietHoursEnd = it)) },
                         label = "Silêncio fim",
@@ -393,10 +393,9 @@ private fun AdminNotificationSettingsFormCard(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                AdminNotificationTextField(
+                AdminTimeZoneLookup(
                     value = form.quietHoursTimeZone,
                     onValueChange = { onFormChange(form.copy(quietHoursTimeZone = it)) },
-                    label = "Fuso horário",
                     enabled = !saving,
                 )
             }

@@ -1,5 +1,6 @@
 package org.sudsmobile.app
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -26,7 +27,9 @@ internal actual fun platformName() = "android"
 internal actual fun PlatformShakeEffect(enabled: Boolean, onShake: () -> Unit) {
     val context = LocalContext.current
     val callback = rememberUpdatedState(onShake)
-    val classifier = remember { ShakeClassifier() }
+    // Compose lint cannot resolve this constructor from commonMain; the compiler verifies its type.
+    @SuppressLint("RememberReturnType")
+    val classifier: ShakeClassifier = remember { ShakeClassifier() }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(context, enabled, lifecycleOwner) {
         val manager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager

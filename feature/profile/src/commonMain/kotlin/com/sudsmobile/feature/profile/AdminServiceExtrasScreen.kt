@@ -207,6 +207,8 @@ private fun AdminServiceExtrasLoadedContent(
     state.form?.let { form ->
         AdminServiceExtraFormCard(
             form = form,
+            serviceOptions = state.serviceOptions,
+            serviceLookupError = state.serviceLookupError,
             saving = saving,
             onFormChange = onFormChange,
             onCancel = onCancelEdit,
@@ -552,6 +554,8 @@ private fun AdminServiceExtraCard(
 @Composable
 private fun AdminServiceExtraFormCard(
     form: AdminServiceExtraForm,
+    serviceOptions: List<AdminLookupOption>,
+    serviceLookupError: String?,
     saving: Boolean,
     onFormChange: (AdminServiceExtraForm) -> Unit,
     onCancel: () -> Unit,
@@ -610,19 +614,19 @@ private fun AdminServiceExtraFormCard(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AdminServiceExtraTextField(
+                AdminDurationLookup(
                     value = form.additionalDurationMinutes,
                     onValueChange = { onFormChange(form.copy(additionalDurationMinutes = it.take(3))) },
                     label = "Duração adicional (min)",
                     modifier = Modifier.weight(1f),
-                    singleLine = true,
+                    enabled = !saving,
                 )
-                AdminServiceExtraTextField(
+                AdminDurationLookup(
                     value = form.dryingDurationMinutes,
                     onValueChange = { onFormChange(form.copy(dryingDurationMinutes = it.take(5))) },
                     label = "Secagem (min)",
                     modifier = Modifier.weight(1f),
-                    singleLine = true,
+                    enabled = !saving,
                 )
             }
             AdminServiceExtraTextField(
@@ -631,19 +635,22 @@ private fun AdminServiceExtraFormCard(
                 label = "Ordem",
                 singleLine = true,
             )
-            AdminServiceExtraTextField(
+            AdminIconLookup(
                 value = form.iconKey,
-                onValueChange = { onFormChange(form.copy(iconKey = it.take(40))) },
-                label = "Ícone",
-                singleLine = true,
+                onValueChange = { onFormChange(form.copy(iconKey = it)) },
+                enabled = !saving,
             )
-            AdminServiceExtraTextField(
-                value = form.eligibleServiceIds,
-                onValueChange = { onFormChange(form.copy(eligibleServiceIds = it.take(800))) },
+            AdminLookupField(
                 label = "Serviços elegíveis",
-                minLines = 1,
-                maxLines = 3,
+                selectedIds = form.eligibleServiceIds.split(",", "\n", " ").filter { it.isNotBlank() }.toSet(),
+                options = serviceOptions,
+                onSelect = { onFormChange(form.copy(eligibleServiceIds = it.joinToString(", "))) },
+                multiple = true,
+                emptyLabel = "Todos os serviços",
+                emptyChoice = "Todos os serviços",
+                enabled = !saving && serviceLookupError == null,
             )
+            serviceLookupError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             AdminServiceExtraSwitchRow(
                 label = "Permitir quantidade",
                 checked = form.quantityEnabled,

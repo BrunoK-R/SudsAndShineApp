@@ -584,19 +584,20 @@ private fun AdminServiceCatalogFormCard(
                 maxLines = 4,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AdminServiceTextField(
+                AdminDurationLookup(
                     value = form.durationMinutes,
                     onValueChange = { onFormChange(form.copy(durationMinutes = it.take(3))) },
                     label = "Duração (min)",
+                    minutes = listOf(15, 30, 45, 60, 90, 105, 120, 180, 240, 480),
                     modifier = Modifier.weight(1f),
-                    singleLine = true,
+                    enabled = !saving,
                 )
-                AdminServiceTextField(
+                AdminDurationLookup(
                     value = form.dryingDurationMinutes,
                     onValueChange = { onFormChange(form.copy(dryingDurationMinutes = it.take(5))) },
                     label = "Secagem (min)",
                     modifier = Modifier.weight(1f),
-                    singleLine = true,
+                    enabled = !saving,
                 )
             }
             AdminServiceTextField(
@@ -621,11 +622,10 @@ private fun AdminServiceCatalogFormCard(
                     singleLine = true,
                 )
             }
-            AdminServiceTextField(
+            AdminIconLookup(
                 value = form.iconKey,
-                onValueChange = { onFormChange(form.copy(iconKey = it.take(40))) },
-                label = "Ícone",
-                singleLine = true,
+                onValueChange = { onFormChange(form.copy(iconKey = it)) },
+                enabled = !saving,
             )
             AdminServiceSwitchRow(
                 label = "Disponível para clientes",

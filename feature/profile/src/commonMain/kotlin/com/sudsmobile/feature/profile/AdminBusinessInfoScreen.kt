@@ -311,6 +311,10 @@ private fun AdminBusinessInfoFormCard(
                 label = "Email",
                 singleLine = true,
             )
+            AdminAddressLookup(enabled = !saving, onSelect = { address ->
+                onFormChange(form.copy(addressLine1 = address.addressLine1,
+                    addressLine2 = address.addressLine2, mapsUri = address.mapsUri))
+            })
             AdminTextField(
                 value = form.addressLine1,
                 onValueChange = { onFormChange(form.copy(addressLine1 = it.take(160))) },
@@ -329,19 +333,15 @@ private fun AdminBusinessInfoFormCard(
                 label = "Mapa",
                 singleLine = true,
             )
-            AdminTextField(
+            AdminOpeningHoursEditor(
                 value = form.openingHoursText,
-                onValueChange = { onFormChange(form.copy(openingHoursText = it.take(1200))) },
-                label = "Horários",
-                minLines = 3,
-                maxLines = 6,
+                onValueChange = { onFormChange(form.copy(openingHoursText = it)) },
+                enabled = !saving,
             )
-            AdminTextField(
+            AdminSocialLinksEditor(
                 value = form.socialLinksText,
-                onValueChange = { onFormChange(form.copy(socialLinksText = it.take(1600))) },
-                label = "Redes sociais",
-                minLines = 2,
-                maxLines = 5,
+                onValueChange = { onFormChange(form.copy(socialLinksText = it)) },
+                enabled = !saving,
             )
 
             Button(

@@ -6,6 +6,11 @@ import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
 import com.sudsmobile.data.catalog.ServiceCatalogResult
+import com.sudsmobile.data.entitlement.AdminBookingLookup
+import com.sudsmobile.data.entitlement.AdminOperationLookupResult
+import com.sudsmobile.data.entitlement.AdminPackageTemplate
+import com.sudsmobile.data.entitlement.AdminPackageTemplateResult
+import kotlinx.coroutines.CancellationException
 import com.sudsmobile.data.entitlement.AdminEntitlementCustomer
 import com.sudsmobile.data.entitlement.AdminServiceEntitlementListResult
 import com.sudsmobile.data.entitlement.AdjustServiceEntitlementUsageRequest
@@ -25,6 +30,7 @@ internal data class AdminEntitlementServiceOption(val id: String, val name: Stri
 
 internal data class AdminServiceEntitlementForm(
     val customerEmail: String = "",
+    val selectedTemplateId: String = "",
     val kind: String = "package",
     val name: String = "Pacote 5 lavagens",
     val totalUses: String = "5",
@@ -46,6 +52,9 @@ internal sealed interface AdminServiceEntitlementsUiState {
         val customer: AdminEntitlementCustomer? = null,
         val entitlements: List<ServiceEntitlement> = emptyList(),
         val pendingRevocationId: String? = null,
+        val templates: List<AdminPackageTemplate> = emptyList(),
+        val bookings: List<AdminBookingLookup> = emptyList(),
+        val lookupError: String? = null,
     ) : AdminServiceEntitlementsUiState
     data class Error(val message: String, val retryable: Boolean) : AdminServiceEntitlementsUiState
 }
@@ -101,9 +110,10 @@ internal class AdminServiceEntitlementsViewModel(
         val current = _uiState.value as? AdminServiceEntitlementsUiState.Loaded ?: return
         val customerChanged = form.customerEmail.trim().lowercase() != current.form.customerEmail.trim().lowercase()
         _uiState.value = current.copy(
-            form = form,
             customer = if (customerChanged) null else current.customer,
             entitlements = if (customerChanged) emptyList() else current.entitlements,
+            bookings = if (customerChanged) emptyList() else current.bookings,
+            form = if (customerChanged) form.copy(usageReservationCode = "") else form,
         )
         _actionState.value = AdminServiceEntitlementActionState.Idle
     }
@@ -111,15 +121,24 @@ internal class AdminServiceEntitlementsViewModel(
     fun findCustomer() {
         val current = _uiState.value as? AdminServiceEntitlementsUiState.Loaded ?: return
         if (_actionState.value == AdminServiceEntitlementActionState.Working) return
+        val requestedSequence = requestSequence
+        val requestedUid = authenticatedUid() ?: return
         runAction {
             when (val result = entitlementRepository.getAdminEntitlements(current.form.customerEmail)) {
                 is AdminServiceEntitlementListResult.Success -> {
+                    if (requestSequence != requestedSequence || authenticatedUid() != requestedUid) return@runAction AdminServiceEntitlementActionState.Idle
                     val latest = _uiState.value as? AdminServiceEntitlementsUiState.Loaded
                         ?: return@runAction AdminServiceEntitlementActionState.Error(
                             "O ecrã deixou de estar disponível.",
                             retryable = true,
                         )
+                    val lookups = entitlementRepository.getAdminOperationLookups(customerEmail = result.value.customer.email)
+                    val activeUid = authenticatedUid()
+                    if (activeUid != requestedUid || requestSequence != requestedSequence) return@runAction AdminServiceEntitlementActionState.Idle
                     _uiState.value = latest.copy(
+                        bookings = (lookups as? AdminOperationLookupResult.Success)?.value?.reservations.orEmpty(),
+                        templates = (lookups as? AdminOperationLookupResult.Success)?.value?.templates ?: latest.templates,
+                        lookupError = (lookups as? AdminOperationLookupResult.Failure)?.error?.message,
                         form = latest.form.copy(customerEmail = result.value.customer.email),
                         customer = result.value.customer,
                         entitlements = result.value.entitlements,
@@ -127,6 +146,52 @@ internal class AdminServiceEntitlementsViewModel(
                     AdminServiceEntitlementActionState.Success("Conta e planos atualizados.")
                 }
                 is AdminServiceEntitlementListResult.Failure -> result.error.toActionState()
+            }
+        }
+    }
+
+    suspend fun searchCustomers(query: String): List<AdminLookupOption> {
+        val uid = authenticatedUid() ?: error("Inicie sessão como administrador.")
+        val result = entitlementRepository.getAdminOperationLookups(query = query)
+        if (authenticatedUid() != uid) throw CancellationException("Sessão alterada")
+        return when (result) {
+            is AdminOperationLookupResult.Success -> result.value.customers.map {
+                AdminLookupOption(it.email, it.displayName.ifBlank { "Cliente registado" },
+                    listOf(it.email, it.phoneNumber).filter(String::isNotBlank).joinToString(" · "))
+            }
+            is AdminOperationLookupResult.Failure -> error(result.error.message)
+        }
+    }
+
+    fun selectTemplate(id: String) {
+        val current = _uiState.value as? AdminServiceEntitlementsUiState.Loaded ?: return
+        val template = current.templates.firstOrNull { it.id == id }
+        updateForm(if (template == null) current.form.copy(selectedTemplateId = "") else current.form.applyTemplate(template))
+    }
+
+    fun saveTemplate() {
+        val current = _uiState.value as? AdminServiceEntitlementsUiState.Loaded ?: return
+        val form = current.form
+        val uses = form.totalUses.toIntOrNull()?.takeIf { it in 1..100 }
+        val days = form.validDays.toIntOrNull()?.takeIf { it in 1..730 }
+        if (form.name.trim().length < 3 || uses == null || days == null || form.selectedServiceIds.isEmpty()) {
+            _actionState.value = AdminServiceEntitlementActionState.Error("Revise o nome, utilizações, validade e serviços do modelo.", false)
+            return
+        }
+        val template = AdminPackageTemplate(form.selectedTemplateId, form.name.trim(), form.kind, uses, days,
+            form.selectedServiceIds.toList().sorted())
+        runAction {
+            when (val result = entitlementRepository.saveAdminPackageTemplate(template)) {
+                is AdminPackageTemplateResult.Success -> {
+                    val latest = _uiState.value as? AdminServiceEntitlementsUiState.Loaded
+                        ?: return@runAction AdminServiceEntitlementActionState.Idle
+                    _uiState.value = latest.copy(
+                        templates = (latest.templates.filterNot { it.id == result.template.id } + result.template).sortedBy { it.name },
+                        form = latest.form.copy(selectedTemplateId = result.template.id), lookupError = null,
+                    )
+                    AdminServiceEntitlementActionState.Success("Modelo guardado. Não foi emitido nenhum plano.")
+                }
+                is AdminPackageTemplateResult.Failure -> result.error.toActionState()
             }
         }
     }
@@ -224,9 +289,12 @@ internal class AdminServiceEntitlementsViewModel(
                 val state = when (val result = catalogRepository.getServiceCatalog()) {
                     is ServiceCatalogResult.Success -> {
                         val services = result.catalog.services.map { AdminEntitlementServiceOption(it.id, it.name) }
+                        val lookup = entitlementRepository.getAdminOperationLookups()
                         AdminServiceEntitlementsUiState.Loaded(
                             form = AdminServiceEntitlementForm(selectedServiceIds = services.map { it.id }.toSet()),
                             services = services,
+                            templates = (lookup as? AdminOperationLookupResult.Success)?.value?.templates.orEmpty(),
+                            lookupError = (lookup as? AdminOperationLookupResult.Failure)?.error?.message,
                         )
                     }
                     is ServiceCatalogResult.Failure -> AdminServiceEntitlementsUiState.Error(
@@ -347,3 +415,9 @@ private fun ServiceEntitlementError.toActionState(): AdminServiceEntitlementActi
         message = message,
         retryable = this is ServiceEntitlementError.Unavailable || this is ServiceEntitlementError.Backend,
     )
+
+internal fun AdminServiceEntitlementForm.applyTemplate(template: AdminPackageTemplate): AdminServiceEntitlementForm = copy(
+    selectedTemplateId = template.id, kind = template.kind, name = template.name,
+    totalUses = template.totalUses.toString(), validDays = template.validDays.toString(),
+    selectedServiceIds = template.eligibleServiceIds.toSet(),
+)

@@ -285,26 +285,26 @@ private fun AdminBookingPolicyFormCard(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             AdminBookingPolicyAuditLabel(label = form.updatedAuditLabel)
-            AdminBookingPolicyTextField(
+            AdminDurationLookup(
                 value = form.pendingHoldMinutes,
                 onValueChange = { onFormChange(form.copy(pendingHoldMinutes = it)) },
                 label = "Reserva pendente ativa por",
-                supportingText = "Minutos até uma marcação pendente expirar.",
-                keyboardType = KeyboardType.Number,
+                enabled = !saving,
+                minutes = listOf(15, 30, 60, 120, 180, 240, 720, 1440),
             )
-            AdminBookingPolicyTextField(
+            AdminDurationLookup(
                 value = form.cancellationWindowMinutes,
                 onValueChange = { onFormChange(form.copy(cancellationWindowMinutes = it)) },
                 label = "Antecedência para cancelar",
-                supportingText = "0 mantém o cancelamento permitido até à hora da marcação.",
-                keyboardType = KeyboardType.Number,
+                enabled = !saving,
+                minutes = listOf(0, 30, 60, 120, 240, 720, 1440, 2880),
             )
-            AdminBookingPolicyTextField(
+            AdminDurationLookup(
                 value = form.rescheduleWindowMinutes,
                 onValueChange = { onFormChange(form.copy(rescheduleWindowMinutes = it)) },
                 label = "Antecedência para remarcar",
-                supportingText = "0 mantém a remarcação permitida até à hora da marcação.",
-                keyboardType = KeyboardType.Number,
+                enabled = !saving,
+                minutes = listOf(0, 30, 60, 120, 240, 720, 1440, 2880),
             )
             AdminBookingPolicyTextField(
                 value = form.paymentEligibilityCopy,

@@ -79,6 +79,12 @@ data class FirebaseFunctionsConfig(
     val getMyServiceEntitlementsUrl: String
         get() = functionUrl("getMyServiceEntitlements")
 
+    val getAdminOperationLookupsUrl: String
+        get() = functionUrl("getAdminOperationLookups")
+
+    val upsertAdminPackageTemplateUrl: String
+        get() = functionUrl("upsertAdminPackageTemplate")
+
     val getAdminServiceEntitlementsUrl: String
         get() = functionUrl("getAdminServiceEntitlements")
 

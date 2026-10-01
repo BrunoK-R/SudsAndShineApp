@@ -169,6 +169,9 @@ private val adminServiceExtrasMenuItem = ProfileMenuItem(
 private val adminMenuItems = listOf(
     adminMenuItem,
     adminAvailabilityMenuItem,
+    adminBookingPolicyMenuItem,
+    adminBusinessInfoMenuItem,
+    adminLoyaltySettingsMenuItem,
     adminNotificationSettingsMenuItem,
     adminNotificationCampaignDraftsMenuItem,
     ProfileMenuItem(Icons.Filled.Feedback, "Feedback recebido", ProfileMenuAction.AdminShakeFeedback),

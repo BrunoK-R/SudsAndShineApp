@@ -14,6 +14,8 @@ import com.sudsmobile.data.admin.AdminError
 import com.sudsmobile.data.admin.AdminRepository
 import com.sudsmobile.data.admin.AdminRole
 import com.sudsmobile.data.admin.AdminRoleResult
+import com.sudsmobile.data.admin.AdminServiceCatalogConfig
+import com.sudsmobile.data.admin.AdminServiceCatalogItem
 import com.sudsmobile.data.admin.AdminServiceCatalogArchiveRequest
 import com.sudsmobile.data.admin.AdminServiceCatalogResult
 import com.sudsmobile.data.admin.AdminServiceCatalogMutationRequest
@@ -59,6 +61,18 @@ class AdminServiceExtrasViewModelTest {
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun eligibleServiceLookupUsesCatalogueNamesAndKeepsInactiveEntriesAvailable() = runTest {
+        val viewModel = AdminServiceExtrasViewModel(FakeServiceExtrasAuthRepository(authenticated = true), FakeServiceExtrasAdminRepository())
+        viewModel.refreshForSession()
+        runCurrent()
+        val loaded = assertIs<AdminServiceExtrasUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("Lavagem Standard", loaded.serviceOptions.single().label)
+        assertEquals("Inativo", loaded.serviceOptions.single().detail)
+        viewModel.startCreate()
+        assertEquals(loaded.serviceOptions, assertIs<AdminServiceExtrasUiState.Loaded>(viewModel.uiState.value).serviceOptions)
     }
 
     @Test
@@ -347,9 +361,12 @@ private class FakeServiceExtrasAdminRepository(
         return AdminAvailabilityResult.Failure(AdminError.Backend("unused"))
     }
 
-    override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult {
-        return AdminServiceCatalogResult.Failure(AdminError.Backend("unused"))
-    }
+    override suspend fun getServiceCatalogConfiguration(): AdminServiceCatalogResult =
+        AdminServiceCatalogResult.Success(AdminServiceCatalogConfig(listOf(AdminServiceCatalogItem(
+            id = "standard", name = "Lavagem Standard", description = "", durationMinutes = 30,
+            passengerPriceCents = 2000, suvPriceCents = 2500, iconKey = "car", popular = false,
+            active = false, sortOrder = 10,
+        ))))
 
     override suspend fun getServiceExtrasConfiguration(): AdminServiceExtrasResult {
         loadCalls += 1

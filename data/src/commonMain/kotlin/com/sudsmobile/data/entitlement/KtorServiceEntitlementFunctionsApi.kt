@@ -15,6 +15,21 @@ class KtorServiceEntitlementFunctionsApi(
     private val httpClient: HttpClient,
     private val config: FirebaseFunctionsConfig,
 ) : ServiceEntitlementFunctionsApi {
+    override suspend fun getAdminOperationLookups(query: String, customerEmail: String, idToken: String): AdminOperationLookupResult =
+        call<OperationLookupPayload, AdminOperationLookups, AdminOperationLookupResult>(
+            url = config.getAdminOperationLookupsUrl, idToken = idToken,
+            payload = OperationLookupPayload(query, customerEmail),
+            mapSuccess = { AdminOperationLookupResult.Success(it) },
+            mapFailure = { AdminOperationLookupResult.Failure(it) },
+        )
+
+    override suspend fun saveAdminPackageTemplate(template: AdminPackageTemplate, idToken: String): AdminPackageTemplateResult =
+        call<AdminPackageTemplate, TemplateMutationPayload, AdminPackageTemplateResult>(
+            url = config.upsertAdminPackageTemplateUrl, idToken = idToken, payload = template,
+            mapSuccess = { AdminPackageTemplateResult.Success(it.template) },
+            mapFailure = { AdminPackageTemplateResult.Failure(it) },
+        )
+
     override suspend fun getMyEntitlements(idToken: String): ServiceEntitlementListResult =
         call<EmptyPayload, EntitlementListPayload, ServiceEntitlementListResult>(
             url = config.getMyServiceEntitlementsUrl,
@@ -104,6 +119,12 @@ private data class CallableError(val status: String? = null, val code: String? =
 
 @Serializable
 private class EmptyPayload
+
+@Serializable
+private data class OperationLookupPayload(val query: String = "", val customerEmail: String = "")
+
+@Serializable
+private data class TemplateMutationPayload(val template: AdminPackageTemplate)
 
 @Serializable
 private data class AdminLookupPayload(val customerEmail: String)

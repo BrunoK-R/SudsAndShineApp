@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.content.TextContent
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -15,8 +16,36 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class KtorServiceEntitlementFunctionsApiTest {
+    @Test
+    fun sendsAuthenticatedLookupAndMapsCustomerBookingAndTemplate() = runTest {
+        val client = HttpClient(MockEngine { request ->
+            assertEquals("getAdminOperationLookups", request.url.pathSegments.last())
+            assertEquals("Bearer admin-token", request.headers[HttpHeaders.Authorization])
+            val payload = Json.parseToJsonElement((request.body as TextContent).text).jsonObject["data"]!!.jsonObject
+            assertEquals("joao", payload["query"]!!.jsonPrimitive.content)
+            assertEquals("client@example.com", payload["customerEmail"]!!.jsonPrimitive.content)
+            respond("""{"result":{"customers":[{"uid":"client","email":"client@example.com","displayName":"João"}],"reservations":[{"id":"r1","reservationCode":"SS-ONE","serviceName":"Standard"}],"templates":[{"id":"p1","name":"Pacote 5","kind":"package","totalUses":5,"validDays":180,"eligibleServiceIds":["standard"]}]}}""",
+                HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()))
+        }) { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
+        val api = KtorServiceEntitlementFunctionsApi(client, entitlementTestConfig())
+        val result = assertIs<AdminOperationLookupResult.Success>(api.getAdminOperationLookups("joao", "client@example.com", "admin-token"))
+        assertEquals("João", result.value.customers.single().displayName)
+        assertEquals("SS-ONE", result.value.reservations.single().reservationCode)
+        assertEquals(5, result.value.templates.single().totalUses)
+        client.close()
+    }
+
+    @Test
+    fun mapsLookupPermissionErrorsWithoutReturningResults() = runTest {
+        val api = KtorServiceEntitlementFunctionsApi(entitlementClient("""{"error":{"status":"PERMISSION_DENIED","message":"Admin role required"}}"""), entitlementTestConfig())
+        val result = assertIs<AdminOperationLookupResult.Failure>(api.getAdminOperationLookups("joao", "", "token"))
+        assertIs<ServiceEntitlementError.Permission>(result.error)
+    }
+
     @Test
     fun mapsCustomerPlansAndKeepsOnlinePurchaseDisabled() = runTest {
         val api = KtorServiceEntitlementFunctionsApi(

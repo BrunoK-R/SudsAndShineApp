@@ -6,6 +6,18 @@ class FirebaseServiceEntitlementRepository(
     private val api: ServiceEntitlementFunctionsApi,
     private val authRepository: AuthRepository,
 ) : ServiceEntitlementRepository {
+    override suspend fun getAdminOperationLookups(query: String, customerEmail: String): AdminOperationLookupResult {
+        val token = authRepository.currentSession()?.idToken
+            ?: return AdminOperationLookupResult.Failure(ServiceEntitlementError.Unauthenticated("Inicie sessão como administrador."))
+        return api.getAdminOperationLookups(query.trim(), customerEmail.trim().lowercase(), token)
+    }
+
+    override suspend fun saveAdminPackageTemplate(template: AdminPackageTemplate): AdminPackageTemplateResult {
+        val token = authRepository.currentSession()?.idToken
+            ?: return AdminPackageTemplateResult.Failure(ServiceEntitlementError.Unauthenticated("Inicie sessão como administrador."))
+        return api.saveAdminPackageTemplate(template, token)
+    }
+
     override suspend fun getMyEntitlements(): ServiceEntitlementListResult {
         val token = authRepository.currentSession()?.idToken
             ?: return ServiceEntitlementListResult.Failure(

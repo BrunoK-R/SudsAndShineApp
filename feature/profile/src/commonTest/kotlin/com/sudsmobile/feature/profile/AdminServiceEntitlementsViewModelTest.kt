@@ -10,6 +10,10 @@ import com.sudsmobile.data.catalog.ServiceCatalog
 import com.sudsmobile.data.catalog.ServiceCatalogRepository
 import com.sudsmobile.data.catalog.ServiceCatalogResult
 import com.sudsmobile.data.catalog.ServiceCatalogService
+import com.sudsmobile.data.entitlement.AdminBookingLookup
+import com.sudsmobile.data.entitlement.AdminOperationLookups
+import com.sudsmobile.data.entitlement.AdminOperationLookupResult
+import com.sudsmobile.data.entitlement.AdminPackageTemplate
 import com.sudsmobile.data.entitlement.AdminEntitlementCustomer
 import com.sudsmobile.data.entitlement.AdminServiceEntitlementList
 import com.sudsmobile.data.entitlement.AdminServiceEntitlementListResult
@@ -48,6 +52,44 @@ class AdminServiceEntitlementsViewModelTest {
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun templateSelectionPreservesPaymentAndDoesNotIssueAPlan() = runTest {
+        val repository = AdminEntitlementRepository()
+        val viewModel = adminEntitlementsViewModel(repository = repository)
+        viewModel.refreshForSession()
+        runCurrent()
+        val initial = assertIs<AdminServiceEntitlementsUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(initial.form.copy(amountPaidEuros = "17,50"))
+        viewModel.selectTemplate("monthly")
+        val selected = assertIs<AdminServiceEntitlementsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("membership", selected.form.kind)
+        assertEquals("4", selected.form.totalUses)
+        assertEquals("30", selected.form.validDays)
+        assertEquals("17,50", selected.form.amountPaidEuros)
+        assertEquals(0, repository.issueRequests.size)
+    }
+
+    @Test
+    fun switchingCustomerClearsBookingReferenceAndLoadedPlans() = runTest {
+        val viewModel = adminEntitlementsViewModel()
+        viewModel.refreshForSession()
+        runCurrent()
+        var loaded = assertIs<AdminServiceEntitlementsUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(loaded.form.copy(customerEmail = "client@example.com"))
+        viewModel.findCustomer()
+        runCurrent()
+        loaded = assertIs<AdminServiceEntitlementsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals(1, loaded.bookings.size)
+        viewModel.updateForm(loaded.form.copy(usageReservationCode = "SS-ONE"))
+        loaded = assertIs<AdminServiceEntitlementsUiState.Loaded>(viewModel.uiState.value)
+        viewModel.updateForm(loaded.form.copy(customerEmail = "other@example.com"))
+        val changed = assertIs<AdminServiceEntitlementsUiState.Loaded>(viewModel.uiState.value)
+        assertEquals("", changed.form.usageReservationCode)
+        assertEquals(0, changed.bookings.size)
+        assertEquals(0, changed.entitlements.size)
+        assertEquals(null, changed.customer)
     }
 
     @Test
@@ -133,6 +175,11 @@ private class AdminEntitlementCatalogRepository : ServiceCatalogRepository {
 private class AdminEntitlementRepository(
     private val adminLookup: CompletableDeferred<AdminServiceEntitlementListResult>? = null,
 ) : ServiceEntitlementRepository {
+    override suspend fun getAdminOperationLookups(query: String, customerEmail: String): AdminOperationLookupResult =
+        AdminOperationLookupResult.Success(AdminOperationLookups(
+            templates = listOf(AdminPackageTemplate("monthly", "Plano mensal", "membership", 4, 30, listOf("standard"))),
+            reservations = if (customerEmail.isBlank()) emptyList() else listOf(AdminBookingLookup("one", "SS-ONE")),
+        ))
     val issueRequests = mutableListOf<IssueServiceEntitlementRequest>()
 
     override suspend fun getMyEntitlements(): ServiceEntitlementListResult = error("Not used")

@@ -97,6 +97,10 @@ sealed interface ServiceEntitlementError {
 }
 
 interface ServiceEntitlementRepository {
+    suspend fun getAdminOperationLookups(query: String = "", customerEmail: String = ""): AdminOperationLookupResult =
+        AdminOperationLookupResult.Failure(ServiceEntitlementError.Backend("Pesquisa indisponível."))
+    suspend fun saveAdminPackageTemplate(template: AdminPackageTemplate): AdminPackageTemplateResult =
+        AdminPackageTemplateResult.Failure(ServiceEntitlementError.Backend("Modelos indisponíveis."))
     suspend fun getMyEntitlements(): ServiceEntitlementListResult
     suspend fun getAdminEntitlements(customerEmail: String): AdminServiceEntitlementListResult
     suspend fun issueEntitlement(request: IssueServiceEntitlementRequest): ServiceEntitlementMutationResult
@@ -105,6 +109,10 @@ interface ServiceEntitlementRepository {
 }
 
 interface ServiceEntitlementFunctionsApi {
+    suspend fun getAdminOperationLookups(query: String, customerEmail: String, idToken: String): AdminOperationLookupResult =
+        AdminOperationLookupResult.Failure(ServiceEntitlementError.Backend("Pesquisa indisponível."))
+    suspend fun saveAdminPackageTemplate(template: AdminPackageTemplate, idToken: String): AdminPackageTemplateResult =
+        AdminPackageTemplateResult.Failure(ServiceEntitlementError.Backend("Modelos indisponíveis."))
     suspend fun getMyEntitlements(idToken: String): ServiceEntitlementListResult
     suspend fun getAdminEntitlements(customerEmail: String, idToken: String): AdminServiceEntitlementListResult
     suspend fun issueEntitlement(

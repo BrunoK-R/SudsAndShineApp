@@ -42,6 +42,9 @@ internal fun AdminServiceEntitlementsSection(
     onRetry: () -> Unit,
     onFormChange: (AdminServiceEntitlementForm) -> Unit,
     onFindCustomer: () -> Unit,
+    onSearchCustomers: suspend (String) -> List<AdminLookupOption>,
+    onSelectTemplate: (String) -> Unit,
+    onSaveTemplate: () -> Unit,
     onIssue: () -> Unit,
     onAdjustUsage: (String, Int) -> Unit,
     onRequestRevoke: (String) -> Unit,
@@ -72,6 +75,9 @@ internal fun AdminServiceEntitlementsSection(
                 actionState = actionState,
                 onFormChange = onFormChange,
                 onFindCustomer = onFindCustomer,
+                onSearchCustomers = onSearchCustomers,
+                onSelectTemplate = onSelectTemplate,
+                onSaveTemplate = onSaveTemplate,
                 onIssue = onIssue,
                 onAdjustUsage = onAdjustUsage,
                 onRequestRevoke = onRequestRevoke,
@@ -105,6 +111,9 @@ private fun AdminServiceEntitlementsLoadedCard(
     actionState: AdminServiceEntitlementActionState,
     onFormChange: (AdminServiceEntitlementForm) -> Unit,
     onFindCustomer: () -> Unit,
+    onSearchCustomers: suspend (String) -> List<AdminLookupOption>,
+    onSelectTemplate: (String) -> Unit,
+    onSaveTemplate: () -> Unit,
     onIssue: () -> Unit,
     onAdjustUsage: (String, Int) -> Unit,
     onRequestRevoke: (String) -> Unit,
@@ -137,26 +146,18 @@ private fun AdminServiceEntitlementsLoadedCard(
 
             AdminEntitlementActionBanner(actionState, onDismissAction)
 
-            OutlinedTextField(
-                value = state.form.customerEmail,
-                onValueChange = { onFormChange(state.form.copy(customerEmail = it)) },
-                modifier = Modifier.fillMaxWidth(),
+            AdminRemoteLookupField(
+                label = "Selecionar cliente",
+                valueLabel = state.customer?.let { "${it.displayName.ifBlank { "Cliente registado" }} · ${it.email}" }.orEmpty(),
+                searchLabel = "Nome, email ou telefone",
                 enabled = !working,
-                singleLine = true,
-                label = { Text("Email da conta do cliente") },
+                onSearch = onSearchCustomers,
+                onSelect = { customer ->
+                    onFormChange(state.form.copy(customerEmail = customer.id))
+                    onFindCustomer()
+                },
             )
-            Button(
-                onClick = onFindCustomer,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !working && state.form.customerEmail.isNotBlank(),
-            ) {
-                if (working) {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                } else {
-                    Icon(Icons.Filled.Search, contentDescription = null)
-                    Text("Consultar conta", modifier = Modifier.padding(start = 8.dp))
-                }
-            }
+            state.lookupError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
             state.customer?.let { customer ->
                 Surface(
@@ -187,6 +188,15 @@ private fun AdminServiceEntitlementsLoadedCard(
                         enabled = !working,
                     )
                 }
+                AdminLookupField(
+                    label = "Modelo de plano / pacote",
+                    selectedIds = state.form.selectedTemplateId.takeIf { it.isNotBlank() }?.let { setOf(it) }.orEmpty(),
+                    options = state.templates.map { AdminLookupOption(it.id, it.name, "${it.totalUses} utilizações · ${it.validDays} dias") },
+                    emptyLabel = "Plano personalizado",
+                    emptyChoice = "Plano personalizado",
+                    enabled = !working,
+                    onSelect = { onSelectTemplate(it.firstOrNull().orEmpty()) },
+                )
                 OutlinedTextField(
                     value = state.form.name,
                     onValueChange = { onFormChange(state.form.copy(name = it)) },
@@ -236,6 +246,10 @@ private fun AdminServiceEntitlementsLoadedCard(
                         )
                     }
                 }
+                OutlinedButton(onClick = onSaveTemplate, enabled = !working && state.form.selectedServiceIds.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text(if (state.form.selectedTemplateId.isBlank()) "Guardar como modelo" else "Atualizar modelo")
+                }
                 OutlinedTextField(
                     value = state.form.issueNote,
                     onValueChange = { onFormChange(state.form.copy(issueNote = it)) },
@@ -254,13 +268,17 @@ private fun AdminServiceEntitlementsLoadedCard(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text("Registar utilização", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                OutlinedTextField(
-                    value = state.form.usageReservationCode,
-                    onValueChange = { onFormChange(state.form.copy(usageReservationCode = it.uppercase())) },
-                    modifier = Modifier.fillMaxWidth(),
+                AdminLookupField(
+                    label = "Marcação associada (opcional)",
+                    selectedIds = state.form.usageReservationCode.takeIf { it.isNotBlank() }?.let { setOf(it) }.orEmpty(),
+                    options = state.bookings.map { booking ->
+                        AdminLookupOption(booking.reservationCode, "${booking.reservationCode} · ${booking.serviceName}",
+                            "${booking.slotStart.replace('T', ' ').take(16)} UTC · ${booking.status.toAdminLookupBookingStatus()}")
+                    },
+                    onSelect = { onFormChange(state.form.copy(usageReservationCode = it.firstOrNull().orEmpty())) },
+                    emptyLabel = "Sem marcação associada",
+                    emptyChoice = "Sem marcação associada",
                     enabled = !working,
-                    singleLine = true,
-                    label = { Text("Código da marcação (opcional)") },
                 )
                 OutlinedTextField(
                     value = state.form.usageNote,
@@ -440,4 +458,15 @@ private fun String.toAdminStatusLabel(): String = when (this) {
     "expired" -> "expirado"
     "revoked" -> "revogado"
     else -> "indisponível"
+}
+
+private fun String.toAdminLookupBookingStatus(): String = when (lowercase()) {
+    "pending", "novo" -> "Pendente"
+    "confirmed", "confirmado" -> "Confirmada"
+    "in_progress", "em_execucao", "em execução" -> "Em curso"
+    "completed", "complete", "concluido", "concluído", "done" -> "Concluída"
+    "rejected", "recusado" -> "Recusada"
+    "cancelled", "canceled", "cancelado" -> "Cancelada"
+    "expired", "expirado" -> "Expirada"
+    else -> this
 }

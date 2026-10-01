@@ -1016,22 +1016,14 @@ private fun AdminRejectEditor(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        OutlinedTextField(
+        AdminPresetField(
             value = rejectionReason,
             onValueChange = onRejectionReasonChange,
+            label = "Motivo opcional",
+            options = listOf(AdminLookupOption("", "Sem motivo")) + adminRejectionReasons,
+            customLabel = "Outro motivo",
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
             minLines = 2,
-            maxLines = 3,
-            label = { Text("Motivo opcional") },
-            supportingText = {
-                Text("${rejectionReason.length}/$MaxAdminRejectionReasonLength")
-            },
-            shape = RoundedCornerShape(14.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.tertiary,
-                focusedLabelColor = MaterialTheme.colorScheme.tertiary,
-            ),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
