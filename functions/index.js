@@ -60,6 +60,7 @@ const {
   userProfilePreferencePatch,
 } = require("./src/notificationPreferences");
 const { normalizeShakeFeedback, SCREENSHOT_MAX_BYTES } = require("./src/shakeFeedback");
+const { mergeCatalogDocuments } = require("./src/serviceCatalog");
 
 initializeApp();
 setGlobalOptions({ region: "europe-west1", maxInstances: 10 });
@@ -2047,20 +2048,26 @@ async function getPublicServiceCatalog() {
     db.collection("serviceExtras").get(),
   ]);
 
-  const services = servicesSnapshot.docs
-    .map((doc) => toServiceCatalogItem(doc.id, doc.data()))
+  const services = mergeCatalogDocuments(
+    defaultServiceCatalogServices,
+    servicesSnapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+  )
+    .map((item) => toServiceCatalogItem(item.id, item))
     .filter((item) => item && item.archived !== true)
     .sort(sortBySortOrderThenName)
     .map(({ archived, sortOrder, ...item }) => item);
-  const extras = extrasSnapshot.docs
-    .map((doc) => toServiceExtraItem(doc.id, doc.data()))
+  const extras = mergeCatalogDocuments(
+    defaultServiceCatalogExtras,
+    extrasSnapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+  )
+    .map((item) => toServiceExtraItem(item.id, item))
     .filter((item) => item && item.archived !== true)
     .sort(sortBySortOrderThenName)
     .map(({ archived, sortOrder, ...item }) => item);
 
   return {
-    services: services.length > 0 ? services : defaultServiceCatalogServices,
-    extras: extras.length > 0 ? extras : defaultServiceCatalogExtras,
+    services,
+    extras,
   };
 }
 
@@ -2119,24 +2126,24 @@ async function getAdminLoyaltySettingsConfig(fallback = {}) {
 
 async function getAdminServiceCatalogItems() {
   const snapshot = await db.collection("serviceCatalog").get();
-  const items = snapshot.docs
-    .map((doc) => toAdminServiceCatalogItem(doc.id, doc.data()))
+  return mergeCatalogDocuments(
+    defaultServiceCatalogServices,
+    snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+  )
+    .map((item) => toAdminServiceCatalogItem(item.id, item))
     .filter(Boolean)
     .sort(sortBySortOrderThenName);
-  return items.length > 0
-    ? items
-    : defaultServiceCatalogServices.map((item) => toAdminServiceCatalogItem(item.id, item)).filter(Boolean);
 }
 
 async function getAdminServiceExtraItems() {
   const snapshot = await db.collection("serviceExtras").get();
-  const items = snapshot.docs
-    .map((doc) => toAdminServiceExtraItem(doc.id, doc.data()))
+  return mergeCatalogDocuments(
+    defaultServiceCatalogExtras,
+    snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+  )
+    .map((item) => toAdminServiceExtraItem(item.id, item))
     .filter(Boolean)
     .sort(sortBySortOrderThenName);
-  return items.length > 0
-    ? items
-    : defaultServiceCatalogExtras.map((item) => toAdminServiceExtraItem(item.id, item)).filter(Boolean);
 }
 
 async function getNotificationCampaignDraftsPayload() {

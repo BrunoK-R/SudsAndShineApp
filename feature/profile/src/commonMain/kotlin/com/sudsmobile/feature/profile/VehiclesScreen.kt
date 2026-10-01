@@ -65,6 +65,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sudsmobile.shared.theme.SudsCustomerTheme
 import com.sudsmobile.shared.ui.SudsCustomerScreen
 import com.sudsmobile.shared.ui.SudsSecondaryTopBar
+import com.sudsmobile.shared.ui.dismissKeyboardOnOutsideTap
+import com.sudsmobile.shared.ui.observeFocusedInput
+import com.sudsmobile.shared.ui.rememberKeyboardDismissState
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -668,9 +671,11 @@ private fun AddVehicleDialog(
 ) {
     val isEditing = draft.id != null
     val isSaving = mutationState is VehicleMutationUiState.Loading
+    val keyboardDismissState = rememberKeyboardDismissState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.dismissKeyboardOnOutsideTap(keyboardDismissState),
         title = {
             Text(
                 text = if (isEditing) "Editar Veículo" else "Adicionar Veículo",
@@ -680,7 +685,11 @@ private fun AddVehicleDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.observeFocusedInput(keyboardDismissState)
+                    .dismissKeyboardOnOutsideTap(keyboardDismissState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 DialogMutationMessage(mutationState = mutationState)
                 VehicleTextField(
                     value = draft.brand,

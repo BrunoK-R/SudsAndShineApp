@@ -2,7 +2,6 @@ package com.sudsmobile.feature.profile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,7 +42,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,6 +52,9 @@ import com.sudsmobile.data.feedback.FeedbackInteractions
 import com.sudsmobile.data.feedback.FeedbackRepository
 import com.sudsmobile.data.feedback.FeedbackResult
 import com.sudsmobile.shared.ui.SudsAdminHeader
+import com.sudsmobile.shared.ui.dismissKeyboardOnOutsideTap
+import com.sudsmobile.shared.ui.observeFocusedInput
+import com.sudsmobile.shared.ui.rememberKeyboardDismissState
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import kotlinx.coroutines.launch
@@ -215,11 +216,17 @@ fun AdminShakeFeedbackScreen(
 
     selected?.let { item ->
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(onDismissRequest = { selected = null }, sheetState = sheetState) {
+        val keyboardDismissState = rememberKeyboardDismissState()
+        ModalBottomSheet(
+            onDismissRequest = { selected = null },
+            sheetState = sheetState,
+            modifier = Modifier.dismissKeyboardOnOutsideTap(keyboardDismissState),
+        ) {
             Column(
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f)
+                    .observeFocusedInput(keyboardDismissState)
+                    .dismissKeyboardOnOutsideTap(keyboardDismissState)
                     .verticalScroll(rememberScrollState())
-                    .pointerInput(Unit) { detectTapGestures(onTap = { focusManager.clearFocus() }) }
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

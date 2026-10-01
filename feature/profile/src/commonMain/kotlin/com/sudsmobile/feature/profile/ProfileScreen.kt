@@ -74,6 +74,9 @@ import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsCustomerTheme
 import com.sudsmobile.shared.ui.SudsBrandBackground
 import com.sudsmobile.shared.ui.SudsCompactTopBar
+import com.sudsmobile.shared.ui.dismissKeyboardOnOutsideTap
+import com.sudsmobile.shared.ui.observeFocusedInput
+import com.sudsmobile.shared.ui.rememberKeyboardDismissState
 import org.koin.compose.viewmodel.koinViewModel
 
 private data class ProfileStat(
@@ -1840,13 +1843,19 @@ private fun AccountDeletionDialog(
     val namesMatch = confirmationName.normalizedConfirmationName() ==
         expectedDisplayName.normalizedConfirmationName()
     val errorMessage = (state as? AccountDeletionUiState.Error)?.message
+    val keyboardDismissState = rememberKeyboardDismissState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = SudsColors.navyElevated,
+        modifier = Modifier.dismissKeyboardOnOutsideTap(keyboardDismissState),
         title = { Text("Eliminar conta?") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.observeFocusedInput(keyboardDismissState)
+                    .dismissKeyboardOnOutsideTap(keyboardDismissState),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text(
                     "Esta ação é definitiva. A conta, os veículos, as marcações, " +
                         "o histórico e os restantes dados pessoais serão eliminados.",

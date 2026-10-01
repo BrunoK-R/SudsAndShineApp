@@ -1,6 +1,5 @@
 package org.sudsmobile.app
 
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +32,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
@@ -45,6 +43,9 @@ import com.sudsmobile.data.feedback.FEEDBACK_TITLE_MAX_LENGTH
 import com.sudsmobile.data.feedback.FeedbackRepository
 import com.sudsmobile.data.feedback.FeedbackResult
 import com.sudsmobile.data.feedback.FeedbackScreenshot
+import com.sudsmobile.shared.ui.dismissKeyboardOnOutsideTap
+import com.sudsmobile.shared.ui.observeFocusedInput
+import com.sudsmobile.shared.ui.rememberKeyboardDismissState
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
@@ -135,7 +136,7 @@ internal fun ShakeFeedbackHost(content: @Composable () -> Unit) {
         iosShakeEvents.collect { open(it) }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().dismissKeyboardOnOutsideTap()) {
         content()
         SnackbarHost(
             hostState = snackbar,
@@ -145,15 +146,18 @@ internal fun ShakeFeedbackHost(content: @Composable () -> Unit) {
 
     if (visible) {
         val signedIn = auth.sessionState.value is AuthSessionState.Authenticated
+        val keyboardDismissState = rememberKeyboardDismissState()
         ModalBottomSheet(
             onDismissRequest = { if (!submitting) visible = false },
             sheetState = sheetState,
+            modifier = Modifier.dismissKeyboardOnOutsideTap(keyboardDismissState),
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                    .imePadding().pointerInput(Unit) {
-                        detectTapGestures(onTap = { focusManager.clearFocus() })
-                    }.padding(horizontal = 24.dp, vertical = 16.dp),
+                modifier = Modifier.fillMaxWidth()
+                    .observeFocusedInput(keyboardDismissState)
+                    .dismissKeyboardOnOutsideTap(keyboardDismissState)
+                    .verticalScroll(rememberScrollState())
+                    .imePadding().padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("Enviar feedback", style = MaterialTheme.typography.headlineSmall)
