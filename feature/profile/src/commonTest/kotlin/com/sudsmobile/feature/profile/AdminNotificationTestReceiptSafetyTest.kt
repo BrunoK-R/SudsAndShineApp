@@ -132,6 +132,22 @@ class AdminNotificationTestReceiptSafetyTest {
         )
     }
 
+    @Test
+    fun queuedReceiptWithoutDeliveryCountersDoesNotClaimDeviceIsInactive() {
+        val receipt = testReceipt(
+            recipientUid = "admin-1",
+            targetScope = "self",
+            testOnly = true,
+            deliveryState = "queued",
+            tokenCount = 0,
+        )
+
+        assertEquals(
+            "Teste de notificação em fila apenas para o administrador atual.",
+            receipt.toSelfTestQueuedMessage("Teste de notificação"),
+        )
+    }
+
     private fun testReceipt(
         recipientUid: String,
         targetScope: String,

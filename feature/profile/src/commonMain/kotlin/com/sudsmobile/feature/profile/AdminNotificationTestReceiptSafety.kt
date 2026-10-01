@@ -13,7 +13,7 @@ internal fun AdminNotificationTestReceipt.toSelfTestQueuedMessage(kindLabel: Str
     return when {
         sentCount > 0 || deliveryState.trim().equals("sent", ignoreCase = true) ->
             "$kindLabel enviado apenas para o administrador atual."
-        tokenCount == 0 || deliveryState.trim().equals("no_recipients", ignoreCase = true) ->
+        deliveryState.trim().equals("no_recipients", ignoreCase = true) ->
             "Ative este dispositivo antes de enviar testes de notificação."
         failedCount > 0 || invalidatedCount > 0 || deliveryState.trim().equals("failed", ignoreCase = true) ->
             "Não foi possível entregar o teste a este dispositivo."
