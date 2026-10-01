@@ -2,10 +2,12 @@
 
 Last reviewed: 22 July 2026
 
+Notification configuration updated: 1 October 2026
+
 ## Release recommendation
 
 - **Android:** ready for a controlled internal or closed pilot after the unchecked P0 items below are completed. It is not yet ready for an unrestricted public launch.
-- **iOS:** development preview only. Push notifications, Crashlytics, Apple signing, and App Store release verification are not complete.
+- **iOS:** native push integration and production Firebase APNs credentials are configured. Physical notification delivery, Crashlytics, Apple signing, and App Store release verification are not complete.
 - **Website:** keep its current public website and booking scope. It is not intended to reproduce the mobile customer or admin experience.
 - **Payments:** the current product records payment status and tells customers to pay on site. It does not process an online payment.
 
@@ -28,7 +30,7 @@ Do not start a public launch until every item in this section is checked.
 
 ## Foundation already verified
 
-- [x] The canonical backend is the sibling `FirebaseSuds` repository; App production function deploys are intentionally blocked.
+- [x] The canonical backend is the sibling `SudsAndShineFirebase` repository; App production function deploys are intentionally blocked.
 - [x] Firebase Functions deploy successfully and the production health endpoint returns HTTP 200.
 - [x] `www.sudsandshine.pt`, its principal public pages, Firebase Hosting, and production JS/CSS assets return HTTP 200 after the latest backend deploy.
 - [x] The live public `getBusinessInfo` and `getServiceCatalog` callable contracts return valid responses.
@@ -43,7 +45,7 @@ Do not start a public launch until every item in this section is checked.
 
 ## Android distribution
 
-- [ ] Create or confirm the Google Play application for package `org.sudsandshine.app`.
+- [ ] Create or confirm the Google Play application for package `org.sudsmobile.app`.
 - [ ] Enrol in Play App Signing and create the upload keystore. Store the keystore and recovery material in two secure locations outside Git.
 - [ ] Supply `SUDS_RELEASE_STORE_FILE`, `SUDS_RELEASE_STORE_PASSWORD`, `SUDS_RELEASE_KEY_ALIAS`, and `SUDS_RELEASE_KEY_PASSWORD` in the release environment.
 - [ ] Decide the first public version and bump `versionCode`/`versionName` if `1`/`1.0.0` is not the intended release identity.
@@ -58,9 +60,11 @@ Do not start a public launch until every item in this section is checked.
 
 - [x] The iOS Google client and reversed-client values are present in `Config.xcconfig`.
 - [x] The iOS simulator build has been verified during this production-readiness work.
-- [ ] Set the Apple Development Team and replace the current team-derived bundle identifier arrangement with the final registered identifier if necessary.
+- [x] The iOS target uses Apple team `7MR6LD3GZC` and the registered production bundle identifier `com.sudseshine.app`.
 - [x] Add APNs entitlements, Firebase Messaging integration, and an iOS implementation of `NotificationDeviceRegistrar`.
-- [ ] Upload an APNs authentication key or certificate in Firebase Cloud Messaging for the registered `com.sudseshine.app` app, enable Push Notifications on its Apple App ID, and verify signing on a physical iPhone. Firebase had no development or production APNs credential configured when checked on 2026-10-01.
+- [x] Upload APNs authentication keys in production Firebase project `sudsandshine-bd3e2` for `com.sudseshine.app`. On 2026-10-01, Sandbox key `HC8MVAJSLG` and Production key `DLPN3AJV9K` were created with topic-specific access to this app and uploaded to their corresponding Firebase fields. Private `.p8` backups remain outside Git.
+- [x] Confirm Push Notifications is enabled on the Apple App ID for `com.sudseshine.app` (verified on 2026-10-01).
+- [ ] Verify APNs entitlements in the signed provisioning profile and install on a physical iPhone.
 - [ ] Verify foreground, background, terminated, permission-denied, token/installation rotation, deep-link, and sign-out notification cases on a physical iPhone.
 - [ ] Add Firebase Crashlytics to the iOS host, upload dSYMs, and verify a controlled crash in Firebase.
 - [ ] Configure production signing, provisioning, version/build numbers, archive validation, and TestFlight.
@@ -77,7 +81,7 @@ Do not start a public launch until every item in this section is checked.
 - [ ] Apply least-privilege IAM to Firebase/Google Cloud users and service accounts; require MFA for all privileged people.
 - [ ] Add Firebase App Check providers to Android, iOS, and the website clients as applicable. Observe metrics first, then enforce on protected callable functions.
 - [ ] Configure budget thresholds, function error/latency alerts, Firestore quota alerts, notification-outbox age/failure alerts, and invalid-installation trend monitoring.
-- [ ] Document the canonical deploy command, pre-deploy checks, rollback procedure, and who can deploy. Use only the `FirebaseSuds` repository for production backend deploys.
+- [ ] Document the canonical deploy command, pre-deploy checks, rollback procedure, and who can deploy. Use only the `SudsAndShineFirebase` repository for production backend deploys.
 - [ ] Schedule Firestore exports and Storage backup/retention appropriate to the business. Perform and record a restore drill before public launch.
 - [ ] Define log retention, customer record retention, booking/audit record retention, and account-deletion/anonymisation rules with a Portuguese/EU privacy reviewer.
 - [ ] Re-run dependency auditing before each release. Six moderate transitive advisories currently come through Google Storage/Admin dependencies; do not accept npm's incompatible Admin downgrade as a fix.

@@ -2,6 +2,32 @@
 
 This folder contains the native iOS host for the Kotlin Multiplatform app.
 
+## Push notification setup
+
+Both Debug and Release connect to production Firebase project
+`sudsandshine-bd3e2` using the registered bundle `com.sudseshine.app` and Apple
+team `7MR6LD3GZC`. Debug uses the development APNs environment; Release uses
+production. This environment choice does not change the Firebase project.
+
+On 2026-10-01, the app's Firebase Cloud Messaging configuration was updated with
+topic-specific APNs keys for this bundle only:
+
+- Sandbox: `HC8MVAJSLG`, uploaded as the development APNs auth key.
+- Production: `DLPN3AJV9K`, uploaded as the production APNs auth key.
+
+Push Notifications is enabled on the Apple App ID. Private `.p8` files belong
+in secure storage outside Git and must never be included in an app build.
+
+The native host configures Firebase, registers with APNs, maps the APNs token
+to Firebase Messaging, and registers the Firebase Installation ID with the
+backend after notification permission is allowed. The shared home banner opens
+the native notification settings when permission is disabled.
+
+The simulator build passes. Verify the signed provisioning profile and actual
+foreground, background, terminated, denied-permission, and notification-tap
+behaviour on a physical iPhone. A TestFlight or App Store build uses the
+production APNs key.
+
 ## Google Sign-In setup
 
 The iOS Google button is hidden if the native Google OAuth configuration is not
