@@ -53,6 +53,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.sudsmobile.shared.ui.SudsCustomerScreen
 import com.sudsmobile.shared.ui.SudsSecondaryTopBar
 import org.koin.compose.viewmodel.koinViewModel
@@ -77,6 +79,9 @@ fun NotificationPreferencesScreen(
     LaunchedEffect(sessionState) {
         viewModel.refreshForSession()
         adminAccessViewModel.refreshForSession()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshForSession()
     }
 
     NotificationPreferencesScreenContent(

@@ -43,3 +43,9 @@ With signing configured, create the upload bundle with:
 ```
 
 Keep the keystore and passwords outside this repository. Back them up securely before the first production upload because future updates must use the same upload identity.
+
+## Notification setup
+
+The home screen checks the app's native notification settings on startup and resume. When notifications are disabled, its banner opens the device's notification settings. Signed-in devices register automatically after native permission is allowed. Admin booking policy includes the “Autoaceitar marcações” switch; it defaults to enabled and keeps the existing slot capacity and blocking checks.
+
+Android uses the normal `org.sudsmobile.app` package and production Firebase by default. iOS uses the existing `com.sudseshine.app` Firebase app, Firebase Messaging installation IDs, explicit APNs registration, and native notification tap routing. The iOS host includes its Firebase SDK configuration. Physical iPhone delivery additionally requires an APNs key/certificate in Firebase Cloud Messaging and Push Notifications enabled on the Apple App ID and signing profile. Both APNs environments were unconfigured in Firebase on 2026-10-01.

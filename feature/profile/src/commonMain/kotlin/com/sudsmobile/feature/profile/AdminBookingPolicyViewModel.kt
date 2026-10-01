@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 internal data class AdminBookingPolicyForm(
+    val autoAcceptBookings: Boolean = true,
     val pendingHoldMinutes: String = "",
     val cancellationWindowMinutes: String = "",
     val rescheduleWindowMinutes: String = "",
@@ -263,6 +264,7 @@ private sealed interface ParsedBookingPolicyRequest {
 }
 
 private fun AdminBookingPolicyConfig.toForm(): AdminBookingPolicyForm = AdminBookingPolicyForm(
+    autoAcceptBookings = autoAcceptBookings,
     pendingHoldMinutes = pendingHoldMinutes.toString(),
     cancellationWindowMinutes = cancellationWindowMinutes.toString(),
     rescheduleWindowMinutes = rescheduleWindowMinutes.toString(),
@@ -314,6 +316,7 @@ private fun AdminBookingPolicyForm.toUpdateRequest(): ParsedBookingPolicyRequest
             ParsedBookingPolicyRequest.Invalid("A mensagem de pagamento deve ter no máximo 500 caracteres.")
         else -> ParsedBookingPolicyRequest.Valid(
             AdminBookingPolicyUpdateRequest(
+                autoAcceptBookings = autoAcceptBookings,
                 pendingHoldMinutes = pendingHold,
                 cancellationWindowMinutes = cancellationWindow,
                 rescheduleWindowMinutes = rescheduleWindow,

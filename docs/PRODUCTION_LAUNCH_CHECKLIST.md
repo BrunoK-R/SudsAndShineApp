@@ -59,7 +59,8 @@ Do not start a public launch until every item in this section is checked.
 - [x] The iOS Google client and reversed-client values are present in `Config.xcconfig`.
 - [x] The iOS simulator build has been verified during this production-readiness work.
 - [ ] Set the Apple Development Team and replace the current team-derived bundle identifier arrangement with the final registered identifier if necessary.
-- [ ] Add the Push Notifications capability, APNs entitlement, APNs key/certificate, Firebase Messaging integration, and an iOS implementation of `NotificationDeviceRegistrar`.
+- [x] Add APNs entitlements, Firebase Messaging integration, and an iOS implementation of `NotificationDeviceRegistrar`.
+- [ ] Upload an APNs authentication key or certificate in Firebase Cloud Messaging for the registered `com.sudseshine.app` app, enable Push Notifications on its Apple App ID, and verify signing on a physical iPhone. Firebase had no development or production APNs credential configured when checked on 2026-10-01.
 - [ ] Verify foreground, background, terminated, permission-denied, token/installation rotation, deep-link, and sign-out notification cases on a physical iPhone.
 - [ ] Add Firebase Crashlytics to the iOS host, upload dSYMs, and verify a controlled crash in Firebase.
 - [ ] Configure production signing, provisioning, version/build numbers, archive validation, and TestFlight.

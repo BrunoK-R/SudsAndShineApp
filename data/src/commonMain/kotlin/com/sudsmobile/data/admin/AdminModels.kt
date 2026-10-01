@@ -204,6 +204,7 @@ data class AdminBookingPolicyConfig(
     val source: String = "",
     val updatedAtIso: String = "",
     val updatedByUid: String = "",
+    val autoAcceptBookings: Boolean = true,
 )
 
 data class AdminLoyaltySettingsConfig(
@@ -251,6 +252,7 @@ data class AdminBookingPolicyUpdateRequest(
     val cancellationWindowMinutes: Int,
     val rescheduleWindowMinutes: Int,
     val paymentEligibilityCopy: String,
+    val autoAcceptBookings: Boolean = true,
 )
 
 data class AdminLoyaltySettingsUpdateRequest(

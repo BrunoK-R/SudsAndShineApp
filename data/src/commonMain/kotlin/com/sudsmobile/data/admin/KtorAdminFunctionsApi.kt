@@ -982,9 +982,11 @@ private data class BookingPolicyPayload(
     val cancellationWindowMinutes: Int,
     val rescheduleWindowMinutes: Int,
     val paymentEligibilityCopy: String,
+    val autoAcceptBookings: Boolean = true,
 ) {
     companion object {
         fun from(request: AdminBookingPolicyUpdateRequest): BookingPolicyPayload = BookingPolicyPayload(
+            autoAcceptBookings = request.autoAcceptBookings,
             pendingHoldMinutes = request.pendingHoldMinutes,
             cancellationWindowMinutes = request.cancellationWindowMinutes,
             rescheduleWindowMinutes = request.rescheduleWindowMinutes,
@@ -1798,8 +1800,10 @@ private data class BookingPolicyResultPayload(
     val source: String = "",
     val updatedAtIso: String = "",
     val updatedByUid: String = "",
+    val autoAcceptBookings: Boolean = true,
 ) {
     fun toAdminBookingPolicyConfig(): AdminBookingPolicyConfig = AdminBookingPolicyConfig(
+        autoAcceptBookings = autoAcceptBookings,
         pendingHoldMinutes = pendingHoldMinutes.coerceIn(15, 10080),
         cancellationWindowMinutes = cancellationWindowMinutes.coerceIn(0, 10080),
         rescheduleWindowMinutes = rescheduleWindowMinutes.coerceIn(0, 10080),

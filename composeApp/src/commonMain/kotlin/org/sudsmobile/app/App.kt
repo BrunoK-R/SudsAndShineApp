@@ -1,6 +1,13 @@
 package org.sudsmobile.app
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.sudsmobile.data.notification.NotificationDeviceSync
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -20,6 +27,13 @@ fun App(
     pendingNotificationRoute: String? = null,
     onNotificationRouteConsumed: () -> Unit = {},
 ) {
+    val notificationSync: NotificationDeviceSync = koinInject()
+    val notificationSession by notificationSync.sessionState.collectAsStateWithLifecycle()
+    val notificationScope = rememberCoroutineScope()
+    LaunchedEffect(notificationSession) { notificationSync.refresh() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        notificationScope.launch { notificationSync.refresh() }
+    }
     val onboardingGateViewModel: OnboardingGateViewModel = koinViewModel()
     val onboardingGateState by onboardingGateViewModel.uiState.collectAsStateWithLifecycle()
 

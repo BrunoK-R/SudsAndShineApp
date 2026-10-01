@@ -23,8 +23,6 @@ import com.sudsmobile.data.auth.AuthRepository
 import com.sudsmobile.data.auth.AuthSessionState
 import com.sudsmobile.data.booking.MutableBookingChangeNotifier
 import com.sudsmobile.data.booking.BookingSelectionPreset
-import com.sudsmobile.data.notification.NotificationDeviceRegistrar
-import com.sudsmobile.data.notification.NotificationRepository
 import com.sudsmobile.feature.blog.BlogScreen
 import com.sudsmobile.feature.cart.CartScreen
 import com.sudsmobile.feature.cart.RatingScreen
@@ -60,8 +58,6 @@ fun MainNavigation(
     val navController = rememberNavController()
     val bookingChangeNotifier: MutableBookingChangeNotifier = koinInject()
     val authRepository: AuthRepository = koinInject()
-    val notificationDeviceRegistrar: NotificationDeviceRegistrar = koinInject()
-    val notificationRepository: NotificationRepository = koinInject()
     val sessionState by authRepository.sessionState.collectAsStateWithLifecycle()
     val latestOnNotificationRouteConsumed by rememberUpdatedState(onNotificationRouteConsumed)
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -152,17 +148,6 @@ fun MainNavigation(
         }
         navController.navigateToNotificationRoute(route)
         latestOnNotificationRouteConsumed()
-    }
-
-    LaunchedEffect((sessionState as? AuthSessionState.Authenticated)?.session?.user?.uid) {
-        val uid = (sessionState as? AuthSessionState.Authenticated)?.session?.user?.uid
-            ?.takeIf { it.isNotBlank() }
-            ?: return@LaunchedEffect
-        registerNotificationDeviceIfAllowed(
-            userUid = uid,
-            notificationDeviceRegistrar = notificationDeviceRegistrar,
-            notificationRepository = notificationRepository,
-        )
     }
 
     Scaffold(

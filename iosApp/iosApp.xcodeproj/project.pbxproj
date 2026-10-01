@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		B9DA98112F00000100A4DA20 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B9DA98122F00000100A4DA20 /* GoogleSignIn */; };
+		F1A000000000000000000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = F1B000000000000000000001 /* FirebaseCore */; };
+		F1A000000000000000000002 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = F1B000000000000000000002 /* FirebaseMessaging */; };
+		F1A000000000000000000003 /* FirebaseInstallations in Frameworks */ = {isa = PBXBuildFile; productRef = F1B000000000000000000003 /* FirebaseInstallations */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +48,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F1A000000000000000000003 /* FirebaseInstallations in Frameworks */,
+				F1A000000000000000000002 /* FirebaseMessaging in Frameworks */,
+				F1A000000000000000000001 /* FirebaseCore in Frameworks */,
 				B9DA98112F00000100A4DA20 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -98,6 +104,9 @@
 			);
 			name = iosApp;
 			packageProductDependencies = (
+				F1B000000000000000000003 /* FirebaseInstallations */,
+				F1B000000000000000000002 /* FirebaseMessaging */,
+				F1B000000000000000000001 /* FirebaseCore */,
 				B9DA98122F00000100A4DA20 /* GoogleSignIn */,
 			);
 			productName = iosApp;
@@ -129,6 +138,7 @@
 			mainGroup = B9DA97A82DC1472C00A4DA20;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				F1C000000000000000000001 /* Firebase */,
 				B9DA98132F00000100A4DA20 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -310,6 +320,7 @@
 			baseConfigurationReferenceAnchor = B9DA98002DC14AA900A4DA20 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "$(APPLE_SIGN_IN_ENTITLEMENTS_$(APPLE_SIGN_IN_ENABLED))";
@@ -346,6 +357,7 @@
 			baseConfigurationReferenceAnchor = B9DA98002DC14AA900A4DA20 /* Configuration */;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "$(APPLE_SIGN_IN_ENTITLEMENTS_$(APPLE_SIGN_IN_ENABLED))";
@@ -409,6 +421,11 @@
 				minimumVersion = 9.0.0;
 			};
 		};
+		F1C000000000000000000001 /* Firebase */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+            requirement = {kind = exactVersion; version = 12.19.2;};
+        };
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -416,6 +433,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B9DA98132F00000100A4DA20 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignIn;
+		};
+		F1B000000000000000000001 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1C000000000000000000001 /* Firebase */;
+			productName = FirebaseCore;
+		};
+		F1B000000000000000000002 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1C000000000000000000001 /* Firebase */;
+			productName = FirebaseMessaging;
+		};
+		F1B000000000000000000003 /* FirebaseInstallations */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F1C000000000000000000001 /* Firebase */;
+			productName = FirebaseInstallations;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -24,6 +24,13 @@ import com.sudsmobile.shared.theme.SudsColors
 import com.sudsmobile.shared.theme.SudsSpacing
 import com.sudsmobile.shared.ui.SudsBrandBackground
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.compose.koinInject
+import com.sudsmobile.data.notification.NotificationDeviceSync
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
 
 @Composable
 fun HomeScreen(
@@ -40,6 +47,9 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
     val bookingRevision by viewModel.bookingRevision.collectAsStateWithLifecycle()
+    val notificationSync: NotificationDeviceSync = koinInject()
+    val notificationsEnabled by notificationSync.notificationsEnabled.collectAsStateWithLifecycle()
+    val openNotificationSettings = rememberOpenNotificationSettings()
 
     LaunchedEffect(sessionState, bookingRevision) {
         viewModel.refreshForSession()
@@ -56,6 +66,8 @@ fun HomeScreen(
         onOpenNotifications = onOpenNotifications,
         onRequestSignIn = onRequestSignIn,
         onRetry = viewModel::retry,
+        notificationsDisabled = notificationsEnabled == false,
+        onOpenNotificationSettings = openNotificationSettings,
     )
 }
 
@@ -71,6 +83,8 @@ internal fun HomeScreenContent(
     onOpenNotifications: () -> Unit,
     onRequestSignIn: () -> Unit,
     onRetry: () -> Unit,
+    notificationsDisabled: Boolean = false,
+    onOpenNotificationSettings: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val reduceMotion = LocalSudsMotionPreferences.current.reduceMotion
@@ -102,6 +116,18 @@ internal fun HomeScreenContent(
             HomeTopBar(
                 onOpenNotifications = onOpenNotifications,
             )
+            if (notificationsDisabled) Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenNotificationSettings),
+            ) {
+                Column(Modifier.padding(horizontal = SudsSpacing.contentGutter, vertical = 12.dp)) {
+                    Text("Não tem as notificações ativas, não será avisado quando os seus serviços terminarem.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text("Abrir definições de notificações", style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 6.dp))
+                }
+            }
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 state = listState,

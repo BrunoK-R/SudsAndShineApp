@@ -3,6 +3,7 @@ import ComposeApp
 
 @main
 struct iOSApp: App {
+    @UIApplicationDelegateAdaptor(SudsAppDelegate.self) var appDelegate
     init() {
         #if DEBUG
         let isDebugBuild = true
@@ -13,6 +14,7 @@ struct iOSApp: App {
         GoogleSignInCoordinator.shared.configureKotlinBridge()
         AppleSignInCoordinator.shared.configureKotlinBridge()
         AppleAccountDeletionCoordinator.shared.configureKotlinBridge()
+        SudsPushNotifications.shared.configureKotlinBridge()
     }
 
     var body: some Scene {

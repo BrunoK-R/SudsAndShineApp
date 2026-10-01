@@ -34,6 +34,7 @@ import com.sudsmobile.data.notification.FirebaseNotificationRepository
 import com.sudsmobile.data.notification.KtorNotificationFunctionsApi
 import com.sudsmobile.data.notification.NotificationFunctionsApi
 import com.sudsmobile.data.notification.NotificationRepository
+import com.sudsmobile.data.notification.NotificationDeviceSync
 import com.sudsmobile.data.profile.AccountDeletionFunctionsApi
 import com.sudsmobile.data.profile.AccountDeletionRepository
 import com.sudsmobile.data.profile.FirebaseUserProfileRepository
@@ -60,6 +61,7 @@ import io.ktor.client.HttpClient
 import org.koin.dsl.module
 
 val dataModule = module {
+    single { NotificationDeviceSync(get(), get(), get()) }
     single<HttpClient> { createSudsHttpClient() }
     single {
         FirebaseAuthConfig.default(

@@ -1,6 +1,7 @@
 package com.sudsmobile.data.notification
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -103,6 +104,12 @@ class AndroidNotificationDeviceRegistrar(
     }
 
     private fun currentPermissionStatus(): NotificationDevicePermissionStatus {
+        val manager = appContext.getSystemService(NotificationManager::class.java)
+        if (!manager.areNotificationsEnabled() ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                manager.getNotificationChannel("suds_notifications")?.importance == NotificationManager.IMPORTANCE_NONE)) {
+            return NotificationDevicePermissionStatus.RequiresPermission
+        }
         return when {
             Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU -> NotificationDevicePermissionStatus.NotRequired
             appContext.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
